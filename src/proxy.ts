@@ -35,6 +35,7 @@ export const config = {
     // Everything except Next internals, Socket.IO, files with an extension and
     // the media routes: Next limits bodies passing through the proxy, so
     // /api/upload and /api/media authenticate inside their handlers.
-    "/((?!_next/|socket\\.io|api/upload|api/media|favicon\\.ico|.*\\.[\\w]+$).*)",
+    // /api/health is public (health checks).
+    "/((?!_next/|socket\\.io|api/upload|api/media|api/health|favicon\\.ico|.*\\.[\\w]+$).*)",
   ],
 };

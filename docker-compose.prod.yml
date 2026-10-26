@@ -1,0 +1,79 @@
+# Production stack: Caddy (HTTPS) → app (Next.js + Socket.IO) → Postgres.
+# Run with the env file so image/mirror variables are interpolated:
+#   docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+# Only Caddy publishes ports; db and app are reachable on the internal network only.
+
+# Own project name, so containers/volumes (kosholo-prod_pgdata, …) never collide
+# with the dev stack in docker-compose.yml (project "kosholo") in the same folder.
+name: kosholo-prod
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: ${POSTGRES_IMAGE:-postgres:17.6}
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kosholo}
+      POSTGRES_DB: ${POSTGRES_DB:-kosholo}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  app:
+    build:
+      context: .
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:24.11-trixie-slim}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+        APT_MIRROR: ${APT_MIRROR:-}
+    image: kosholo-app:latest
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOST: 0.0.0.0
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    # Give the graceful shutdown (10s) time before Docker kills the process.
+    stop_grace_period: 15s
+    logging: *logging
+
+  caddy:
+    image: ${CADDY_IMAGE:-caddy:2.10.2}
+    restart: unless-stopped
+    env_file: .env.production
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    logging: *logging
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,23 @@
+# Keep the build context small and free of secrets/data.
+node_modules
+.next
+dist
+.git
+.github
+.env*
+!.env.example
+!.env.production.example
+uploads
+backups
+public/sw.js
+public/fonts
+src/generated
+*.log
+.vscode
+.idea
+.claude
+Dockerfile
+docker-compose*.yml
+Caddyfile
+DEPLOY.md
+README.md

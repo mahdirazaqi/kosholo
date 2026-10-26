@@ -1,6 +1,7 @@
 import type { AppServer } from "@/server/io";
 import { db } from "@/lib/db";
 import { readCookie, SESSION_COOKIE, verifySession } from "@/lib/session-token";
+import { logger } from "@/lib/logger";
 
 // Handshake: the browser sends the httpOnly "session" cookie with the
 // polling/websocket request. Unauthenticated connections are rejected.
@@ -21,7 +22,7 @@ export function registerAuth(io: AppServer) {
       socket.data.name = user.name;
       next();
     } catch (error) {
-      console.error("[socket] auth failed", error);
+      logger.error("socket", "auth failed", error);
       next(new Error("unauthorized"));
     }
   });

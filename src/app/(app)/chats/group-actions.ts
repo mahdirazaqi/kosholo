@@ -15,6 +15,7 @@ import {
   groupTitleSchema,
   memberRoleSchema,
 } from "@/lib/validations/groups";
+import { logger } from "@/lib/logger";
 
 // Every action: requireUser → validate → transactional change with permission
 // checks (lib/chat/groups.ts) → realtime events. Nothing here trusts the client.
@@ -36,7 +37,7 @@ async function run<T extends object>(work: () => Promise<T>): Promise<GroupActio
   } catch (error) {
     unstable_rethrow(error); // redirects from requireUser() etc.
     if (error instanceof GroupError) return { ok: false, error: error.message };
-    console.error("[group-action]", error);
+    logger.error("group-action", "failed", error);
     return { ok: false, error: GENERIC_ERROR };
   }
 }

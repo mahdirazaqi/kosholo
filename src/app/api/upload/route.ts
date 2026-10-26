@@ -18,6 +18,7 @@ import { chatMediaSelect, toChatMedia } from "@/lib/media/serialize";
 import { removeFiles, tempFilePath } from "@/lib/media/storage";
 import { isRateLimited, RATE_LIMIT_ERROR, recordHit } from "@/lib/rate-limit";
 import type { UploadKind } from "@/lib/types/chat";
+import { logger } from "@/lib/logger";
 
 // POST /api/upload?kind=IMAGE|VIDEO|VOICE|AVATAR (multipart: file, kind, waveform?)
 // A Route Handler (not a Server Action) for large bodies and upload progress.
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (processed) await removeFiles(processed.path, processed.thumbPath);
     if (error instanceof MediaError) return fail(422, error.message);
-    console.error("[upload] failed", error);
+    logger.error("upload", "failed", error);
     return fail(500, MEDIA_ERRORS.processing);
   } finally {
     await rm(tmp, { force: true });

@@ -22,6 +22,7 @@ import {
   registerSchema,
   updateProfileSchema,
 } from "@/lib/validations/auth";
+import { logger } from "@/lib/logger";
 
 const BCRYPT_COST = 12;
 const INVALID_CREDENTIALS = "ایمیل/نام کاربری یا رمز عبور اشتباه است";
@@ -37,12 +38,15 @@ function getDummyHash() {
   return dummyHash;
 }
 
-// Assumes the app runs behind a reverse proxy that sets X-Forwarded-For.
-// The custom server fills it from the socket address when it's missing.
+// The client IP for rate limiting. In production the app is only reachable
+// through Caddy, which sets X-Forwarded-For to the real client address
+// (ignoring whatever the client sent); we only trust that first proxy hop,
+// i.e. the right-most entry. Without a proxy the custom server fills the
+// header from the socket address.
 async function getClientIp() {
   const headerList = await headers();
-  const forwarded = headerList.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || headerList.get("x-real-ip") || "unknown";
+  const forwarded = headerList.get("x-forwarded-for")?.split(",").at(-1)?.trim();
+  return forwarded || "unknown";
 }
 
 // Only allow same-site relative paths after login.
@@ -165,7 +169,7 @@ export async function updateProfile(
   try {
     await db.user.update({ where: { id: user.id }, data: { name: parsed.data.name } });
   } catch (error) {
-    console.error("[updateProfile]", error);
+    logger.error("updateProfile", "failed", error);
     return { message: GENERIC_ERROR, values };
   }
 

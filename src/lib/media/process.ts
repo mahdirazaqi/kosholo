@@ -3,10 +3,11 @@ import "server-only";
 import { copyFile, rm, stat } from "node:fs/promises";
 import { fileTypeFromFile } from "file-type";
 import sharp from "sharp";
-import { ffmpeg, ffprobe } from "@/lib/media/ffmpeg";
+import { ffmpeg, FfmpegTimeoutError, ffprobe } from "@/lib/media/ffmpeg";
 import { ACCEPTED_MIME, MAX_VOICE_SECONDS, MEDIA_ERRORS, WAVEFORM_BARS } from "@/lib/media/limits";
 import { newFilePath, removeFiles, tempFilePath } from "@/lib/media/storage";
 import type { UploadKind } from "@/lib/types/chat";
+import { logger } from "@/lib/logger";
 
 export class MediaError extends Error {}
 
@@ -114,8 +115,8 @@ export async function processVideo(tmp: string, id: string): Promise<ProcessedUp
     }
   } catch (error) {
     await removeFiles(out.relative);
-    console.error("[media] video processing failed", error);
-    throw new MediaError(MEDIA_ERRORS.processing);
+    logger.error("media", "video processing failed", error);
+    throw new MediaError(error instanceof FfmpegTimeoutError ? MEDIA_ERRORS.timeout : MEDIA_ERRORS.processing);
   }
 
   const final = await ffprobe(out.absolute);
@@ -155,8 +156,8 @@ export async function processVoice(tmp: string, id: string, waveform: unknown): 
     await ffmpeg(["-i", tmp, "-vn", "-ac", "1", "-c:a", "aac", "-b:a", "64k", "-movflags", "+faststart", out.absolute]);
   } catch (error) {
     await removeFiles(out.relative);
-    console.error("[media] voice processing failed", error);
-    throw new MediaError(MEDIA_ERRORS.processing);
+    logger.error("media", "voice processing failed", error);
+    throw new MediaError(error instanceof FfmpegTimeoutError ? MEDIA_ERRORS.timeout : MEDIA_ERRORS.processing);
   }
   const final = await ffprobe(out.absolute);
   const duration = final.duration ?? 0;

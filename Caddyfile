@@ -1,0 +1,58 @@
+# Reverse proxy for the app: automatic HTTPS (Let's Encrypt, or a local
+# certificate when DOMAIN=localhost), HTTP→HTTPS redirect, security headers.
+{
+	email {$ACME_EMAIL}
+	servers {
+		# Long-lived WebSockets and big uploads on slow mobile links.
+		timeouts {
+			read_body 10m
+			read_header 30s
+			write 10m
+			idle 10m
+		}
+	}
+}
+
+{$DOMAIN} {
+	# Uploads: up to 50MB of media plus multipart overhead.
+	request_body {
+		max_size 60MB
+	}
+
+	# Compress text, but not media (already compressed, and Range requests
+	# must reach the app untouched).
+	@compressible not path /api/media/*
+	encode @compressible zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		# Microphone (voice) and camera (photos/videos) for our own origin only.
+		Permissions-Policy "camera=(self), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()"
+		-Server
+	}
+
+	# Never let a cache (a CDN put in front later, browsers) keep HTML: after a
+	# deploy, stale pages would point at JS chunks that no longer exist. Next
+	# marks prerendered pages "s-maxage=31536000", so override it here.
+	header {
+		Cache-Control "no-cache"
+		match {
+			header Content-Type text/html*
+		}
+	}
+
+	# WebSockets (/socket.io) are proxied automatically. Caddy sets
+	# X-Forwarded-For to the real client IP and ignores client-sent values.
+	# No caching here: HTML and API responses pass through as the app sends them.
+	reverse_proxy app:3000 {
+		transport http {
+			read_timeout 10m
+			write_timeout 10m
+		}
+		# Stream responses (video/voice ranges, server-sent chunks) immediately.
+		flush_interval -1
+	}
+}

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { isUuid } from "@/lib/realtime/membership";
 import { PRESENCE_GRACE_MS, presenceRoom, type PresenceState } from "@/lib/realtime/events";
 import type { AppServer } from "@/server/io";
+import { logger } from "@/lib/logger";
 
 // userId → number of connected sockets (tabs/devices). Single process, so in memory.
 const socketCounts = new Map<string, number>();
@@ -44,7 +45,7 @@ export function userDisconnected(io: AppServer, userId: string) {
       try {
         await db.user.update({ where: { id: userId }, data: { lastSeenAt } });
       } catch (error) {
-        console.error("[presence] lastSeenAt update failed", error);
+        logger.error("presence", "lastSeenAt update failed", error);
       }
       io.to(presenceRoom(userId)).emit("presence:update", {
         userId,

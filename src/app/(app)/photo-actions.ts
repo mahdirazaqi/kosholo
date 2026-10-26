@@ -10,6 +10,7 @@ import { emitToMembers } from "@/lib/realtime/emit";
 import { userRoom } from "@/lib/realtime/events";
 import { isUuid } from "@/lib/realtime/membership";
 import { tryGetIO } from "@/server/io";
+import { logger } from "@/lib/logger";
 
 type Result = { ok: true; avatarUrl: string | null } | { ok: false; error: string };
 
@@ -48,7 +49,7 @@ export async function setProfilePhoto(uploadId: string | null): Promise<Result> 
   } catch (error) {
     unstable_rethrow(error);
     if (error instanceof GroupError) return { ok: false, error: error.message };
-    console.error("[setProfilePhoto]", error);
+    logger.error("setProfilePhoto", "failed", error);
     return { ok: false, error: "تغییر عکس انجام نشد" };
   }
 }
@@ -67,7 +68,7 @@ export async function setGroupPhoto(conversationId: string, uploadId: string | n
   } catch (error) {
     unstable_rethrow(error);
     if (error instanceof GroupError) return { ok: false, error: error.message };
-    console.error("[setGroupPhoto]", error);
+    logger.error("setGroupPhoto", "failed", error);
     return { ok: false, error: "تغییر عکس انجام نشد" };
   }
 }

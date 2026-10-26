@@ -1,6 +1,7 @@
 import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
 import { uploadIdFromUrl } from "@/lib/media/serialize";
 import { removeFiles, uploadRoot } from "@/lib/media/storage";
 
@@ -43,11 +44,18 @@ export async function cleanupUploads() {
     if (info && Date.now() - info.mtimeMs > HOUR) await rm(full, { force: true });
   }
 
-  if (deleted) console.log(`[media] cleanup removed ${deleted} unused upload(s)`);
+  if (deleted) logger.info("media", `cleanup removed ${deleted} unused upload(s)`);
 }
 
+// Returns a function that stops the job (graceful shutdown).
 export function startMediaCleanup() {
-  const run = () => cleanupUploads().catch((error) => console.error("[media] cleanup failed", error));
-  setTimeout(run, 30_000);
-  setInterval(run, HOUR).unref();
+  const run = () => cleanupUploads().catch((error) => logger.error("media", "cleanup failed", error));
+  const first = setTimeout(run, 30_000);
+  const hourly = setInterval(run, HOUR);
+  first.unref();
+  hourly.unref();
+  return () => {
+    clearTimeout(first);
+    clearInterval(hourly);
+  };
 }

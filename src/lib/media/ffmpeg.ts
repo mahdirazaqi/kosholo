@@ -7,6 +7,10 @@ export const ffmpegPath = () => process.env.FFMPEG_PATH || "ffmpeg";
 export const ffprobePath = () => process.env.FFPROBE_PATH || "ffprobe";
 
 const MAX_CONCURRENT = 2;
+// Per job; a job past this is killed. FFMPEG_TIMEOUT_SECONDS overrides it.
+const JOB_TIMEOUT_MS = (Number(process.env.FFMPEG_TIMEOUT_SECONDS) || 120) * 1000;
+
+export class FfmpegTimeoutError extends Error {}
 const globalForQueue = globalThis as unknown as { __ffmpegQueue?: { running: number; waiting: (() => void)[] } };
 const queue = (globalForQueue.__ffmpegQueue ??= { running: 0, waiting: [] });
 
@@ -22,12 +26,16 @@ async function withSlot<T>(work: () => Promise<T>): Promise<T> {
   }
 }
 
-function run(bin: string, args: string[], timeoutMs = 10 * 60_000): Promise<string> {
+function run(bin: string, args: string[], timeoutMs = JOB_TIMEOUT_MS): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
-    const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, timeoutMs);
     child.stdout.on("data", (chunk) => (stdout += chunk));
     child.stderr.on("data", (chunk) => (stderr = (stderr + chunk).slice(-4000)));
     child.on("error", (error) => {
@@ -36,7 +44,8 @@ function run(bin: string, args: string[], timeoutMs = 10 * 60_000): Promise<stri
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (code === 0) resolve(stdout);
+      if (timedOut) reject(new FfmpegTimeoutError(`${bin} timed out after ${timeoutMs / 1000}s`));
+      else if (code === 0) resolve(stdout);
       else reject(new Error(`${bin} exited with ${code}: ${stderr}`));
     });
   });

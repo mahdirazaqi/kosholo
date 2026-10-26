@@ -36,6 +36,7 @@ export const MEDIA_ERRORS = {
   tooLong: "پیام صوتی حداکثر می‌تواند ۵ دقیقه باشد",
   tooShort: "پیام صوتی خیلی کوتاه است",
   processing: "پردازش فایل انجام نشد",
+  timeout: "پردازش فایل بیش از حد طول کشید؛ فایل کوتاه‌تر یا کم‌حجم‌تری بفرستید",
   empty: "فایلی انتخاب نشده است",
   tooMany: `حداکثر ${toFaDigits(MAX_FILES_PER_SELECTION)} فایل را می‌توانید یک‌جا بفرستید`,
 } as const;

@@ -301,7 +301,7 @@ One process: Socket.IO is attached to the custom server.
 - **Shared instances:** the io instance, the Prisma client, the membership cache and the rate limiter are all shared through `globalThis`. Next bundles and the custom server load separate copies of the same modules.
 - **No `server-only` in socket code:** `src/server/socket/*` and everything it imports (`db.ts`, `session-token.ts`, `lib/realtime/*`) must not import `"server-only"` or `next/headers`. The custom server runs in plain Node, where `server-only` throws.
 - **Server bundle format:** the server bundle is ESM (`dist/server.mjs`), because the generated Prisma client uses `import.meta.url`.
-- **Env loading:** `.env` is loaded by `src/server/env.ts` (`process.loadEnvFile`), which must stay the first import of `src/server/index.ts`.
+- **Env loading:** `.env` is loaded by `src/server/env.ts` (`process.loadEnvFile`), which must stay the first import of `src/server/index.ts`. It also validates required env (`DATABASE_URL`, `JWT_SECRET` ≥ 32 chars, `UPLOAD_DIR`) and exits with a clear error otherwise.
 
 **Event contract:** `src/lib/realtime/events.ts` defines every event name, payload type and room helper, typed through Socket.IO's generics on both sides. Add new events there.
 
@@ -362,6 +362,46 @@ Both the Server Action response and `message:new` go through it, so either can a
   - Client: `usePresence(userId)` (ref-counted subscriptions, re-subscribed on reconnect). The header uses `formatLastSeen()` and refreshes every minute.
 - **Header subtitle priority:** «در حال اتصال...» (disconnected) → «در حال نوشتن» → «آنلاین» / «آخرین بازدید …».
 - **Socket transports:** websocket first with a polling fallback, and default auto-reconnect.
+
+## Production deployment
+
+Full step-by-step guide (Persian, for the server admin): `DEPLOY.md`.
+
+- **Files:**
+  - `Dockerfile`: multi-stage build (deps → build → runner) on Debian slim Node. Build args are `NODE_IMAGE`, `NPM_REGISTRY` and `APT_MIRROR`, so builds work through mirrors from Iran.
+  - The runner stage installs `ffmpeg`, runs as the non-root `node` user, and has a HEALTHCHECK on `/api/health`.
+  - `docker-entrypoint.sh` runs `prisma migrate deploy`, then `exec node dist/server.mjs`.
+  - `.dockerignore`.
+- **`docker-compose.prod.yml`** defines three services:
+  - `db`: postgres 17.6, volume `pgdata`, not published.
+  - `app`: image `kosholo-app:latest`, volume `uploads` → `/app/uploads`, internal only.
+  - `caddy`: ports 80/443 (+443/udp), volumes `caddy_data`/`caddy_config`, `./Caddyfile`.
+  - All three use log rotation (json-file, 10m × 3).
+  - Always run it as `docker compose --env-file .env.production -f docker-compose.prod.yml …`. The `--env-file` is needed for image/mirror/port interpolation; containers get their env from `env_file: .env.production`.
+  - It has its own project name, **`name: kosholo-prod`**, so its volumes are `kosholo-prod_*`. Never remove that name. Without it, the prod stack shares the dev stack's project (`kosholo`) and mounts the dev `kosholo_pgdata` volume. The two postgres images (debian uid 999 vs alpine uid 70) then fight over the same data directory.
+  - `./Caddyfile` is a single-file bind mount. After it's replaced (an edit or `git pull`), the container keeps the old inode until `restart caddy`; `deploy.sh` does this automatically when the file changed.
+- **`Caddyfile`:**
+  - Automatic HTTPS for `{$DOMAIN}`.
+  - Proxies to `app:3000`, with WebSockets and 10-minute timeouts.
+  - 60MB body limit.
+  - zstd/gzip, except `/api/media/*`.
+  - Security headers; Permissions-Policy allows camera and microphone for self.
+  - HTML responses get `Cache-Control: no-cache`, because Next marks prerendered pages `s-maxage=1y` and a CDN would serve stale chunk references after a deploy. No proxy caching otherwise.
+- **`scripts/`:**
+  - `backup.sh`: pg_dump plus an uploads tar into `backups/YYYY-MM-DD_HHMM/`; keeps 7.
+  - `restore.sh <folder>`.
+  - `deploy.sh`: pull, build, up, prune, wait for healthy.
+  - `wait-healthy.sh`.
+- **App readiness rules:**
+  - The server listens on `HOST` (default `0.0.0.0`) and `PORT`. Don't use `HOSTNAME`, which Docker sets to the container id.
+  - SIGTERM/SIGINT shut down gracefully (10s cap).
+  - `GET /api/health` runs `SELECT 1` and returns 200 or 503. It's excluded from the proxy; keep it that way.
+  - Socket.IO accepts same-origin connections only.
+  - The client IP is the right-most `X-Forwarded-For` entry (the one Caddy appends).
+  - ffmpeg runs at most 2 jobs at a time, each with a `FFMPEG_TIMEOUT_SECONDS` limit.
+- **Logging:** server code logs through `src/lib/logger.ts` (`logger.info/warn/error(scope, msg, err?)`, timestamped and levelled). Never log secrets, tokens, passwords or message contents.
+- **Rule: every new env var** must be added to `.env.example`, `.env.production.example` (commented) **and** the table in `DEPLOY.md` §5. If the container needs a fixed value, set it in `docker-compose.prod.yml`.
+- **Lockfile:** the image uses npm 11 (`npm ci`), which is stricter than local npm 10 about optional platform packages. If `npm ci` fails in the image, regenerate `package-lock.json` with npm 11, e.g. a full `npm install` inside `node:24.11-trixie-slim`, and check it with `npm ci --dry-run` both there and locally.
 
 ## Commands
 
