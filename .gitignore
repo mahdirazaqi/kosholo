@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+!.env.example
+
+# custom server build
+/dist
+
+# prisma generated client
+/src/generated/
+
+# uploaded media
+/uploads/

@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ConversationType {
+  DIRECT
+  GROUP
+}
+
+enum MemberRole {
+  ADMIN
+  MEMBER
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  VOICE
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  // Always stored lowercase; normalized in application code.
+  username     String    @unique
+  name         String
+  passwordHash String    @map("password_hash")
+  avatarUrl    String?   @map("avatar_url")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  lastSeenAt   DateTime? @map("last_seen_at") @db.Timestamptz
+
+  contacts             Contact[]            @relation("ContactOwner")
+  contactOf            Contact[]            @relation("ContactTarget")
+  createdConversations Conversation[]
+  memberships          ConversationMember[]
+  messages             Message[]
+
+  @@map("users")
+}
+
+model Contact {
+  id        String   @id @default(uuid()) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
+  contactId String   @map("contact_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  owner   User @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  contact User @relation("ContactTarget", fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, contactId])
+  @@map("contacts")
+}
+
+model Conversation {
+  id          String           @id @default(uuid()) @db.Uuid
+  type        ConversationType
+  title       String?
+  avatarUrl   String?          @map("avatar_url")
+  createdById String           @map("created_by_id") @db.Uuid
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  createdBy User                 @relation(fields: [createdById], references: [id])
+  members   ConversationMember[]
+  messages  Message[]
+
+  @@map("conversations")
+}
+
+model ConversationMember {
+  conversationId String     @map("conversation_id") @db.Uuid
+  userId         String     @map("user_id") @db.Uuid
+  role           MemberRole @default(MEMBER)
+  joinedAt       DateTime   @default(now()) @map("joined_at") @db.Timestamptz
+  lastReadAt     DateTime?  @map("last_read_at") @db.Timestamptz
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_members")
+}
+
+model Message {
+  id             String      @id @default(uuid()) @db.Uuid
+  conversationId String      @map("conversation_id") @db.Uuid
+  senderId       String      @map("sender_id") @db.Uuid
+  type           MessageType @default(TEXT)
+  content        String?     @db.Text
+  mediaUrl       String?     @map("media_url")
+  // Length in seconds, for voice and video messages.
+  duration       Int?
+  replyToId      String?     @map("reply_to_id") @db.Uuid
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id])
+  replyTo      Message?     @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies      Message[]    @relation("MessageReplies")
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
