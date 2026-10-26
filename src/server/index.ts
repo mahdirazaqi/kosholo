@@ -19,6 +19,9 @@ async function main() {
   await app.prepare();
 
   httpServer.on("request", (req, res) => {
+    // Behind a reverse proxy this header is already set; when exposed
+    // directly, fall back to the socket address (used by rate limiting).
+    req.headers["x-forwarded-for"] ??= req.socket.remoteAddress;
     handle(req, res);
   });
 

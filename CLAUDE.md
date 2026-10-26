@@ -38,14 +38,47 @@ Never use physical left/right variants: `ml-`, `mr-`, `pl-`, `pr-`, `left-`, `ri
 ```
 prisma/               schema.prisma + migrations/
 prisma.config.ts      Prisma CLI config
-src/app/              routes, root layout, globals.css, fonts/ (self-hosted Vazirmatn)
-src/components/       app components (app-shell, bottom-nav, theme-provider, ...)
+src/proxy.ts          route protection (Next 16's renamed middleware)
+src/app/              root layout (providers only), globals.css, fonts/ (self-hosted Vazirmatn)
+src/app/(auth)/       /login, /register (centered card, no bottom nav) + actions.ts (all auth Server Actions)
+src/app/(app)/        protected app: layout renders AppShell (header + bottom nav); /, /contacts, /profile
+src/components/       app components (app-shell, bottom-nav, form-field, password-input, submit-button, ...)
+src/components/auth/  login/register forms, auth card
+src/components/profile/ profile forms + logout dialog
 src/components/ui/    shadcn components (RTL-audited)
 src/generated/prisma/ generated Prisma client (do not edit)
-src/hooks/            client hooks (use-socket)
-src/lib/              db.ts (Prisma singleton), socket.ts (socket.io-client singleton), utils.ts
+src/hooks/            client hooks (use-socket, use-form-feedback)
+src/lib/              db.ts, session.ts, auth.ts, rate-limit.ts, form.ts, validations/, socket.ts, utils.ts
 src/server/           custom server: index.ts (entry), io.ts (getIO/setIO), socket.ts (event handlers)
 ```
+
+## Auth
+
+Custom email/password auth. Do not add NextAuth or other auth libraries.
+
+- **Passwords:** bcryptjs, cost 12. Never store, return or log plain passwords. `passwordHash` must never leave the server.
+- **Session:** an HS256 JWT signed with `jose` (`JWT_SECRET`), with only the user id in `sub`. It's stored in the httpOnly cookie `session` (30 days, `sameSite: lax`, `secure` in production).
+- **`src/lib/session.ts`:** `createSession(userId)`, `deleteSession()` and `verifySession(token)`. It's edge-safe: jose only and no Prisma, so `proxy.ts` can import it.
+- **`src/lib/auth.ts` (server-only):**
+  - `getCurrentUser()` verifies the cookie and loads the user. It's wrapped in React `cache()` and selects only public fields.
+  - `requireUser()` redirects to `/login` when there's no user.
+  - **Call `requireUser()` in every protected page and Server Action.** `proxy.ts` is only an optimistic check of the JWT signature, with no DB.
+- **`src/proxy.ts`:**
+  - Logged-out users go to `/login?from=<path>`.
+  - Logged-in users visiting `/login` or `/register` go to `/`.
+  - Add any new public routes to `AUTH_ROUTES`.
+- **Cache Components:** reading the session is request-time data. Put components that call `requireUser()`/`getCurrentUser()` inside `<Suspense>`, not at the top level of a layout (see `(app)/profile/page.tsx`).
+- **Validation:** zod schemas in `src/lib/validations/` with Persian messages. They're shared by the client (instant feedback) and the Server Actions (the source of truth).
+- **Forms:**
+  - Server Actions return `FormState` (`src/lib/form.ts`). Field errors, the message and echoed non-secret values go back to the form.
+  - Client forms use `useActionState` and `useFormFeedback(schema, state)`, which handles client validation and toasts the `message`.
+  - Use `FormField` and `fieldA11y` for labels, errors and aria attributes.
+- **Rate limiting:**
+  - `src/lib/rate-limit.ts` keeps an in-memory fixed window on `globalThis`, which is valid because there's a single long-running process.
+  - Logins allow 5 failures per IP+identifier per 15 minutes. Registrations allow 5 per IP per hour.
+  - The client IP comes from `X-Forwarded-For`, which the reverse proxy must set. The custom server fills it from the socket address when it's missing.
+- **LTR fields:** email, username and password inputs use `dir="ltr"` + `text-start`. Labels and errors stay RTL.
+- **Inputs are always 16px** (`text-base`, also on desktop) so iOS Safari doesn't zoom on focus. `md:text-sm` was removed from `ui/input.tsx` and `ui/textarea.tsx` on purpose.
 
 ## Realtime
 

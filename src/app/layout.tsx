@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
-import { AppShell } from "@/components/app-shell";
 import { ThemeProvider } from "@/components/theme-provider";
 import { DirectionProvider } from "@/components/ui/direction";
 import { Toaster } from "@/components/ui/sonner";
@@ -45,7 +44,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           disableTransitionOnChange
         >
           <DirectionProvider dir="rtl">
-            <AppShell>{children}</AppShell>
+            {children}
             <Toaster position="top-center" dir="rtl" />
           </DirectionProvider>
         </ThemeProvider>
