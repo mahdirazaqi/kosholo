@@ -9,7 +9,7 @@ export default function HomePage() {
           <MessageCircle className="size-10" strokeWidth={1.75} />
         </div>
         <div className="space-y-2">
-          <h1 className="text-3xl font-extrabold tracking-tight">کشولو</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight">کوشولو</h1>
           <p className="text-sm leading-7 text-muted-foreground">
             پیام‌رسانی سبک، سریع و ساده برای گفتگو با دوستان
           </p>

@@ -1,6 +1,6 @@
 @AGENTS.md
 
-# Kosholo (کشولو)
+# Kosholo (کوشولو)
 
 A small, lightweight real-time chat web app (mini WhatsApp/Telegram). Persian UI, fully RTL, mobile-first, and later an installable PWA. Next.js serves the frontend and backend together from one project.
 

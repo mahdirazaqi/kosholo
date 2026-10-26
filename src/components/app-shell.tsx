@@ -6,7 +6,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="mx-auto flex h-dvh w-full max-w-md flex-col overflow-hidden bg-background md:h-[calc(100dvh-3rem)] md:rounded-3xl md:border md:shadow-sm">
         <header className="shrink-0 border-b bg-background/80 pt-[env(safe-area-inset-top)] ps-[env(safe-area-inset-left)] pe-[env(safe-area-inset-right)] backdrop-blur">
           <div className="flex h-14 items-center px-5">
-            <span className="text-lg font-bold tracking-tight">کشولو</span>
+            <span className="text-lg font-bold tracking-tight">کوشولو</span>
           </div>
         </header>
 

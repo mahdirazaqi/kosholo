@@ -14,9 +14,9 @@ const vazirmatn = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "کشولو",
+  title: "کوشولو",
   description: "پیام‌رسان سبک و سریع",
-  applicationName: "کشولو",
+  applicationName: "کوشولو",
 };
 
 export const viewport: Viewport = {
