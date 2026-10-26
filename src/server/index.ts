@@ -5,6 +5,8 @@ import next from "next";
 import { Server } from "socket.io";
 import { setIO, type AppServer } from "./io";
 import { registerSocketHandlers } from "./socket";
+import { startMediaCleanup } from "./media-cleanup";
+import { checkMediaBinaries } from "@/lib/media/ffmpeg";
 
 const dev = process.env.NODE_ENV !== "production";
 
@@ -28,6 +30,15 @@ async function main() {
   const io: AppServer = new Server(httpServer, { path: "/socket.io" });
   setIO(io);
   registerSocketHandlers(io);
+
+  const missing = await checkMediaBinaries();
+  if (missing.length) {
+    console.error(
+      `[media] ERROR: ${missing.join(", ")} not found. Video and voice uploads will fail. ` +
+        "Install ffmpeg (e.g. `apt install ffmpeg`) or set FFMPEG_PATH / FFPROBE_PATH.",
+    );
+  }
+  startMediaCleanup();
 
   httpServer.listen(port, hostname, () => {
     console.log(

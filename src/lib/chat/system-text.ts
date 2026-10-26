@@ -34,6 +34,10 @@ export function systemMessageText(
         return `${targets} ${targetIds.includes(meId ?? "") ? "ادمین گروه شدید" : "ادمین گروه شد"}`;
       }
       return `${actor}، ${targets} را ادمین ${verb("کرد", "کردید")}`;
+    case "photo_changed":
+      return meta.removed
+        ? `${actor} عکس گروه را ${verb("حذف کرد", "حذف کردید")}`
+        : `${actor} عکس گروه را ${verb("تغییر داد", "تغییر دادید")}`;
     case "admin_demoted":
       return `${actor}، ${targets} را از ادمینی ${verb("برداشت", "برداشتید")}`;
     default:

@@ -47,6 +47,11 @@ src/components/       app components (app-shell, page-header, bottom-nav, bottom
 src/components/contacts/ contacts list, contact sheet, add-contact sheet
 src/components/chat/  chat list, new-conversation/new-chat sheets, chat view, message list/bubble, system message, composer, emoji button
 src/components/groups/ new-group flow, member picker, group info view, direct info view
+src/components/chat/media/ image/video/voice bubbles, upload progress, viewer, attach + preview
+src/components/avatar-editor.tsx  change/remove a profile or group photo
+src/app/api/upload/   POST: upload + process (Route Handler, auth inside)
+src/app/api/media/    GET/HEAD [uploadId] and [uploadId]/thumb: access-checked, Range-aware streaming
+src/app/(app)/photo-actions.ts  setProfilePhoto, setGroupPhoto
 src/components/auth/  login/register forms, auth card
 src/components/profile/ profile forms + logout dialog
 src/components/ui/    shadcn components (RTL-audited)
@@ -55,12 +60,15 @@ src/hooks/            client hooks (use-conversation-realtime, use-presence, use
 src/lib/              db.ts, session.ts, session-token.ts, auth.ts, users.ts, contacts.ts, rate-limit.ts, form.ts, validations/, format-date.ts, emoji.ts, client-utils.ts, utils.ts
 src/lib/realtime/     events.ts (typed event contract + rooms), membership.ts (cached), emit.ts (from Server Actions)
 src/lib/realtime/client/ socket.ts (typed client), store.ts (zustand), merge.ts (dedupe rule)
+src/lib/media/        limits.ts (shared), storage.ts, ffmpeg.ts, serialize.ts (no server-only: also used by the custom server);
+                      process.ts (sharp/ffmpeg), access.ts, serve.ts, routes.ts (server-only); client/ (prepare, upload, audio-manager)
 src/lib/chat/         queries.ts (selects + mappers), conversations.ts, messages.ts, groups.ts (group rules), limits.ts, system-text.ts (client-safe)
 src/lib/colors.ts     stable per-id colors (avatar tints, group sender names)
 src/lib/types/chat.ts shared chat types (ChatMessage, ConversationListItem, ...)
 public/emojibase/     self-hosted emoji data for the picker (no CDN)
 src/server/           custom server: index.ts (entry), env.ts (loads .env first), io.ts (getIO/setIO/tryGetIO)
 src/server/socket/    index.ts (handlers), auth.ts (handshake), presence.ts
+src/server/media-cleanup.ts  hourly cleanup of unused uploads
 ```
 
 ## Auth
@@ -169,7 +177,7 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
 ### System messages
 
 - `MessageType.SYSTEM` with `Message.meta` (JSON, type `SystemMeta` in `lib/types/chat.ts`): `{ event, actorId, actorName, targetIds?, targetNames?, newTitle?, auto? }`.
-  - `event` is one of `created`, `member_added`, `member_removed`, `member_left`, `renamed`, `admin_promoted` or `admin_demoted`.
+  - `event` is one of `created`, `member_added`, `member_removed`, `member_left`, `renamed`, `admin_promoted`, `admin_demoted` or `photo_changed` (with `removed: true` when the photo was removed).
   - `auto: true` marks the promotion that happens when the last admin leaves.
   - `senderId` is the actor.
 - **Names live in meta** so the text still renders after people leave. `systemMessageText(meta, meId, currentNames?)` (`lib/chat/system-text.ts`) builds the Persian sentence on the client: «شما» plus second-person verbs for the viewer, and current member names when known.
@@ -177,6 +185,67 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
   - They break sender runs, can't be replied to (the server rejects `replyToId` pointing at one) and never count as unread (excluded in the unread SQL and in the client store).
   - They do show as the chat-list preview.
 - **Creation:** `recordEvent()` in `groups.ts` creates them and bumps `conversation.updatedAt` in the same transaction.
+
+## Media (images, videos, voice, avatars)
+
+**Requirement: system `ffmpeg` and `ffprobe`.** They're used for video and voice, through `child_process`. Paths come from `FFMPEG_PATH` / `FFPROBE_PATH` (default `ffmpeg` / `ffprobe`). The custom server checks them at startup and logs a clear error if they're missing. Never use `ffmpeg-static` or other download-at-install packages. The Docker image needs `apt install ffmpeg` and a persistent volume for `UPLOAD_DIR`.
+
+**Limits** (`src/lib/media/limits.ts`, shared by client and server):
+
+| Kind | Max size | Real types (magic bytes via `file-type`) |
+|---|---|---|
+| Image | 10MB | JPEG/PNG/WebP/GIF |
+| Video | 50MB | MP4/MOV/WebM |
+| Voice | 10MB, max 5 min | MediaRecorder output (webm/opus, mp4/aac) and common audio |
+| Avatar | 5MB | image |
+
+- Up to 10 files per selection, each its own message (no albums).
+- Uploads are rate limited to 60 per user per 10 minutes. Every rejection has a Persian message (`MEDIA_ERRORS`).
+
+**Data:**
+- `Upload` stores `{ path, thumbPath, mime, size, width, height, duration, placeholder, waveform }`.
+  - `path` is relative to `UPLOAD_DIR`: `yyyy/mm/{uuid}.{ext}`, plus `{uuid}.thumb.webp`.
+- `Message.uploadId` (unique) links a message to its file.
+- `ChatMessage.media` is a `ChatMedia`: `{ id, kind, url, thumbUrl, mime, width, height, duration, placeholder, waveform }`. URLs are always `/api/media/{id}` and `/api/media/{id}/thumb`; never select or send `path`.
+- `User.avatarUrl` and `Conversation.avatarUrl` store `/api/media/{uploadId}`, and `avatarThumbUrl()` maps it to the 128px thumb.
+
+**Pipeline:**
+1. **Client:** `prepareFile` downscales photos to 2048px JPEG 0.85 (GIFs are kept), then `uploadFile` posts with XHR (progress, abort) to `POST /api/upload?kind=…`. The kind is in the query, so oversized bodies are rejected from `Content-Length` before they're read.
+2. **Server:** the Route Handler (`src/app/api/upload/route.ts`) authenticates with the session cookie, then streams the body to `UPLOAD_DIR/tmp` and detects the real type.
+   - **Image (sharp):** EXIF-rotated, metadata stripped, ≤2048px WebP q80. GIFs stay as-is. Each gets a 480px WebP thumb and a 16px placeholder.
+   - **Video (ffprobe/ffmpeg):** H.264/AAC MP4 is remuxed with `+faststart`. Anything else (HEVC .mov, WebM) is transcoded to H.264/AAC (`veryfast`, `crf 26`, ≤1280px). A poster frame from ~1s becomes the thumb and placeholder. Rotation is applied to width/height.
+   - **Voice:** converted to M4A (AAC mono 64kbps), so Chrome and Safari recordings play everywhere. The duration comes from ffprobe, and the client's peaks are validated and resampled to 48 bars.
+   - **Avatar:** 512×512 center-cropped WebP plus a 128×128 thumb.
+   - ffmpeg runs at most 2 jobs at a time.
+3. **Send:** `sendMessage({ conversationId, uploadId, content?, replyToId?, tempId })`.
+   - The upload must be the sender's, unused and not an avatar. The message type comes from the upload kind.
+   - The content becomes an optional caption (≤1000 chars).
+4. **Client flow:** `useMediaSender` shows optimistic bubbles from local object URLs, with a progress ring, cancel during upload/processing, and retry on failure (re-uploading only if needed).
+   - Uploads run in parallel, but messages are sent in **selection order**.
+   - Media messages use the same `tempId` / dedupe / realtime path as text.
+
+**Serving and access** (`/api/media/[uploadId]`, `/thumb`; excluded from `proxy.ts` because Next limits bodies passing through the proxy, so these handlers authenticate themselves):
+- `AVATAR`: any signed-in user.
+- Other kinds: the uploader (for their pending optimistic message), or a member of the conversation whose message uses the upload.
+- Everything else, unknown ids included, gets 404; no session gets 401.
+- Files stream from disk with HTTP Range (206/416), HEAD, `ETag` (304) and `Cache-Control: private, max-age=31536000, immutable`. They're never served statically.
+
+**Cleanup:** `src/server/media-cleanup.ts` runs hourly in the custom server. It deletes uploads (rows and files) older than 24h that no message uses and that aren't a user or group avatar. This covers abandoned sends, replaced avatars and files of deleted messages or groups. It also clears stale temp files.
+
+**UI:**
+- **Images:** a fixed aspect-ratio frame with the blur placeholder, then the thumb (the original for GIFs). The caption goes underneath, or the time overlays the image when there's no caption. Tapping opens `yet-another-react-lightbox` (zoom, download, pull down to close).
+- **Video:** a poster with a play icon and an `m:ss` duration badge. Tapping opens a full-screen native player (`playsInline`, `autoplay`).
+- **Voice:** the mic replaces send when the composer is empty.
+  - Recording (`useVoiceRecorder`): hold to record, slide toward the inline start to cancel, slide up to lock. A tap shows a hint. Recordings under 1s are discarded, and recording stops automatically at 5 minutes.
+  - Playback: the waveform doubles as the seek bar, there's a 1x / 1.5x / 2x toggle, and `audioManager` makes sure only one voice plays at a time.
+- **Previews:** «📷 عکس», «🎬 ویدیو», «🎤 پیام صوتی (m:ss)», with the caption when there is one. Quotes and the reply bar show a thumbnail.
+- **Media direction:** playback controls and timelines stay LTR (play icon, waveform direction).
+
+**Avatars:**
+- `AvatarEditor` (profile page; group info for admins) uploads `AVATAR`, then calls `setProfilePhoto` / `setGroupPhoto`.
+- `setGroupPhoto` is admin-only, records `photo_changed` and emits `conversation:updated { avatarUrl }`.
+- `setProfilePhoto` emits `user:updated` to everyone who shares a conversation with the user or has them as a contact.
+- `UserAvatar` (client) reads live overrides from `store.avatars` (keyed by user id or group id), uses the 128px thumb for small sizes, and falls back to initials while loading or on error.
 
 ## Realtime (Socket.IO)
 
@@ -195,7 +264,8 @@ One process: Socket.IO is attached to the custom server.
 | S→C | `conversation:read` | `{ conversationId, userId, lastReadAt }` | `user:{id}` of every member |
 | S→C | `typing:start` / `typing:stop` | `{ conversationId, userId, name }` | `user:{id}` of the other members |
 | S→C | `presence:update` | `{ userId, online, lastSeenAt }` | `presence:{userId}` |
-| S→C | `conversation:updated` | `{ conversationId, title?, members? }` | `user:{id}` of every member, after rename / membership / role changes |
+| S→C | `conversation:updated` | `{ conversationId, title?, avatarUrl?, members? }` | `user:{id}` of every member, after rename / photo / membership / role changes |
+| S→C | `user:updated` | `{ userId, name?, avatarUrl? }` | `user:{id}` of everyone sharing a conversation with the user or having them as a contact |
 | S→C | `conversation:removed` | `{ conversationId, reason: "removed" \| "left" \| "deleted" }` | `user:{id}` of the former member(s) |
 | C→S | `conversation:join` (ack `{ ok }`) / `conversation:leave` | `conversationId` | joins/leaves `conv:{id}` after a membership check |
 | C→S | `typing:start` / `typing:stop` | `conversationId` | membership-checked; `start` ignored if faster than 1/s per socket |

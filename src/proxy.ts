@@ -29,7 +29,9 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Everything except Next internals, Socket.IO and files with an extension.
-    "/((?!_next/|socket\\.io|favicon\\.ico|.*\\.[\\w]+$).*)",
+    // Everything except Next internals, Socket.IO, files with an extension and
+    // the media routes: Next limits bodies passing through the proxy, so
+    // /api/upload and /api/media authenticate inside their handlers.
+    "/((?!_next/|socket\\.io|api/upload|api/media|favicon\\.ico|.*\\.[\\w]+$).*)",
   ],
 };

@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { PREVIEW_LENGTH } from "@/lib/chat/limits";
+import { chatMediaSelect, mediaThumbUrl, toChatMedia } from "@/lib/media/serialize";
 import type { ChatMember, ChatMessage, MemberReadState, SystemMeta } from "@/lib/types/chat";
 import { publicUserSelect } from "@/lib/users";
 
@@ -12,13 +13,19 @@ export const messageSelect = {
   conversationId: true,
   type: true,
   content: true,
-  mediaUrl: true,
   meta: true,
+  upload: { select: chatMediaSelect },
   createdAt: true,
   replyToId: true,
   sender: { select: publicUserSelect },
   replyTo: {
-    select: { id: true, type: true, content: true, sender: { select: { name: true } } },
+    select: {
+      id: true,
+      type: true,
+      content: true,
+      sender: { select: { name: true } },
+      upload: { select: { id: true, thumbPath: true, duration: true } },
+    },
   },
 } satisfies Prisma.MessageSelect;
 
@@ -34,7 +41,7 @@ export function toChatMessage(row: MessageRow): ChatMessage {
     conversationId: row.conversationId,
     type: row.type,
     content: row.content,
-    mediaUrl: row.mediaUrl,
+    media: row.upload ? toChatMedia(row.upload) : null,
     meta: row.type === "SYSTEM" ? (row.meta as SystemMeta | null) : null,
     createdAt: row.createdAt.toISOString(),
     sender: row.sender,
@@ -44,6 +51,8 @@ export function toChatMessage(row: MessageRow): ChatMessage {
           type: row.replyTo.type,
           content: preview(row.replyTo.content),
           senderName: row.replyTo.sender.name,
+          thumbUrl: row.replyTo.upload?.thumbPath ? mediaThumbUrl(row.replyTo.upload.id) : null,
+          duration: row.replyTo.upload?.duration ?? null,
         }
       : row.replyToId
         ? "deleted"

@@ -18,6 +18,8 @@ type RealtimeState = {
   // conversationId → userId → display name
   typing: Record<string, Record<string, string>>;
   presence: Record<string, PresenceState>;
+  // Live photo changes, keyed by user id or group conversation id.
+  avatars: Record<string, string | null>;
 };
 
 export const useRealtimeStore = create<RealtimeState>(() => ({
@@ -27,6 +29,7 @@ export const useRealtimeStore = create<RealtimeState>(() => ({
   activeConversationId: null,
   typing: {},
   presence: {},
+  avatars: {},
 }));
 
 const set = useRealtimeStore.setState;
@@ -79,6 +82,7 @@ export function applyMessageToList(message: ChatMessage): boolean {
     ...item,
     lastMessage: {
       type: message.type,
+      duration: message.media?.duration ?? null,
       content: message.content?.slice(0, PREVIEW_LENGTH) ?? null,
       isMine,
       senderName: message.sender.name,
@@ -155,6 +159,12 @@ export function setTyping(conversationId: string, userId: string, name: string |
   if (Object.keys(users).length) typing[conversationId] = users;
   else delete typing[conversationId];
   set({ typing });
+}
+
+// ---- Avatars (user and group photos) ----
+
+export function setAvatarOverride(id: string, avatarUrl: string | null) {
+  set({ avatars: { ...get().avatars, [id]: avatarUrl } });
 }
 
 // ---- Presence ----

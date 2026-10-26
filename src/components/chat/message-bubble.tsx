@@ -2,6 +2,9 @@
 
 import { memo, useRef, useState } from "react";
 import { AlertCircle, Check, CheckCheck, Clock3, Copy, MoreHorizontal, Reply, RotateCw } from "lucide-react";
+import { ImageMedia } from "@/components/chat/media/image-media";
+import { VideoMedia } from "@/components/chat/media/video-media";
+import { VoiceMedia } from "@/components/chat/media/voice-media";
 import { previewText } from "@/components/chat/message-preview";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
@@ -28,6 +31,8 @@ export type BubbleActions = {
   onOpenActions: (message: ChatMessage) => void; // mobile long-press menu
   onQuoteClick: (messageId: string) => void;
   onRetry: (message: ChatMessage) => void;
+  onOpenMedia: (message: ChatMessage) => void; // full-screen image/video
+  onCancelUpload: (message: ChatMessage) => void;
 };
 
 type Props = BubbleActions & {
@@ -54,6 +59,9 @@ export const MessageBubble = memo(function MessageBubble({
 }: Props) {
   const canInteract = message.status === "sent";
   const emojiOnly = message.type === "TEXT" && isEmojiOnly(message.content);
+  // Images/videos sit edge-to-edge in the bubble; the time overlays them when there's no caption.
+  const visual = (message.type === "IMAGE" || message.type === "VIDEO") && message.media !== null;
+  const timeOverlay = visual && !message.content;
   const isNew = message.tempId !== undefined;
   // «پاسخ» from the dropdown is applied after it closes: the menu's focus trap
   // would otherwise pull focus back from the composer.
@@ -124,24 +132,44 @@ export const MessageBubble = memo(function MessageBubble({
               emojiOnly
                 ? "px-1"
                 : isMine
-                  ? "bg-primary px-3 py-1.5 text-primary-foreground shadow-xs"
-                  : "bg-muted px-3 py-1.5 text-foreground shadow-xs ring-1 ring-foreground/5",
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "bg-muted text-foreground shadow-xs ring-1 ring-foreground/5",
+              !emojiOnly && (visual ? "p-1" : "px-3 py-1.5"),
               !emojiOnly && groupEnd && (isMine ? "rounded-ee-md" : "rounded-es-md"),
               !isDesktop && "select-none [-webkit-touch-callout:none]",
             )}
           >
             {isGroup && !isMine && groupStart && (
-              <p className={cn("mb-0.5 truncate text-xs font-semibold", nameColor(message.sender.id))}>
+              <p className={cn("mb-0.5 truncate text-xs font-semibold", visual && "px-2 pt-0.5", nameColor(message.sender.id))}>
                 {message.sender.name}
               </p>
             )}
 
             {message.replyTo && (
-              <Quote
-                replyTo={message.replyTo}
-                isMine={isMine && !emojiOnly}
-                onClick={actions.onQuoteClick}
-              />
+              <div className={cn(visual && "px-1 pt-0.5")}>
+                <Quote replyTo={message.replyTo} isMine={isMine && !emojiOnly} onClick={actions.onQuoteClick} />
+              </div>
+            )}
+
+            {visual &&
+              (message.type === "IMAGE" ? (
+                <ImageMedia
+                  message={message}
+                  overlay={timeOverlay && <TimeOverlay message={message} isMine={isMine} read={read} />}
+                  onOpen={() => actions.onOpenMedia(message)}
+                  onCancel={() => actions.onCancelUpload(message)}
+                />
+              ) : (
+                <VideoMedia
+                  message={message}
+                  overlay={timeOverlay && <TimeOverlay message={message} isMine={isMine} read={read} />}
+                  onOpen={() => actions.onOpenMedia(message)}
+                  onCancel={() => actions.onCancelUpload(message)}
+                />
+              ))}
+
+            {message.type === "VOICE" && message.media && (
+              <VoiceMedia message={message} isMine={isMine} onCancel={() => actions.onCancelUpload(message)} />
             )}
 
             {message.content && (
@@ -150,27 +178,31 @@ export const MessageBubble = memo(function MessageBubble({
                 className={cn(
                   "break-words whitespace-pre-wrap",
                   emojiOnly ? "text-5xl leading-tight" : "text-[15px] leading-6",
+                  visual && "px-2 pt-1",
                 )}
               >
                 {message.content}
               </p>
             )}
 
-            <div
-              className={cn(
-                "flex items-center justify-end gap-1 text-[11px] leading-4",
-                emojiOnly
-                  ? "ms-auto mt-0.5 w-fit rounded-full bg-background/80 px-1.5 text-muted-foreground"
-                  : isMine
-                    ? "text-primary-foreground/70"
-                    : "text-muted-foreground",
-              )}
-            >
-              <time dateTime={message.createdAt} suppressHydrationWarning>
-                {formatTime(message.createdAt)}
-              </time>
-              {isMine && <StatusIcon status={message.status} read={read} />}
-            </div>
+            {!timeOverlay && (
+              <div
+                className={cn(
+                  "flex items-center justify-end gap-1 text-[11px] leading-4",
+                  visual && "px-2 pb-0.5",
+                  emojiOnly
+                    ? "ms-auto mt-0.5 w-fit rounded-full bg-background/80 px-1.5 text-muted-foreground"
+                    : isMine
+                      ? "text-primary-foreground/70"
+                      : "text-muted-foreground",
+                )}
+              >
+                <time dateTime={message.createdAt} suppressHydrationWarning>
+                  {formatTime(message.createdAt)}
+                </time>
+                {isMine && <StatusIcon status={message.status} read={read} />}
+              </div>
+            )}
           </div>
         </Swipeable>
         {menu}
@@ -189,6 +221,17 @@ export const MessageBubble = memo(function MessageBubble({
     </div>
   );
 });
+
+function TimeOverlay({ message, isMine, read }: { message: ChatMessage; isMine: boolean; read: boolean }) {
+  return (
+    <span className="pointer-events-none absolute end-1.5 bottom-1.5 flex items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-[11px] leading-4 text-white">
+      <time dateTime={message.createdAt} suppressHydrationWarning>
+        {formatTime(message.createdAt)}
+      </time>
+      {isMine && <StatusIcon status={message.status} read={read} />}
+    </span>
+  );
+}
 
 function StatusIcon({ status, read }: { status: ChatMessage["status"]; read: boolean }) {
   if (status === "sending") return <Clock3 aria-label="در حال ارسال" className="size-3.5" />;
@@ -227,15 +270,21 @@ function Quote({
         onClick(replyTo.id);
       }}
       className={cn(
-        "mb-1 flex w-full min-w-0 flex-col items-start rounded-lg border-s-[3px] px-2 py-1 text-start text-xs transition-opacity hover:opacity-90",
+        "mb-1 flex w-full min-w-0 items-center gap-2 rounded-lg border-s-[3px] px-2 py-1 text-start text-xs transition-opacity hover:opacity-90",
         tone,
       )}
     >
-      <span className={cn("max-w-full truncate font-semibold", !isMine && "text-primary")}>
-        {replyTo.senderName}
-      </span>
-      <span dir="auto" className="w-full truncate opacity-80">
-        {previewText(replyTo)}
+      {replyTo.thumbUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={replyTo.thumbUrl} alt="" className="size-8 shrink-0 rounded object-cover" />
+      )}
+      <span className="flex min-w-0 flex-1 flex-col items-start">
+        <span className={cn("max-w-full truncate font-semibold", !isMine && "text-primary")}>
+          {replyTo.senderName}
+        </span>
+        <span dir="auto" className="w-full truncate opacity-80">
+          {previewText(replyTo)}
+        </span>
       </span>
     </button>
   );

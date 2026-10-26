@@ -3,12 +3,15 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { Reply, SendHorizontal, X } from "lucide-react";
 import { EmojiButton } from "@/components/chat/emoji-button";
+import { AttachButton } from "@/components/chat/media/attach-button";
+import { VoiceControl } from "@/components/chat/voice-control";
+import type { VoiceRecording } from "@/hooks/use-media-sender";
+import type { PreparedFile } from "@/lib/media/client/prepare";
 import { previewText } from "@/components/chat/message-preview";
 import { Button } from "@/components/ui/button";
 import { useIsDesktop } from "@/hooks/use-media-query";
 import type { ChatMessage } from "@/lib/types/chat";
 import { MAX_MESSAGE_LENGTH } from "@/lib/validations/chat";
-import { cn } from "@/lib/utils";
 
 const MAX_HEIGHT_PX = 5 * 24 + 20; // ~5 lines of text + vertical padding
 
@@ -18,12 +21,14 @@ type Props = {
   replyTo: ChatMessage | null;
   onCancelReply: () => void;
   onSend: (content: string) => void;
+  onSendFiles: (files: PreparedFile[], caption: string | null) => void;
+  onSendVoice: (recording: VoiceRecording) => void;
   onInput?: (value: string) => void; // typing indicator
   onBlur?: () => void;
 };
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
-  { replyTo, onCancelReply, onSend, onInput, onBlur },
+  { replyTo, onCancelReply, onSend, onSendFiles, onSendVoice, onInput, onBlur },
   ref,
 ) {
   const isDesktop = useIsDesktop();
@@ -84,10 +89,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       {replyTo && (
         <div className="flex animate-in items-center gap-3 px-3 pt-2 fade-in-0 slide-in-from-bottom-1 duration-150">
           <Reply className="size-5 shrink-0 text-primary" />
+          {replyTo.media?.thumbUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={replyTo.media.thumbUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" />
+          )}
           <div className="min-w-0 flex-1 border-s-2 border-primary ps-2">
             <p className="truncate text-xs font-semibold text-primary">پاسخ به {replyTo.sender.name}</p>
             <p dir="auto" className="truncate text-sm text-muted-foreground">
-              {previewText(replyTo)}
+              {previewText({ ...replyTo, duration: replyTo.media?.duration })}
             </p>
           </div>
           <Button
@@ -111,9 +120,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           event.preventDefault();
           submit();
         }}
-        className="flex items-end gap-1 px-2 pt-2"
+        className="relative flex items-end gap-1 px-2 pt-2"
       >
         <EmojiButton onPick={insertEmoji} onClose={focus} />
+        <AttachButton onSend={onSendFiles} />
 
         <textarea
           ref={textareaRef}
@@ -149,17 +159,21 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           className="max-h-[140px] min-h-11 flex-1 resize-none overflow-y-hidden rounded-3xl border border-input bg-muted/40 px-4 py-2.5 text-base leading-6 outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 dark:bg-input/30"
         />
 
-        <Button
-          type="submit"
-          size="icon-lg"
-          aria-label="ارسال"
-          disabled={!canSend}
-          // Keep the textarea focused (and the mobile keyboard open) when tapping send.
-          onPointerDown={(event) => event.preventDefault()}
-          className={cn("size-11 shrink-0 rounded-full transition-transform", canSend && "active:scale-95")}
-        >
-          <SendHorizontal className="size-5 rtl:-scale-x-100" />
-        </Button>
+        {canSend ? (
+          <Button
+            type="submit"
+            size="icon-lg"
+            aria-label="ارسال"
+            // Keep the textarea focused (and the mobile keyboard open) when tapping send.
+            onPointerDown={(event) => event.preventDefault()}
+            className="size-11 shrink-0 animate-in rounded-full transition-transform zoom-in-75 duration-150 active:scale-95"
+          >
+            <SendHorizontal className="size-5 rtl:-scale-x-100" />
+          </Button>
+        ) : (
+          // Empty composer: the send button becomes the mic.
+          <VoiceControl onSend={onSendVoice} />
+        )}
       </form>
     </div>
   );

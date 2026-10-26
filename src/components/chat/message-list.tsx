@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { previewText } from "@/components/chat/message-preview";
 import { MessageBubble, type BubbleActions } from "@/components/chat/message-bubble";
 import { SystemMessage } from "@/components/chat/system-message";
+import { MediaViewer, type ViewerTarget } from "@/components/chat/media/media-viewer";
 import { BottomSheetContent } from "@/components/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetDescription, SheetTitle } from "@/components/ui/sheet";
@@ -33,6 +34,7 @@ type Props = {
   onLoadOlder: () => Promise<boolean>;
   onReply: (message: ChatMessage) => void;
   onRetry: (message: ChatMessage) => void;
+  onCancelUpload: (message: ChatMessage) => void;
 };
 
 const keyOf = (message: ChatMessage) => message.tempId ?? message.id;
@@ -48,6 +50,7 @@ export function MessageList({
   onLoadOlder,
   onReply,
   onRetry,
+  onCancelUpload,
 }: Props) {
   const isDesktop = useIsDesktop();
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -64,6 +67,7 @@ export function MessageList({
   const [highlight, setHighlight] = useState<string | null>(null);
   const [actionsFor, setActionsFor] = useState<ChatMessage | null>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [viewer, setViewer] = useState<ViewerTarget>(null);
   // Reply chosen from the mobile sheet; applied once the sheet has closed so
   // its focus trap doesn't fight the composer for focus.
   const pendingReply = useRef<ChatMessage | null>(null);
@@ -161,10 +165,21 @@ export function MessageList({
     setActionsOpen(true);
   }, []);
 
+  const onOpenMedia = useCallback((message: ChatMessage) => {
+    const media = message.media;
+    if (!media) return;
+    setViewer({
+      kind: media.kind === "VIDEO" ? "video" : "image",
+      url: media.url,
+      width: media.width,
+      height: media.height,
+    });
+  }, []);
+
   // Stable so memoized bubbles don't re-render on every list update.
   const actions = useMemo<BubbleActions>(
-    () => ({ onReply, onCopy, onOpenActions, onQuoteClick: jumpTo, onRetry }),
-    [onReply, onCopy, onOpenActions, jumpTo, onRetry],
+    () => ({ onReply, onCopy, onOpenActions, onQuoteClick: jumpTo, onRetry, onOpenMedia, onCancelUpload }),
+    [onReply, onCopy, onOpenActions, jumpTo, onRetry, onOpenMedia, onCancelUpload],
   );
 
   const seenIndex = seenKey === null ? -1 : messages.findIndex((m) => keyOf(m) === seenKey);
@@ -259,6 +274,8 @@ export function MessageList({
         <ChevronDown className="size-5" />
       </Button>
 
+      <MediaViewer target={viewer} onClose={() => setViewer(null)} />
+
       <Sheet open={actionsOpen} onOpenChange={setActionsOpen}>
         <BottomSheetContent
           showCloseButton={false}
@@ -272,7 +289,7 @@ export function MessageList({
           {actionsFor && (
             <>
               <SheetDescription dir="auto" className="mx-4 line-clamp-2 rounded-xl bg-muted px-3 py-2 text-sm">
-                {previewText(actionsFor)}
+                {previewText({ ...actionsFor, duration: actionsFor.media?.duration })}
               </SheetDescription>
               <div className="grid gap-1 px-2 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
                 <ActionButton

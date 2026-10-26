@@ -207,6 +207,19 @@ export async function setMemberRole(actor: Actor, conversationId: string, userId
   });
 }
 
+// avatarUrl: "/api/media/{uploadId}" or null to remove.
+export async function setGroupPhoto(actor: Actor, conversationId: string, avatarUrl: string | null) {
+  return db.$transaction(async (tx) => {
+    await requireAdmin(tx, conversationId, actor.id);
+    await tx.conversation.update({ where: { id: conversationId }, data: { avatarUrl } });
+    const message = await recordEvent(tx, conversationId, actor, {
+      event: "photo_changed",
+      ...(avatarUrl ? {} : { removed: true }),
+    });
+    return { message };
+  });
+}
+
 export async function deleteGroup(actor: Actor, conversationId: string) {
   return db.$transaction(async (tx) => {
     await requireAdmin(tx, conversationId, actor.id);

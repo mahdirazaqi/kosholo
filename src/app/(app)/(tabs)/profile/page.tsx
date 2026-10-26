@@ -4,7 +4,8 @@ import { ChangePasswordForm } from "@/components/profile/change-password-form";
 import { EditNameForm } from "@/components/profile/edit-name-form";
 import { LogoutButton } from "@/components/profile/logout-button";
 import { PageHeader } from "@/components/page-header";
-import { UserAvatar } from "@/components/user-avatar";
+import { setProfilePhoto } from "@/app/(app)/photo-actions";
+import { AvatarEditor } from "@/components/avatar-editor";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/lib/auth";
 
@@ -33,7 +34,7 @@ async function ProfileContent() {
   return (
     <>
         <div className="flex flex-col items-center gap-3 rounded-2xl border bg-card px-5 py-7 text-center">
-          <UserAvatar user={user} size="xl" />
+          <AvatarEditor entity={user} onSave={setProfilePhoto} label="عکس پروفایل" />
           <div className="space-y-1">
             <h1 className="text-lg font-bold">{user.name}</h1>
             <p dir="ltr" className="text-sm text-muted-foreground">

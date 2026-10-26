@@ -1,15 +1,24 @@
+import { formatDuration } from "@/lib/format-date";
 import type { MessageType } from "@/lib/types/chat";
 
-const MEDIA_LABELS: Record<MessageType, string> = {
-  TEXT: "پیام",
-  IMAGE: "🖼️ تصویر",
-  VIDEO: "🎬 ویدیو",
-  VOICE: "🎤 پیام صوتی",
-  SYSTEM: "رویداد گروه",
-};
-
-// One-line text for list previews and quotes; media types get a label.
-export function previewText(message: { type: MessageType; content: string | null }) {
-  if (message.type === "TEXT") return message.content?.replace(/\s+/g, " ").trim() ?? "";
-  return message.content ? `${MEDIA_LABELS[message.type]}: ${message.content}` : MEDIA_LABELS[message.type];
+// One-line text for list previews, quotes and the reply bar. Media get an
+// icon + label (voice with its length), followed by the caption if any.
+export function previewText(message: {
+  type: MessageType;
+  content: string | null;
+  duration?: number | null;
+}) {
+  const caption = message.content?.replace(/\s+/g, " ").trim() ?? "";
+  switch (message.type) {
+    case "TEXT":
+      return caption;
+    case "IMAGE":
+      return caption ? `📷 ${caption}` : "📷 عکس";
+    case "VIDEO":
+      return caption ? `🎬 ${caption}` : "🎬 ویدیو";
+    case "VOICE":
+      return `🎤 پیام صوتی${message.duration ? ` (${formatDuration(message.duration)})` : ""}`;
+    default:
+      return "رویداد گروه";
+  }
 }

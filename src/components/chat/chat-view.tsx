@@ -12,6 +12,7 @@ import { MessageList } from "@/components/chat/message-list";
 import { PageHeader } from "@/components/page-header";
 import { UserAvatar } from "@/components/user-avatar";
 import { useConversationRealtime } from "@/hooks/use-conversation-realtime";
+import { useMediaSender } from "@/hooks/use-media-sender";
 import { useVisualViewportHeight } from "@/hooks/use-visual-viewport-height";
 import { PREVIEW_LENGTH } from "@/lib/chat/limits";
 import { tempId } from "@/lib/client-utils";
@@ -28,6 +29,8 @@ import type {
   ReplyPreview,
 } from "@/lib/types/chat";
 import type { PublicUser } from "@/lib/users";
+import type { PreparedFile } from "@/lib/media/client/prepare";
+import type { VoiceRecording } from "@/hooks/use-media-sender";
 
 export function ChatView({
   conversation,
@@ -71,10 +74,11 @@ export function ChatView({
             : state,
         ),
       ),
-    onUpdated: ({ title, members }) => {
+    onUpdated: ({ title, avatarUrl, members }) => {
       setChat((current) => ({
         ...current,
         ...(title !== undefined && current.type === "GROUP" ? { title } : {}),
+        ...(avatarUrl !== undefined && current.type === "GROUP" ? { avatarUrl } : {}),
         ...(members ? { members, memberCount: members.length } : {}),
       }));
       if (title !== undefined) renameConversation(conversation.id, title);
@@ -190,7 +194,7 @@ export function ChatView({
         conversationId: conversation.id,
         type: "TEXT",
         content,
-        mediaUrl: null,
+        media: null,
         meta: null,
         createdAt: new Date().toISOString(),
         sender: currentUser,
@@ -205,14 +209,37 @@ export function ChatView({
     [conversation.id, currentUser, replyTo, deliver, stopTyping, requestRead],
   );
 
+  const media = useMediaSender({ conversationId: conversation.id, currentUser, setMessages });
+  const { isMediaPending, retry: retryMedia } = media;
+
   const retry = useCallback(
     (message: ChatMessage) => {
+      // Media messages re-run their own pipeline (re-upload only if needed).
+      if (isMediaPending(message.tempId)) return void retryMedia(message.tempId!);
       setMessages((current) =>
         current.map((m) => (m.tempId === message.tempId ? { ...m, status: "sending" } : m)),
       );
       void deliver(message);
     },
-    [deliver],
+    [deliver, isMediaPending, retryMedia],
+  );
+
+  const sendFiles = useCallback(
+    (files: PreparedFile[], caption: string | null) => {
+      media.sendFiles(files, caption, replyTo ? toReplyPreview(replyTo) : null);
+      setReplyTo(null);
+      requestRead.current();
+    },
+    [media, replyTo, requestRead],
+  );
+
+  const sendVoice = useCallback(
+    (recording: VoiceRecording) => {
+      media.sendVoice(recording, replyTo ? toReplyPreview(replyTo) : null);
+      setReplyTo(null);
+      requestRead.current();
+    },
+    [media, replyTo, requestRead],
   );
 
   const startReply = useCallback((message: ChatMessage) => {
@@ -255,6 +282,7 @@ export function ChatView({
         onLoadOlder={loadOlder}
         onReply={startReply}
         onRetry={retry}
+        onCancelUpload={media.cancel}
       />
 
       {removed ? (
@@ -272,6 +300,8 @@ export function ChatView({
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
           onSend={send}
+          onSendFiles={sendFiles}
+          onSendVoice={sendVoice}
           onInput={onInput}
           onBlur={stopTyping}
         />
@@ -286,5 +316,7 @@ function toReplyPreview(message: ChatMessage): ReplyPreview {
     type: message.type,
     content: message.content?.slice(0, PREVIEW_LENGTH) ?? null,
     senderName: message.sender.name,
+    thumbUrl: message.media?.thumbUrl ?? null,
+    duration: message.media?.duration ?? null,
   };
 }

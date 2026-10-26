@@ -97,3 +97,13 @@ export function formatLastSeen(value: DateInput, now: Date = new Date()) {
 export function formatFullDate(value: DateInput) {
   return longDateWithYearFormat.format(toDate(value));
 }
+
+// Media length: "۱:۰۵" (m:ss), "۱:۰۲:۰۵" past an hour.
+export function formatDuration(seconds: number | null | undefined) {
+  const total = Math.max(0, Math.round(seconds ?? 0));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, "0");
+  const text = h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+  return text.replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
+}

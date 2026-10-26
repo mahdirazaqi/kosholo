@@ -1,7 +1,7 @@
-import type { ConversationType, MemberRole, MessageType } from "@/generated/prisma/enums";
+import type { ConversationType, MemberRole, MessageType, UploadKind } from "@/generated/prisma/enums";
 import type { PublicUser } from "@/lib/users";
 
-export type { ConversationType, MemberRole, MessageType };
+export type { ConversationType, MemberRole, MessageType, UploadKind };
 
 export type MessageStatus = "sending" | "sent" | "failed";
 
@@ -14,7 +14,8 @@ export type SystemEvent =
   | "member_left"
   | "renamed"
   | "admin_promoted"
-  | "admin_demoted";
+  | "admin_demoted"
+  | "photo_changed";
 
 export type SystemMeta = {
   event: SystemEvent;
@@ -24,6 +25,7 @@ export type SystemMeta = {
   targetNames?: string[];
   newTitle?: string; // "created" and "renamed"
   auto?: boolean; // "admin_promoted" when the last admin left
+  removed?: boolean; // "photo_changed" when the photo was removed
 };
 
 // Quoted message shown inside a reply. "deleted" means the message was a
@@ -33,6 +35,23 @@ export type ReplyPreview = {
   type: MessageType;
   content: string | null; // first 100 chars
   senderName: string;
+  thumbUrl: string | null; // image/video
+  duration: number | null; // voice/video, seconds
+};
+
+// A processed upload as the client sees it. URLs go through /api/media, which
+// checks access; files are never served statically.
+export type ChatMedia = {
+  id: string;
+  kind: UploadKind;
+  url: string; // /api/media/{id}
+  thumbUrl: string | null; // /api/media/{id}/thumb (image/video poster, avatar 128px)
+  mime: string;
+  width: number | null;
+  height: number | null;
+  duration: number | null; // seconds
+  placeholder: string | null; // tiny blurred data URL
+  waveform: number[] | null; // voice: ~48 values 0–1
 };
 
 export type ChatMessage = {
@@ -40,7 +59,7 @@ export type ChatMessage = {
   conversationId: string;
   type: MessageType;
   content: string | null;
-  mediaUrl: string | null; // for IMAGE/VIDEO/VOICE (later phases)
+  media: ChatMedia | null; // IMAGE / VIDEO / VOICE (content is then an optional caption)
   meta: SystemMeta | null; // SYSTEM only
   createdAt: string; // ISO string, safe to send over RSC, actions and sockets
   sender: PublicUser;
@@ -48,6 +67,12 @@ export type ChatMessage = {
   // Client-only:
   status: MessageStatus;
   tempId?: string; // id of the optimistic message this one replaced
+  local?: LocalUpload; // optimistic media message still uploading
+};
+
+export type LocalUpload = {
+  phase: "uploading" | "processing";
+  progress: number; // 0–1 of the request body
 };
 
 export type MessagesPage = {
@@ -57,6 +82,7 @@ export type MessagesPage = {
 
 export type LastMessagePreview = {
   type: MessageType;
+  duration: number | null; // voice
   content: string | null; // first 100 chars
   isMine: boolean;
   senderName: string; // shown as "علی: …" in group rows

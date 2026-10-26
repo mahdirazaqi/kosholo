@@ -17,6 +17,13 @@ enum MemberRole {
   MEMBER
 }
 
+enum UploadKind {
+  IMAGE
+  VIDEO
+  VOICE
+  AVATAR
+}
+
 enum MessageType {
   TEXT
   IMAGE
@@ -41,6 +48,7 @@ model User {
   createdConversations Conversation[]
   memberships          ConversationMember[]
   messages             Message[]
+  uploads              Upload[]
 
   @@map("users")
 }
@@ -98,18 +106,42 @@ model Message {
   senderId       String      @map("sender_id") @db.Uuid
   type           MessageType @default(TEXT)
   content        String?     @db.Text
-  mediaUrl       String?     @map("media_url")
-  // Length in seconds, for voice and video messages.
-  duration       Int?
   replyToId      String?     @map("reply_to_id") @db.Uuid
+  // IMAGE / VIDEO / VOICE messages point at their processed file.
+  uploadId       String?     @unique @map("upload_id") @db.Uuid
   meta           Json?
   createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation(fields: [senderId], references: [id])
   replyTo      Message?     @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  upload       Upload?      @relation(fields: [uploadId], references: [id], onDelete: SetNull)
   replies      Message[]    @relation("MessageReplies")
 
   @@index([conversationId, createdAt])
   @@map("messages")
+}
+
+// A processed file on disk under UPLOAD_DIR (never served statically; see
+// /api/media/[uploadId]). Unattached uploads are cleaned up after 24h.
+model Upload {
+  id          String     @id @default(uuid()) @db.Uuid
+  ownerId     String     @map("owner_id") @db.Uuid
+  kind        UploadKind
+  path        String // relative to UPLOAD_DIR: yyyy/mm/{uuid}.{ext}
+  thumbPath   String?    @map("thumb_path")
+  mime        String
+  size        Int
+  width       Int?
+  height      Int?
+  duration    Float? // seconds (video/voice)
+  placeholder String?    @db.Text // tiny blurred image as a data URL
+  waveform    Json? // voice: ~48 numbers 0–1
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  owner   User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  message Message?
+
+  @@index([createdAt])
+  @@map("uploads")
 }

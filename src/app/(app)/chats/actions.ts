@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@/generated/prisma/client";
 import { requireUser } from "@/lib/auth";
 import { getConversations, isMember } from "@/lib/chat/conversations";
 import { getMessages, getMessagesSince as queryMessagesSince } from "@/lib/chat/messages";
@@ -24,7 +25,7 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
   const me = await requireUser();
   const parsed = sendMessageSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
-  const { conversationId, content, replyToId, tempId } = parsed.data;
+  const { conversationId, content, uploadId, replyToId, tempId } = parsed.data;
 
   if (!(await isMember(conversationId, me.id))) return { ok: false, error: NOT_FOUND };
 
@@ -39,19 +40,39 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
     if (!original) return { ok: false, error: "پیامی که به آن پاسخ می‌دهید پیدا نشد" };
   }
 
+  // Media: the upload must be mine, unused, and a message kind (not an avatar).
+  let type: "TEXT" | "IMAGE" | "VIDEO" | "VOICE" = "TEXT";
+  if (uploadId) {
+    const upload = await db.upload.findFirst({
+      where: { id: uploadId, ownerId: me.id, message: null },
+      select: { kind: true },
+    });
+    if (!upload || upload.kind === "AVATAR") return { ok: false, error: "فایل پیدا نشد، دوباره بفرستید" };
+    type = upload.kind;
+  }
+
   const now = new Date();
-  const [row] = await db.$transaction([
-    db.message.create({
-      data: { conversationId, senderId: me.id, type: "TEXT", content, replyToId, createdAt: now },
-      select: messageSelect,
-    }),
-    db.conversation.update({ where: { id: conversationId }, data: { updatedAt: now } }),
-    // Sending counts as reading everything before it.
-    db.conversationMember.update({
-      where: { conversationId_userId: { conversationId, userId: me.id } },
-      data: { lastReadAt: now },
-    }),
-  ]);
+  let row;
+  try {
+    [row] = await db.$transaction([
+      db.message.create({
+        data: { conversationId, senderId: me.id, type, content, uploadId, replyToId, createdAt: now },
+        select: messageSelect,
+      }),
+      db.conversation.update({ where: { id: conversationId }, data: { updatedAt: now } }),
+      // Sending counts as reading everything before it.
+      db.conversationMember.update({
+        where: { conversationId_userId: { conversationId, userId: me.id } },
+        data: { lastReadAt: now },
+      }),
+    ]);
+  } catch (error) {
+    // uploadId is unique: a concurrent send with the same upload lost the race.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { ok: false, error: "این فایل قبلاً ارسال شده است" };
+    }
+    throw error;
+  }
   const message = toChatMessage(row);
 
   // Every member's user room, including the sender's other tabs/devices.

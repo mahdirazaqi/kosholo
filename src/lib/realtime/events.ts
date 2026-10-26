@@ -32,7 +32,15 @@ export type TypingPayload = {
 export type ConversationUpdatedPayload = {
   conversationId: string;
   title?: string;
+  avatarUrl?: string | null; // group photo ("/api/media/{id}") or removed
   members?: ChatMember[]; // full current member list
+};
+
+// A user's public profile changed (name / photo).
+export type UserUpdatedPayload = {
+  userId: string;
+  name?: string;
+  avatarUrl?: string | null;
 };
 
 // To a user who is no longer a member (removed, left, or the group was deleted).
@@ -59,6 +67,8 @@ export interface ServerToClientEvents {
   "conversation:read": (payload: ConversationReadPayload) => void;
   // To user:{memberId} of every member.
   "conversation:updated": (payload: ConversationUpdatedPayload) => void;
+  // To everyone who shares a conversation with the user or has them as a contact.
+  "user:updated": (payload: UserUpdatedPayload) => void;
   // To user:{id} of a former member only.
   "conversation:removed": (payload: ConversationRemovedPayload) => void;
   // To user:{memberId} of every member except the typist.

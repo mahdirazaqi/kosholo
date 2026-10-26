@@ -83,6 +83,7 @@ export async function getConversations(
             meta: true,
             createdAt: true,
             sender: { select: { id: true, name: true } },
+            upload: { select: { duration: true } },
           },
         },
       },
@@ -99,6 +100,7 @@ export async function getConversations(
       lastMessage: last
         ? {
             type: last.type,
+            duration: last.upload?.duration ?? null,
             content: preview(last.content),
             isMine: last.sender.id === userId,
             senderName: last.sender.name,

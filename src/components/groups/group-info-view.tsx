@@ -13,6 +13,8 @@ import {
   renameGroup,
   setMemberRole,
 } from "@/app/(app)/chats/group-actions";
+import { setGroupPhoto } from "@/app/(app)/photo-actions";
+import { AvatarEditor } from "@/components/avatar-editor";
 import { BackButton } from "@/components/back-button";
 import { BottomSheetContent } from "@/components/bottom-sheet";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -75,11 +77,12 @@ export function GroupInfoView({
   // Live: title/member/role changes, and being removed.
   useEffect(() => {
     const socket = getSocket();
-    const onUpdated = ({ conversationId, title, members: next }: ConversationUpdatedPayload) => {
+    const onUpdated = ({ conversationId, title, avatarUrl, members: next }: ConversationUpdatedPayload) => {
       if (conversationId !== info.id) return;
       setInfo((current) => ({
         ...current,
         ...(title !== undefined ? { title } : {}),
+        ...(avatarUrl !== undefined ? { avatarUrl } : {}),
         ...(next
           ? { members: next, myRole: next.find((m) => m.id === currentUserId)?.role ?? current.myRole }
           : {}),
@@ -145,7 +148,15 @@ export function GroupInfoView({
 
       <div className="space-y-4 px-4 py-6">
         <section className="flex flex-col items-center gap-3 rounded-2xl border bg-card px-5 py-8 text-center">
-          <UserAvatar user={{ id: info.id, name: info.title, avatarUrl: info.avatarUrl }} size="2xl" />
+          {isAdmin ? (
+            <AvatarEditor
+              entity={{ id: info.id, name: info.title, avatarUrl: info.avatarUrl }}
+              onSave={(uploadId) => setGroupPhoto(info.id, uploadId)}
+              label="عکس گروه"
+            />
+          ) : (
+            <UserAvatar user={{ id: info.id, name: info.title, avatarUrl: info.avatarUrl }} size="2xl" />
+          )}
           {editing ? (
             <form
               onSubmit={(event) => {

@@ -9,6 +9,7 @@ import type {
   ConversationUpdatedPayload,
   MessageNewPayload,
   TypingPayload,
+  UserUpdatedPayload,
 } from "@/lib/realtime/events";
 import {
   applyMessageToList,
@@ -18,6 +19,7 @@ import {
   removeConversation,
   renameConversation,
   resubscribePresence,
+  setAvatarOverride,
   setPresence,
   setTyping,
   useRealtimeStore,
@@ -62,8 +64,12 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       // Read in another tab/device of mine.
       if (userId === useRealtimeStore.getState().me) markConversationRead(conversationId);
     };
-    const onUpdated = ({ conversationId, title }: ConversationUpdatedPayload) => {
+    const onUpdated = ({ conversationId, title, avatarUrl }: ConversationUpdatedPayload) => {
       if (title !== undefined) renameConversation(conversationId, title);
+      if (avatarUrl !== undefined) setAvatarOverride(conversationId, avatarUrl);
+    };
+    const onUserUpdated = ({ userId, avatarUrl }: UserUpdatedPayload) => {
+      if (avatarUrl !== undefined) setAvatarOverride(userId, avatarUrl);
     };
     const onRemoved = ({ conversationId }: ConversationRemovedPayload) => removeConversation(conversationId);
     const onTypingStart = (payload: TypingPayload) =>
@@ -91,6 +97,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     socket.on("conversation:read", onRead);
     socket.on("conversation:updated", onUpdated);
     socket.on("conversation:removed", onRemoved);
+    socket.on("user:updated", onUserUpdated);
     socket.on("typing:start", onTypingStart);
     socket.on("typing:stop", onTypingStop);
     socket.on("presence:update", setPresence);
@@ -105,12 +112,13 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       socket.off("conversation:read", onRead);
       socket.off("conversation:updated", onUpdated);
       socket.off("conversation:removed", onRemoved);
+      socket.off("user:updated", onUserUpdated);
       socket.off("typing:start", onTypingStart);
       socket.off("typing:stop", onTypingStop);
       socket.off("presence:update", setPresence);
       document.removeEventListener("visibilitychange", onVisibility);
       socket.disconnect();
-      useRealtimeStore.setState({ connected: false, conversations: null, typing: {}, presence: {}, me: null });
+      useRealtimeStore.setState({ connected: false, conversations: null, typing: {}, presence: {}, avatars: {}, me: null });
     };
   }, []);
 
