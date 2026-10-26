@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { PREVIEW_LENGTH } from "@/lib/chat/limits";
-import type { ChatMessage } from "@/lib/types/chat";
+import type { ChatMember, ChatMessage, MemberReadState, SystemMeta } from "@/lib/types/chat";
 import { publicUserSelect } from "@/lib/users";
 
 // Every message query uses this select, so the shape is always the same and
@@ -13,6 +13,7 @@ export const messageSelect = {
   type: true,
   content: true,
   mediaUrl: true,
+  meta: true,
   createdAt: true,
   replyToId: true,
   sender: { select: publicUserSelect },
@@ -34,6 +35,7 @@ export function toChatMessage(row: MessageRow): ChatMessage {
     type: row.type,
     content: row.content,
     mediaUrl: row.mediaUrl,
+    meta: row.type === "SYSTEM" ? (row.meta as SystemMeta | null) : null,
     createdAt: row.createdAt.toISOString(),
     sender: row.sender,
     replyTo: row.replyTo
@@ -56,5 +58,30 @@ export const conversationSelect = {
   type: true,
   title: true,
   avatarUrl: true,
-  members: { select: { userId: true, lastReadAt: true, user: { select: publicUserSelect } } },
+  members: {
+    orderBy: { joinedAt: "asc" },
+    select: {
+      userId: true,
+      role: true,
+      joinedAt: true,
+      lastReadAt: true,
+      user: { select: publicUserSelect },
+    },
+  },
 } satisfies Prisma.ConversationSelect;
+
+type MemberRow = Prisma.ConversationGetPayload<{
+  select: typeof conversationSelect;
+}>["members"][number];
+
+export function toChatMember(member: MemberRow): ChatMember {
+  return { ...member.user, role: member.role, joinedAt: member.joinedAt.toISOString() };
+}
+
+export function toReadState(member: MemberRow): MemberReadState {
+  return {
+    userId: member.userId,
+    lastReadAt: member.lastReadAt?.toISOString() ?? null,
+    joinedAt: member.joinedAt.toISOString(),
+  };
+}

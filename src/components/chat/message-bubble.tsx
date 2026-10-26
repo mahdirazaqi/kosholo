@@ -3,6 +3,7 @@
 import { memo, useRef, useState } from "react";
 import { AlertCircle, Check, CheckCheck, Clock3, Copy, MoreHorizontal, Reply, RotateCw } from "lucide-react";
 import { previewText } from "@/components/chat/message-preview";
+import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,6 +15,7 @@ import { vibrate } from "@/lib/client-utils";
 import { isEmojiOnly } from "@/lib/emoji";
 import { formatTime } from "@/lib/format-date";
 import type { ChatMessage } from "@/lib/types/chat";
+import { nameColor } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 
 const SWIPE_THRESHOLD = 60;
@@ -33,7 +35,7 @@ type Props = BubbleActions & {
   isMine: boolean;
   groupStart: boolean; // first of a run from the same sender
   groupEnd: boolean; // last of the run: gets the tail
-  showSenderName: boolean; // GROUP conversations only
+  isGroup: boolean; // sender names + avatars for others' messages
   isDesktop: boolean;
   highlighted: boolean;
   read: boolean; // my message, seen by the other member (DIRECT)
@@ -44,7 +46,7 @@ export const MessageBubble = memo(function MessageBubble({
   isMine,
   groupStart,
   groupEnd,
-  showSenderName,
+  isGroup,
   isDesktop,
   highlighted,
   read,
@@ -105,6 +107,12 @@ export const MessageBubble = memo(function MessageBubble({
       )}
     >
       <div className={cn("flex max-w-[85%] items-end gap-1", isMine && "flex-row-reverse")}>
+        {isGroup && !isMine && (
+          // Avatar on the last bubble of a run; an empty slot keeps the run aligned.
+          <span className="w-7 shrink-0 self-end">
+            {groupEnd && <UserAvatar user={message.sender} size="xs" />}
+          </span>
+        )}
         <Swipeable
           enabled={canInteract && !isDesktop}
           onSwipe={() => actions.onReply(message)}
@@ -122,8 +130,10 @@ export const MessageBubble = memo(function MessageBubble({
               !isDesktop && "select-none [-webkit-touch-callout:none]",
             )}
           >
-            {showSenderName && !isMine && groupStart && (
-              <p className="mb-0.5 truncate text-xs font-semibold text-primary">{message.sender.name}</p>
+            {isGroup && !isMine && groupStart && (
+              <p className={cn("mb-0.5 truncate text-xs font-semibold", nameColor(message.sender.id))}>
+                {message.sender.name}
+              </p>
             )}
 
             {message.replyTo && (

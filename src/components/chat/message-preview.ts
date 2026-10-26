@@ -5,6 +5,7 @@ const MEDIA_LABELS: Record<MessageType, string> = {
   IMAGE: "🖼️ تصویر",
   VIDEO: "🎬 ویدیو",
   VOICE: "🎤 پیام صوتی",
+  SYSTEM: "رویداد گروه",
 };
 
 // One-line text for list previews and quotes; media types get a label.

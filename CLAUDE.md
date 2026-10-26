@@ -45,7 +45,8 @@ src/app/(app)/(tabs)/ protected tabs, AppShell with bottom nav: / , /contacts (+
 src/app/(app)/chats/  protected conversation screens, AppShell without bottom nav: /chats/[conversationId]
 src/components/       app components (app-shell, page-header, bottom-nav, bottom-sheet, user-avatar, back-button, form-field, ...)
 src/components/contacts/ contacts list, contact sheet, add-contact sheet
-src/components/chat/  chat list, new-chat sheet, chat view, message list/bubble, composer, emoji button
+src/components/chat/  chat list, new-conversation/new-chat sheets, chat view, message list/bubble, system message, composer, emoji button
+src/components/groups/ new-group flow, member picker, group info view, direct info view
 src/components/auth/  login/register forms, auth card
 src/components/profile/ profile forms + logout dialog
 src/components/ui/    shadcn components (RTL-audited)
@@ -54,7 +55,8 @@ src/hooks/            client hooks (use-conversation-realtime, use-presence, use
 src/lib/              db.ts, session.ts, session-token.ts, auth.ts, users.ts, contacts.ts, rate-limit.ts, form.ts, validations/, format-date.ts, emoji.ts, client-utils.ts, utils.ts
 src/lib/realtime/     events.ts (typed event contract + rooms), membership.ts (cached), emit.ts (from Server Actions)
 src/lib/realtime/client/ socket.ts (typed client), store.ts (zustand), merge.ts (dedupe rule)
-src/lib/chat/         server chat queries: queries.ts (selects + mappers), conversations.ts, messages.ts, limits.ts
+src/lib/chat/         queries.ts (selects + mappers), conversations.ts, messages.ts, groups.ts (group rules), limits.ts, system-text.ts (client-safe)
+src/lib/colors.ts     stable per-id colors (avatar tints, group sender names)
 src/lib/types/chat.ts shared chat types (ChatMessage, ConversationListItem, ...)
 public/emojibase/     self-hosted emoji data for the picker (no CDN)
 src/server/           custom server: index.ts (entry), env.ts (loads .env first), io.ts (getIO/setIO/tryGetIO)
@@ -139,6 +141,43 @@ Custom email/password auth. Do not add NextAuth or other auth libraries.
 - **Emoji picker:** the frimousse-based shadcn `ui/emoji-picker.tsx`. Data is self-hosted in `public/emojibase/en`, with Persian category names in `messages.json`; search is English because emojibase has no Persian. Don't point it at a CDN (jsDelivr is often blocked in Iran).
 - **Reply deletion:** `Message.replyTo` is `onDelete: SetNull`, so a deleted original currently drops the link. `"deleted"` is rendered as «پیام در دسترس نیست» for when message deletion lands.
 
+## Groups
+
+Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, message, reply, emoji and realtime code as DIRECT chats; branch on `conversation.type` instead of duplicating components.
+
+- **Rules:**
+  - The title is 1–50 chars, trimmed. A group has at most 50 members.
+  - Only the actor's **contacts** can be added (at creation, or later by an admin). Creating a group needs at least 1 other member.
+  - The creator is `ADMIN`, and a group can have several admins.
+  - Admins can rename, add members, remove **non-admin** members, promote, demote another admin, and delete the group for everyone.
+  - Any member can leave. If the last admin leaves, the longest-standing member (`joinedAt`, then `userId`) becomes admin. If the last member leaves, the conversation is deleted.
+- **Where:**
+  - `src/lib/chat/groups.ts` (server-only) holds the rules. Every check runs **inside** the interactive transaction that makes the change, and violations throw `GroupError` with a Persian message.
+  - `src/app/(app)/chats/group-actions.ts`: `createGroup`, `renameGroup`, `addMembers`, `removeMember`, `leaveGroup`, `setMemberRole` and `deleteGroup`. Each one runs `requireUser`, zod validation (`lib/validations/groups.ts`), the transaction, then realtime events, and returns `{ ok, error? }`.
+  - `run()` rethrows Next control flow (`unstable_rethrow`). **UI hiding is cosmetic; the server is the authority.**
+- **Info data:** `getGroupInfo(conversationId, userId)` returns the title, avatar, createdAt, members (`ChatMember` = public user + role + joinedAt) and my role. `getMembers()` builds `conversation:updated` payloads.
+- **Pages:**
+  - `/chats/new-group` is a two-step flow: `MemberPicker` (checkboxes, filter, chips), then the title.
+  - `/chats/[id]/info` shows `GroupInfoView` (live via `conversation:updated` / `removed`) or, for DIRECT, `DirectInfoView`. It opens from the chat header.
+- **In chat:**
+  - Others' bubbles show the sender name (`nameColor(id)`) on the first bubble of a run and a small avatar on the last.
+  - Read receipts (✓✓) need **every** other current member who joined before the message to have read it.
+  - Typing shows «{name} در حال نوشتن» or «{n} نفر در حال نوشتن».
+  - The header shows «{n} عضو، {m} آنلاین»; the group chat subscribes to presence for all members.
+  - The list prefixes previews with «علی: » / «شما: ».
+
+### System messages
+
+- `MessageType.SYSTEM` with `Message.meta` (JSON, type `SystemMeta` in `lib/types/chat.ts`): `{ event, actorId, actorName, targetIds?, targetNames?, newTitle?, auto? }`.
+  - `event` is one of `created`, `member_added`, `member_removed`, `member_left`, `renamed`, `admin_promoted` or `admin_demoted`.
+  - `auto: true` marks the promotion that happens when the last admin leaves.
+  - `senderId` is the actor.
+- **Names live in meta** so the text still renders after people leave. `systemMessageText(meta, meId, currentNames?)` (`lib/chat/system-text.ts`) builds the Persian sentence on the client: «شما» plus second-person verbs for the viewer, and current member names when known.
+- **Rendering:** a centered muted pill (`SystemMessage`).
+  - They break sender runs, can't be replied to (the server rejects `replyToId` pointing at one) and never count as unread (excluded in the unread SQL and in the client store).
+  - They do show as the chat-list preview.
+- **Creation:** `recordEvent()` in `groups.ts` creates them and bumps `conversation.updatedAt` in the same transaction.
+
 ## Realtime (Socket.IO)
 
 One process: Socket.IO is attached to the custom server.
@@ -156,6 +195,8 @@ One process: Socket.IO is attached to the custom server.
 | S→C | `conversation:read` | `{ conversationId, userId, lastReadAt }` | `user:{id}` of every member |
 | S→C | `typing:start` / `typing:stop` | `{ conversationId, userId, name }` | `user:{id}` of the other members |
 | S→C | `presence:update` | `{ userId, online, lastSeenAt }` | `presence:{userId}` |
+| S→C | `conversation:updated` | `{ conversationId, title?, members? }` | `user:{id}` of every member, after rename / membership / role changes |
+| S→C | `conversation:removed` | `{ conversationId, reason: "removed" \| "left" \| "deleted" }` | `user:{id}` of the former member(s) |
 | C→S | `conversation:join` (ack `{ ok }`) / `conversation:leave` | `conversationId` | joins/leaves `conv:{id}` after a membership check |
 | C→S | `typing:start` / `typing:stop` | `conversationId` | membership-checked; `start` ignored if faster than 1/s per socket |
 | C→S | `presence:subscribe` (ack: states) / `presence:unsubscribe` | `{ userIds }` | joins `presence:{id}`; only for people I share a conversation with or have as contacts |
@@ -172,6 +213,11 @@ Typing goes to user rooms rather than `conv:{id}` so the chat list can show it t
 **Membership:** every client event that names a conversation is checked with `isConversationMember` (`lib/realtime/membership.ts`). It has a 60s in-memory TTL; call `invalidateMembership(id)` when members change.
 
 **Emitting from Server Actions:** use `emitToMembers(conversationId, event, payload)` (`lib/realtime/emit.ts`). It's a no-op without a socket server, so mutations never fail because of realtime.
+- **Membership changes:**
+  - Call `invalidateMembership(id)` **before** emitting to the new member list (adds).
+  - Use `emitRemoved(id, userIds, reason)` for people who are no longer members. It emits `conversation:removed`, runs `io.in(user rooms).socketsLeave(conv room)` and invalidates the cache.
+- **Group system messages** go out as normal `message:new` (`tempId: null`). A new member's client sees an unknown conversation and fetches its row, so the group appears in their list instantly.
+- **Client side:** `conversation:removed` removes the row from the list. An open chat shows a non-dismissable banner («شما دیگر عضو این گروه نیستید» / «این گروه حذف شده است») and hides the composer.
 - `sendMessage` emits `message:new` plus `conversation:read` for the sender.
 - `markAsRead` emits `conversation:read`.
 

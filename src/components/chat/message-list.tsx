@@ -5,6 +5,7 @@ import { ChevronDown, Copy, Loader2, Reply } from "lucide-react";
 import { toast } from "sonner";
 import { previewText } from "@/components/chat/message-preview";
 import { MessageBubble, type BubbleActions } from "@/components/chat/message-bubble";
+import { SystemMessage } from "@/components/chat/system-message";
 import { BottomSheetContent } from "@/components/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetDescription, SheetTitle } from "@/components/ui/sheet";
@@ -24,6 +25,7 @@ type Props = {
   messages: ChatMessage[];
   currentUserId: string;
   conversationType: ConversationType;
+  memberNames: Map<string, string>; // current names, for system messages
   readStates: MemberReadState[]; // other members
   hasMore: boolean;
   loadingOlder: boolean;
@@ -39,6 +41,7 @@ export function MessageList({
   messages,
   currentUserId,
   conversationType,
+  memberNames,
   readStates,
   hasMore,
   loadingOlder,
@@ -167,14 +170,20 @@ export function MessageList({
   const seenIndex = seenKey === null ? -1 : messages.findIndex((m) => keyOf(m) === seenKey);
   const unseen = atBottom
     ? 0
-    : messages.slice(seenIndex + 1).filter((m) => m.sender.id !== currentUserId).length;
+    : messages
+        .slice(seenIndex + 1)
+        .filter((m) => m.sender.id !== currentUserId && m.type !== "SYSTEM").length;
 
-  // DIRECT: read once the other member's lastReadAt reaches the message.
-  // (Groups can switch this to "read by everyone" or a count in phase 5.)
-  const isRead = (message: ChatMessage) =>
-    message.sender.id === currentUserId &&
-    message.status === "sent" &&
-    readStates.some((state) => state.lastReadAt !== null && state.lastReadAt >= message.createdAt);
+  // ✓✓ once every other current member who was already in the conversation
+  // when the message was sent has read it (DIRECT: the other person).
+  const isRead = (message: ChatMessage) => {
+    if (message.sender.id !== currentUserId || message.status !== "sent") return false;
+    const expected = readStates.filter((state) => state.joinedAt <= message.createdAt);
+    return (
+      expected.length > 0 &&
+      expected.every((state) => state.lastReadAt !== null && state.lastReadAt >= message.createdAt)
+    );
+  };
 
   return (
     <div className="relative min-h-0 flex-1">
@@ -202,6 +211,15 @@ export function MessageList({
           const groupStart = newDay || !continues(previous, message);
           const groupEnd = !next || !continues(message, next) || dayNumber(next.createdAt) !== dayNumber(message.createdAt);
 
+          if (message.type === "SYSTEM") {
+            return (
+              <Fragment key={keyOf(message)}>
+                {newDay && <DaySeparator date={message.createdAt} />}
+                <SystemMessage message={message} currentUserId={currentUserId} memberNames={memberNames} />
+              </Fragment>
+            );
+          }
+
           return (
             <Fragment key={keyOf(message)}>
               {newDay && <DaySeparator date={message.createdAt} />}
@@ -210,7 +228,7 @@ export function MessageList({
                 isMine={message.sender.id === currentUserId}
                 groupStart={groupStart}
                 groupEnd={groupEnd}
-                showSenderName={conversationType === "GROUP"}
+                isGroup={conversationType === "GROUP"}
                 isDesktop={isDesktop}
                 highlighted={highlight === message.id}
                 read={isRead(message)}
@@ -284,9 +302,11 @@ export function MessageList({
   );
 }
 
-// Same sender within 5 minutes → same visual group.
+// Same sender within 5 minutes → same visual group. System messages break runs.
 function continues(a: ChatMessage, b: ChatMessage) {
   return (
+    a.type !== "SYSTEM" &&
+    b.type !== "SYSTEM" &&
     a.sender.id === b.sender.id &&
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() <= GROUP_WINDOW_MS
   );

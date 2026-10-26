@@ -33,7 +33,9 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
   recordHit(limitKey, LIMITS.messages);
 
   if (replyToId) {
-    const original = await db.message.count({ where: { id: replyToId, conversationId } });
+    const original = await db.message.count({
+      where: { id: replyToId, conversationId, type: { not: "SYSTEM" } },
+    });
     if (!original) return { ok: false, error: "پیامی که به آن پاسخ می‌دهید پیدا نشد" };
   }
 
@@ -113,12 +115,16 @@ export async function getMessagesSince(
     queryMessagesSince(conversationId, date),
     db.conversationMember.findMany({
       where: { conversationId, userId: { not: me.id } },
-      select: { userId: true, lastReadAt: true },
+      select: { userId: true, lastReadAt: true, joinedAt: true },
     }),
   ]);
   return {
     ...result,
-    readStates: members.map((m) => ({ userId: m.userId, lastReadAt: m.lastReadAt?.toISOString() ?? null })),
+    readStates: members.map((m) => ({
+      userId: m.userId,
+      lastReadAt: m.lastReadAt?.toISOString() ?? null,
+      joinedAt: m.joinedAt.toISOString(),
+    })),
   };
 }
 

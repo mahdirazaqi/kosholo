@@ -72,6 +72,8 @@ export function applyMessageToList(message: ChatMessage): boolean {
   const isMine = message.sender.id === me;
   const isOpen =
     activeConversationId === message.conversationId && document.visibilityState === "visible";
+  // System messages (group events) never count as unread.
+  const counts = !isMine && !isOpen && message.type !== "SYSTEM";
   const item = conversations[index];
   const updated: ConversationListItem = {
     ...item,
@@ -79,9 +81,11 @@ export function applyMessageToList(message: ChatMessage): boolean {
       type: message.type,
       content: message.content?.slice(0, PREVIEW_LENGTH) ?? null,
       isMine,
+      senderName: message.sender.name,
+      meta: message.meta,
     },
     lastMessageAt: message.createdAt,
-    unreadCount: isMine || isOpen ? item.unreadCount : item.unreadCount + 1,
+    unreadCount: counts ? item.unreadCount + 1 : item.unreadCount,
   };
   set({ conversations: [updated, ...conversations.filter((_, i) => i !== index)] });
   return true;
@@ -101,6 +105,29 @@ export function markConversationRead(conversationId: string) {
       item.id === conversationId && item.unreadCount ? { ...item, unreadCount: 0 } : item,
     ),
   });
+}
+
+export function renameConversation(conversationId: string, title: string) {
+  const conversations = get().conversations;
+  if (!conversations) return;
+  set({
+    conversations: conversations.map((item) =>
+      item.id === conversationId && item.type === "GROUP" ? { ...item, title } : item,
+    ),
+  });
+}
+
+export function removeConversation(conversationId: string) {
+  const conversations = get().conversations;
+  if (conversations) set({ conversations: conversations.filter((item) => item.id !== conversationId) });
+  setTypingFor(conversationId, null);
+}
+
+function setTypingFor(conversationId: string, users: Record<string, string> | null) {
+  const typing = { ...get().typing };
+  if (users) typing[conversationId] = users;
+  else delete typing[conversationId];
+  set({ typing });
 }
 
 export function setActiveConversation(conversationId: string | null) {

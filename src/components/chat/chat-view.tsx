@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { UserX } from "lucide-react";
 import { toast } from "sonner";
 import { loadOlderMessages, sendMessage } from "@/app/(app)/chats/actions";
 import { BackButton } from "@/components/back-button";
@@ -16,9 +18,11 @@ import { tempId } from "@/lib/client-utils";
 import { lastConfirmedAt, mergeMessage } from "@/lib/realtime/client/merge";
 import { getSocket } from "@/lib/realtime/client/socket";
 import { TYPING_CLIENT_THROTTLE_MS } from "@/lib/realtime/events";
+import { removeConversation, renameConversation } from "@/lib/realtime/client/store";
 import type {
   ChatConversation,
   ChatMessage,
+  ConversationRemovedReason,
   MemberReadState,
   MessagesPage,
   ReplyPreview,
@@ -41,6 +45,10 @@ export function ChatView({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [readStates, setReadStates] = useState<MemberReadState[]>(conversation.readStates);
+  // Title and members change live in groups (conversation:updated).
+  const [chat, setChat] = useState(conversation);
+  const [removed, setRemoved] = useState<ConversationRemovedReason | null>(null);
+  const memberNames = useMemo(() => new Map(chat.members.map((m) => [m.id, m.name])), [chat.members]);
   const composerRef = useRef<ComposerHandle>(null);
 
   // Refs so loadOlder stays stable and concurrent callers share one request.
@@ -63,6 +71,31 @@ export function ChatView({
             : state,
         ),
       ),
+    onUpdated: ({ title, members }) => {
+      setChat((current) => ({
+        ...current,
+        ...(title !== undefined && current.type === "GROUP" ? { title } : {}),
+        ...(members ? { members, memberCount: members.length } : {}),
+      }));
+      if (title !== undefined) renameConversation(conversation.id, title);
+      if (members) {
+        // Keep known read positions; drop people who left; add newcomers.
+        setReadStates((current) =>
+          members
+            .filter((member) => member.id !== currentUser.id)
+            .map((member) => ({
+              userId: member.id,
+              joinedAt: member.joinedAt,
+              lastReadAt: current.find((state) => state.userId === member.id)?.lastReadAt ?? null,
+            })),
+        );
+      }
+    },
+    onRemoved: (reason) => {
+      setRemoved(reason);
+      setReplyTo(null);
+      removeConversation(conversation.id);
+    },
     getLastConfirmedAt: () => lastConfirmedAt(messagesRef.current),
   });
 
@@ -158,6 +191,7 @@ export function ChatView({
         type: "TEXT",
         content,
         mediaUrl: null,
+        meta: null,
         createdAt: new Date().toISOString(),
         sender: currentUser,
         replyTo: replyTo ? toReplyPreview(replyTo) : null,
@@ -186,30 +220,35 @@ export function ChatView({
     composerRef.current?.focus();
   }, []);
 
-  const other = conversation.otherUser;
+  const other = chat.otherUser;
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         start={<BackButton />}
         title={
-          <span className="flex items-center gap-3">
+          // Tapping the header opens the info page.
+          <Link
+            href={`/chats/${chat.id}/info`}
+            className="flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
             <UserAvatar
-              user={other ?? { id: conversation.id, name: conversation.title, avatarUrl: conversation.avatarUrl }}
+              user={other ?? { id: chat.id, name: chat.title, avatarUrl: chat.avatarUrl }}
               size="sm"
             />
             <span className="min-w-0">
-              <span className="block truncate text-base leading-tight">{conversation.title}</span>
-              <ChatStatus conversation={conversation} />
+              <span className="block truncate text-base leading-tight">{chat.title}</span>
+              <ChatStatus conversation={chat} currentUserId={currentUser.id} />
             </span>
-          </span>
+          </Link>
         }
       />
 
       <MessageList
         messages={messages}
         currentUserId={currentUser.id}
-        conversationType={conversation.type}
+        conversationType={chat.type}
+        memberNames={memberNames}
         readStates={readStates}
         hasMore={cursor !== null}
         loadingOlder={loadingOlder}
@@ -218,14 +257,25 @@ export function ChatView({
         onRetry={retry}
       />
 
-      <Composer
-        ref={composerRef}
-        replyTo={replyTo}
-        onCancelReply={() => setReplyTo(null)}
-        onSend={send}
-        onInput={onInput}
-        onBlur={stopTyping}
-      />
+      {removed ? (
+        // Non-dismissable: the user can still read what's loaded, not send.
+        <div
+          role="status"
+          className="flex shrink-0 items-center justify-center gap-2 border-t bg-muted/60 px-4 pt-4 pb-[max(env(safe-area-inset-bottom),1rem)] text-sm font-medium text-muted-foreground"
+        >
+          <UserX className="size-4.5" />
+          {removed === "deleted" ? "این گروه حذف شده است" : "شما دیگر عضو این گروه نیستید"}
+        </div>
+      ) : (
+        <Composer
+          ref={composerRef}
+          replyTo={replyTo}
+          onCancelReply={() => setReplyTo(null)}
+          onSend={send}
+          onInput={onInput}
+          onBlur={stopTyping}
+        />
+      )}
     </div>
   );
 }

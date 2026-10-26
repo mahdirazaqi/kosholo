@@ -1,9 +1,9 @@
 import "server-only";
 
 import { Prisma } from "@/generated/prisma/client";
-import { conversationSelect, preview } from "@/lib/chat/queries";
+import { conversationSelect, preview, toChatMember, toReadState } from "@/lib/chat/queries";
 import { db } from "@/lib/db";
-import type { ChatConversation, ConversationListItem } from "@/lib/types/chat";
+import type { ChatConversation, ConversationListItem, SystemMeta } from "@/lib/types/chat";
 import { userIdSchema } from "@/lib/validations/contacts";
 
 // Key that identifies the single DIRECT conversation between two users.
@@ -49,10 +49,9 @@ export async function getConversationForMember(
   return {
     id: conversation.id,
     type: conversation.type,
+    members: conversation.members.map(toChatMember),
     memberCount: conversation.members.length,
-    readStates: conversation.members
-      .filter((member) => member.userId !== userId)
-      .map((member) => ({ userId: member.userId, lastReadAt: member.lastReadAt?.toISOString() ?? null })),
+    readStates: conversation.members.filter((member) => member.userId !== userId).map(toReadState),
     ...describe(conversation, userId),
   };
 }
@@ -78,7 +77,13 @@ export async function getConversations(
         messages: {
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: 1,
-          select: { type: true, content: true, senderId: true, createdAt: true },
+          select: {
+            type: true,
+            content: true,
+            meta: true,
+            createdAt: true,
+            sender: { select: { id: true, name: true } },
+          },
         },
       },
     }),
@@ -92,7 +97,13 @@ export async function getConversations(
       type: conversation.type,
       ...describe(conversation, userId),
       lastMessage: last
-        ? { type: last.type, content: preview(last.content), isMine: last.senderId === userId }
+        ? {
+            type: last.type,
+            content: preview(last.content),
+            isMine: last.sender.id === userId,
+            senderName: last.sender.name,
+            meta: last.type === "SYSTEM" ? (last.meta as SystemMeta | null) : null,
+          }
         : null,
       lastMessageAt: (last?.createdAt ?? conversation.updatedAt).toISOString(),
       unreadCount: unread.get(conversation.id) ?? 0,
@@ -108,6 +119,7 @@ async function getUnreadCounts(userId: string) {
     JOIN conversation_members cm
       ON cm.conversation_id = m.conversation_id AND cm.user_id = ${userId}::uuid
     WHERE m.sender_id <> ${userId}::uuid
+      AND m.type <> 'SYSTEM'
       AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
     GROUP BY m.conversation_id
   `);

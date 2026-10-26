@@ -3,12 +3,20 @@
 import { useEffect } from "react";
 import { getConversation, listConversations } from "@/app/(app)/chats/actions";
 import { getSocket } from "@/lib/realtime/client/socket";
-import type { ConversationReadPayload, MessageNewPayload, TypingPayload } from "@/lib/realtime/events";
+import type {
+  ConversationReadPayload,
+  ConversationRemovedPayload,
+  ConversationUpdatedPayload,
+  MessageNewPayload,
+  TypingPayload,
+} from "@/lib/realtime/events";
 import {
   applyMessageToList,
   hydrateConversations,
   insertConversation,
   markConversationRead,
+  removeConversation,
+  renameConversation,
   resubscribePresence,
   setPresence,
   setTyping,
@@ -54,6 +62,10 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       // Read in another tab/device of mine.
       if (userId === useRealtimeStore.getState().me) markConversationRead(conversationId);
     };
+    const onUpdated = ({ conversationId, title }: ConversationUpdatedPayload) => {
+      if (title !== undefined) renameConversation(conversationId, title);
+    };
+    const onRemoved = ({ conversationId }: ConversationRemovedPayload) => removeConversation(conversationId);
     const onTypingStart = (payload: TypingPayload) =>
       setTyping(payload.conversationId, payload.userId, payload.name);
     const onTypingStop = (payload: TypingPayload) =>
@@ -77,6 +89,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     socket.on("session:ready", onSession);
     socket.on("message:new", onMessage);
     socket.on("conversation:read", onRead);
+    socket.on("conversation:updated", onUpdated);
+    socket.on("conversation:removed", onRemoved);
     socket.on("typing:start", onTypingStart);
     socket.on("typing:stop", onTypingStop);
     socket.on("presence:update", setPresence);
@@ -89,6 +103,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       socket.off("session:ready", onSession);
       socket.off("message:new", onMessage);
       socket.off("conversation:read", onRead);
+      socket.off("conversation:updated", onUpdated);
+      socket.off("conversation:removed", onRemoved);
       socket.off("typing:start", onTypingStart);
       socket.off("typing:stop", onTypingStop);
       socket.off("presence:update", setPresence);

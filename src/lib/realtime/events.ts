@@ -1,6 +1,6 @@
 // Socket.IO contract shared by the client and the server. Every event name and
 // payload lives here; both sides use Socket.IO's typed-event generics.
-import type { ChatMessage } from "@/lib/types/chat";
+import type { ChatMember, ChatMessage, ConversationRemovedReason } from "@/lib/types/chat";
 
 // ---- Rooms ----
 // user:{id}      every socket of a user (all tabs/devices). Per-user delivery.
@@ -28,6 +28,19 @@ export type TypingPayload = {
   name: string;
 };
 
+// After rename / membership / role changes. Fields present are the new values.
+export type ConversationUpdatedPayload = {
+  conversationId: string;
+  title?: string;
+  members?: ChatMember[]; // full current member list
+};
+
+// To a user who is no longer a member (removed, left, or the group was deleted).
+export type ConversationRemovedPayload = {
+  conversationId: string;
+  reason: ConversationRemovedReason;
+};
+
 export type PresenceState = {
   userId: string;
   online: boolean;
@@ -44,6 +57,10 @@ export interface ServerToClientEvents {
   "message:new": (payload: MessageNewPayload) => void;
   // To user:{memberId} of every member.
   "conversation:read": (payload: ConversationReadPayload) => void;
+  // To user:{memberId} of every member.
+  "conversation:updated": (payload: ConversationUpdatedPayload) => void;
+  // To user:{id} of a former member only.
+  "conversation:removed": (payload: ConversationRemovedPayload) => void;
   // To user:{memberId} of every member except the typist.
   "typing:start": (payload: TypingPayload) => void;
   "typing:stop": (payload: TypingPayload) => void;

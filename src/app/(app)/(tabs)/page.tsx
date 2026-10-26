@@ -20,7 +20,7 @@ async function ChatListContent() {
     getConversations(user.id),
     getContacts(user.id),
   ]);
-  return <ChatListView conversations={conversations} contacts={contacts} />;
+  return <ChatListView conversations={conversations} contacts={contacts} currentUserId={user.id} />;
 }
 
 function ChatListSkeleton() {

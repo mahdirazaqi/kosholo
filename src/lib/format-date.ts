@@ -92,3 +92,8 @@ export function formatLastSeen(value: DateInput, now: Date = new Date()) {
   if (diff === 1) return `دیروز ساعت ${formatTime(date)}`;
   return shortDateFormat.format(date);
 }
+
+// "۴ آبان ۱۴۰۵"
+export function formatFullDate(value: DateInput) {
+  return longDateWithYearFormat.format(toDate(value));
+}
