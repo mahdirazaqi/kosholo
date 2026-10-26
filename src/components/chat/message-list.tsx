@@ -11,10 +11,11 @@ import { BottomSheetContent } from "@/components/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { useIsDesktop } from "@/hooks/use-media-query";
-import { copyText, nextFrame } from "@/lib/client-utils";
+import { copyText, nextFrame, scrollBehavior } from "@/lib/client-utils";
 import { dayNumber, formatDaySeparator } from "@/lib/format-date";
 import type { ChatMessage, ConversationType, MemberReadState } from "@/lib/types/chat";
 import { cn } from "@/lib/utils";
+import { toFaDigits } from "@/lib/digits";
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 const LOAD_MORE_THRESHOLD = 400; // px from the top
@@ -75,7 +76,7 @@ export function MessageList({
   const scrollToBottom = useCallback((smooth = false) => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
-    scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth ? scrollBehavior() : "auto" });
   }, []);
 
   // Keep the viewport stable when messages change:
@@ -134,7 +135,7 @@ export function MessageList({
           `[data-message-id="${CSS.escape(messageId)}"]`,
         );
         if (target) {
-          target.scrollIntoView({ block: "center", behavior: "smooth" });
+          target.scrollIntoView({ block: "center", behavior: scrollBehavior() });
           setHighlight(null);
           await nextFrame();
           setHighlight(messageId);
@@ -257,7 +258,7 @@ export function MessageList({
       <Button
         size="lg"
         variant="outline"
-        aria-label={unseen > 0 ? `${unseen.toLocaleString("fa-IR")} پیام جدید` : "رفتن به آخرین پیام"}
+        aria-label={unseen > 0 ? `${toFaDigits(unseen)} پیام جدید` : "رفتن به آخرین پیام"}
         onClick={() => scrollToBottom(true)}
         className={cn(
           "absolute end-3 bottom-3 h-11 min-w-11 gap-1.5 rounded-full bg-background/95 px-3 shadow-md transition-all duration-200",
@@ -268,7 +269,7 @@ export function MessageList({
       >
         {unseen > 0 && (
           <span className="text-sm font-medium text-primary">
-            {unseen.toLocaleString("fa-IR")} پیام جدید
+            {toFaDigits(unseen)} پیام جدید
           </span>
         )}
         <ChevronDown className="size-5" />

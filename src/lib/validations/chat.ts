@@ -1,7 +1,6 @@
 import { z } from "zod";
+import { MAX_MESSAGE_LENGTH } from "@/lib/chat/limits";
 import { MAX_CAPTION_LENGTH } from "@/lib/media/limits";
-
-export const MAX_MESSAGE_LENGTH = 4000;
 
 // Text messages need content; media messages (uploadId) take an optional caption.
 export const sendMessageSchema = z

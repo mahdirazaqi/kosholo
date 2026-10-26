@@ -10,6 +10,7 @@ import { prepareFile } from "@/lib/media/client/prepare";
 import { uploadFile } from "@/lib/media/client/upload";
 import { MEDIA_ERRORS, UPLOAD_LIMITS } from "@/lib/media/limits";
 import { setAvatarOverride, useRealtimeStore } from "@/lib/realtime/client/store";
+import { toFaDigits } from "@/lib/digits";
 
 type SaveResult = { ok: true; avatarUrl: string | null } | { ok: false; error: string };
 
@@ -72,7 +73,7 @@ export function AvatarEditor({
         </span>
         {progress !== null && (
           <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-sm font-semibold text-white">
-            {Math.round(progress * 100).toLocaleString("fa-IR")}٪
+            {toFaDigits(Math.round(progress * 100))}٪
           </span>
         )}
       </button>

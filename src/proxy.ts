@@ -5,9 +5,12 @@ import { SESSION_COOKIE, verifySession } from "@/lib/session";
 // Pages and Server Actions still authorize with requireUser().
 
 const AUTH_ROUTES = ["/login", "/register"];
+// Reachable signed in or out (precached by the service worker).
+const PUBLIC_ROUTES = ["/~offline"];
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+  if (PUBLIC_ROUTES.includes(pathname)) return NextResponse.next();
   const session = await verifySession(request.cookies.get(SESSION_COOKIE)?.value);
   const isAuthRoute = AUTH_ROUTES.includes(pathname);
 

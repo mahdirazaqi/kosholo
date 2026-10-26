@@ -1,5 +1,6 @@
 // Upload limits, shared by the client (early checks) and the server (authority).
 import type { UploadKind } from "@/lib/types/chat";
+import { toFaDigits } from "@/lib/digits";
 
 const MB = 1024 * 1024;
 
@@ -27,7 +28,7 @@ export const WAVEFORM_BARS = 48;
 // Uploads per user per window (shared limiter).
 export const UPLOAD_RATE = { max: 60, windowMs: 10 * 60 * 1000 } as const;
 
-const persianMb = (bytes: number) => Math.round(bytes / MB).toLocaleString("fa-IR");
+const persianMb = (bytes: number) => toFaDigits(Math.round(bytes / MB));
 
 export const MEDIA_ERRORS = {
   tooLarge: (kind: UploadKind) => `حجم فایل بیشتر از ${persianMb(UPLOAD_LIMITS[kind])} مگابایت است`,
@@ -36,7 +37,7 @@ export const MEDIA_ERRORS = {
   tooShort: "پیام صوتی خیلی کوتاه است",
   processing: "پردازش فایل انجام نشد",
   empty: "فایلی انتخاب نشده است",
-  tooMany: `حداکثر ${MAX_FILES_PER_SELECTION.toLocaleString("fa-IR")} فایل را می‌توانید یک‌جا بفرستید`,
+  tooMany: `حداکثر ${toFaDigits(MAX_FILES_PER_SELECTION)} فایل را می‌توانید یک‌جا بفرستید`,
 } as const;
 
 // Coarse client-side kind from the browser's MIME (the server re-detects).

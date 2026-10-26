@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { BackButton } from "@/components/back-button";
+import { ChatSkeleton } from "@/components/skeletons";
 import { ChatView } from "@/components/chat/chat-view";
-import { PageHeader } from "@/components/page-header";
-import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/lib/auth";
 import { getConversationForMember } from "@/lib/chat/conversations";
 import { getMessages } from "@/lib/chat/messages";
@@ -37,23 +35,5 @@ async function Chat({ params }: Pick<PageProps<"/chats/[conversationId]">, "para
       currentUser={{ id: user.id, name: user.name, username: user.username, avatarUrl: user.avatarUrl }}
       initialPage={page}
     />
-  );
-}
-
-function ChatSkeleton() {
-  return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        start={<BackButton />}
-        title={
-          <span className="flex items-center gap-3">
-            <Skeleton className="size-9 rounded-full" />
-            <Skeleton className="h-4 w-28" />
-          </span>
-        }
-      />
-      <div className="chat-bg flex-1" />
-      <div className="h-16 border-t bg-background" />
-    </div>
   );
 }

@@ -29,3 +29,7 @@ export function vibrate(ms: number) {
 }
 
 export const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+// Smooth scrolling only when the user hasn't asked for reduced motion.
+export const scrollBehavior = (): ScrollBehavior =>
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";

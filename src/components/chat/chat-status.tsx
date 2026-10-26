@@ -8,6 +8,7 @@ import { usePresence } from "@/hooks/use-presence";
 import { formatLastSeen } from "@/lib/format-date";
 import { subscribePresence, useRealtimeStore } from "@/lib/realtime/client/store";
 import type { ChatConversation } from "@/lib/types/chat";
+import { toFaDigits } from "@/lib/digits";
 
 // Chat header subtitle, by priority: connecting → typing → presence.
 export function ChatStatus({
@@ -71,6 +72,6 @@ function GroupPresence({
   const online = useRealtimeStore(
     (state) => otherIds.filter((id) => state.presence[id]?.online).length,
   );
-  const count = `${conversation.memberCount.toLocaleString("fa-IR")} عضو`;
-  return online > 0 ? <>{count}، {online.toLocaleString("fa-IR")} آنلاین</> : <>{count}</>;
+  const count = `${toFaDigits(conversation.memberCount)} عضو`;
+  return online > 0 ? <>{count}، {toFaDigits(online)} آنلاین</> : <>{count}</>;
 }

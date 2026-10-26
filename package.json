@@ -4,14 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch --clear-screen=false --exclude './src/app/**' --exclude './src/components/**' --exclude './src/hooks/**' --exclude './.next/**' src/server/index.ts",
-    "build": "prisma generate && next build && npm run build:server",
+    "build": "prisma generate && next build && npm run build:server && npm run build:sw",
     "start": "NODE_ENV=production node dist/server.mjs",
     "lint": "eslint",
     "build:server": "esbuild src/server/index.ts --bundle --platform=node --target=node20 --format=esm --packages=external --outfile=dist/server.mjs",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "icons": "node scripts/generate-icons.mjs",
+    "build:sw": "node scripts/build-sw.mjs",
+    "typecheck": "tsc --noEmit && tsc -p src/sw"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
@@ -29,6 +32,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "^0.0.1",
+    "serwist": "^9.5.13",
     "shadcn": "^4.22.1",
     "sharp": "^0.35.5",
     "socket.io": "^4.8.4",
@@ -40,6 +44,7 @@
     "zustand": "^5.0.16"
   },
   "devDependencies": {
+    "@serwist/build": "^9.5.13",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -52,5 +57,10 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "overrides": {
+    "@serwist/build": {
+      "zod": "$zod"
+    }
   }
 }

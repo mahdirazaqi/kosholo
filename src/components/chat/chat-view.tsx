@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { UserX } from "lucide-react";
 import { toast } from "sonner";
 import { loadOlderMessages, sendMessage } from "@/app/(app)/chats/actions";
@@ -241,6 +242,31 @@ export function ChatView({
     },
     [media, replyTo, requestRead],
   );
+
+  // Escape: close the reply bar, then (via Radix) an open picker/sheet/dialog,
+  // then the chat itself. Captured on window so the reply bar goes first.
+  const router = useRouter();
+  const replyRef = useRef(replyTo);
+  useEffect(() => {
+    replyRef.current = replyTo;
+  }, [replyTo]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (replyRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        setReplyTo(null);
+        return;
+      }
+      const layerOpen = document.querySelector(
+        '[role="dialog"], [data-radix-popper-content-wrapper], .yarl__root',
+      );
+      if (!layerOpen) router.push("/");
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [router]);
 
   const startReply = useCallback((message: ChatMessage) => {
     setReplyTo(message);

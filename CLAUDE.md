@@ -43,7 +43,10 @@ src/app/              root layout (providers only), globals.css, fonts/ (self-ho
 src/app/(auth)/       /login, /register (centered card, no bottom nav) + actions.ts (all auth Server Actions)
 src/app/(app)/(tabs)/ protected tabs, AppShell with bottom nav: / , /contacts (+ actions.ts), /profile
 src/app/(app)/chats/  protected conversation screens, AppShell without bottom nav: /chats/[conversationId]
-src/components/       app components (app-shell, page-header, bottom-nav, bottom-sheet, user-avatar, back-button, form-field, ...)
+src/components/       app components (app-shell, page-header, bottom-nav, desktop-sidebar, bottom-sheet, user-avatar, empty-state, skeletons, ...)
+src/components/pwa/   service-worker registration (+ update toast), install banner / iOS sheet / settings row
+src/sw/sw.ts          service worker source (Serwist), own tsconfig (webworker lib)
+scripts/              generate-icons.mjs (npm run icons), build-sw.mjs (npm run build:sw)
 src/components/contacts/ contacts list, contact sheet, add-contact sheet
 src/components/chat/  chat list, new-conversation/new-chat sheets, chat view, message list/bubble, system message, composer, emoji button
 src/components/groups/ new-group flow, member picker, group info view, direct info view
@@ -57,7 +60,8 @@ src/components/profile/ profile forms + logout dialog
 src/components/ui/    shadcn components (RTL-audited)
 src/generated/prisma/ generated Prisma client (do not edit)
 src/hooks/            client hooks (use-conversation-realtime, use-presence, use-now, use-form-feedback, use-media-query, use-visual-viewport-height)
-src/lib/              db.ts, session.ts, session-token.ts, auth.ts, users.ts, contacts.ts, rate-limit.ts, form.ts, validations/, format-date.ts, emoji.ts, client-utils.ts, utils.ts
+src/lib/              db.ts, session.ts, session-token.ts, auth.ts, users.ts, contacts.ts, rate-limit.ts, form.ts, validations/, format-date.ts, digits.ts, emoji.ts, client-utils.ts, utils.ts
+src/lib/pwa/          settings.ts (per-device), install.ts, notification-sound.ts, caches.ts
 src/lib/realtime/     events.ts (typed event contract + rooms), membership.ts (cached), emit.ts (from Server Actions)
 src/lib/realtime/client/ socket.ts (typed client), store.ts (zustand), merge.ts (dedupe rule)
 src/lib/media/        limits.ts (shared), storage.ts, ffmpeg.ts, serialize.ts (no server-only: also used by the custom server);
@@ -103,10 +107,54 @@ Custom email/password auth. Do not add NextAuth or other auth libraries.
 
 ## Layout conventions
 
-- `AppShell` is the app frame: a centered column on desktop with a scrollable `main`. Pass `nav` to show the bottom navigation.
+- **Breakpoints:** phones are full screen. Tablets (`md`) get a centered card. **Desktop (`lg`, ≥1024px) gets two columns:**
+  - `src/app/(app)/layout.tsx` renders a fixed 360px `DesktopSidebar` on the inline start: icon tabs plus the live chat list from the realtime store, with the selected chat highlighted.
+  - The sidebar lives in that layout, so it stays mounted (no reload, no scroll reset) while the main pane changes. Its `usePathname()` sits inside `<Suspense>` (Cache Components).
+  - The main pane is the `(tabs)` / `chats` `AppShell`. On `lg` the bottom nav is hidden (`lg:hidden`) and `/` shows `SelectChatPane` instead of the list. Floating buttons use `lg:bottom-6`.
+- **Escape** in a chat closes, in order, the reply bar, then any open picker/sheet/dialog (Radix), then the chat.
+- `AppShell` is the app frame with a scrollable `main`. Pass `nav` to show the bottom navigation.
 - Each page renders its own sticky `PageHeader` (title, subtitle, `start`/`end` slots).
 - Use `UserAvatar` for avatars, which shows initials with a deterministic tint. Use `BottomSheetContent` for bottom sheets.
 - Display a username inside RTL text as `<bdi dir="ltr">@{username}</bdi>` so it stays aligned with the RTL line. Only inputs get `dir="ltr"` + `text-start`.
+- **Digits:** use `toFaDigits()` (`src/lib/digits.ts`) for every number shown (counts, badges, durations, sizes) and `formatBytes()` for file sizes. Never call `toLocaleString("fa-IR")` directly.
+- **Shared components:** empty states use `EmptyState` (icon, title, description, optional action). Loading states come from `src/components/skeletons.tsx`, used both by page `<Suspense>` fallbacks and by `loading.tsx`. `error.tsx` (root and `(app)`) uses `ErrorView` with «تلاش دوباره», and `not-found.tsx` uses `NotFoundView`.
+- **Accessibility:** icon-only buttons need a Persian `aria-label`. Custom interactive elements get the global `:focus-visible` outline (`globals.css`). Chrome (`header`, `nav`, buttons) is `user-select: none`; message text stays selectable. All animation respects `prefers-reduced-motion`, and JS scrolling uses `scrollBehavior()`.
+- **Performance:**
+  - Lazy-load heavy client pieces with `next/dynamic`: the emoji picker panel, lightbox, video player and voice recorder are already split.
+  - Keep zod out of always-loaded client components; import limits from zod-free modules (`lib/chat/limits.ts`, `lib/media/limits.ts`).
+  - `MessageBubble` and `ConversationRow` are memoized, and rows subscribe to their own typing state.
+  - The chat list page keeps its header, install banner and «گفتگوی جدید» in the static shell; only the list streams (Lighthouse LCP).
+
+## PWA
+
+- **Manifest:** `src/app/manifest.ts` (Persian name, `lang: fa`, `dir: rtl`, standalone, portrait, `theme_color`/`background_color` #ffffff, maskable icon). The root layout metadata adds the Apple web-app tags (`black-translucent` status bar), icons and light/dark `theme-color`.
+- **Icons:** generated from `public/logo.svg` by `npm run icons` (sharp): `public/icons/{icon-192,icon-512,maskable-512,apple-touch-icon,favicon-32}.png` and `src/app/favicon.ico`.
+- **Service worker (Serwist):**
+  - The source is `src/sw/sw.ts`. `npm run build:sw` (part of `npm run build`) bundles it with esbuild and injects the precache manifest with `@serwist/build` into `public/sw.js` (gitignored).
+  - **Why not `@serwist/next` / `@serwist/turbopack`:** the first is a webpack plugin, and the second doesn't support `cacheComponents`. This framework-agnostic setup keeps Turbopack builds and works with the custom server, since `sw.js` is just a static file.
+  - It's registered in **production only**, after `load` (`ServiceWorkerRegistration`). In dev, leftover workers are unregistered.
+  - Updates wait; a toast «نسخه‌ی جدید آماده است» → «به‌روزرسانی» posts `SKIP_WAITING`, then the page reloads on `controllerchange`.
+- **Caching rules** (first match wins; only GET is routed):
+
+  | Request | Strategy |
+  |---|---|
+  | `/socket.io`, `/api/upload`, full-size `/api/media/{id}` (video/voice ranges) | **network only, never cached** |
+  | `/api/media/{id}/thumb` (image/video thumbs, avatars) | cache-first, 300 entries, 30 days |
+  | `/_next/static/*`, `/icons/*`, `/emojibase/*`, fonts, svg, ico | cache-first |
+  | page navigations | network-first (3s timeout) → cached page → `/~offline` |
+  | Server Action POSTs, any non-GET | not routed (always network) |
+
+  - The precache is deliberately small (CSS, font, `/~offline`, logo, icons, manifest). JS chunks are runtime-cached as they're used.
+- **Offline page:** `/~offline` is a **route handler returning plain HTML** (inline CSS and a tiny script, no React). It renders from the precache alone and reloads when back online. It's public in `proxy.ts`, and its font is copied to `public/fonts/` by `build-sw.mjs`.
+- **Logout:** `clearAppCaches()` deletes every cache except Serwist's precache, which holds no user data and is needed for the offline page.
+- **Install:**
+  - `lib/pwa/install.ts` captures `beforeinstallprompt`, detects iOS and standalone mode, and remembers a dismissal for 14 days.
+  - `InstallBanner` shows at the top of the chat list (and in the sidebar) after the user's first interaction in the session (no layout shift on load). On iOS it opens step-by-step instructions.
+  - `InstallSettingsRow` is the permanent «نصب اپ» in settings. Nothing install-related shows in standalone mode.
+- **Unread total** (`selectTotalUnread`): a badge on the «گفتگوها» tab and sidebar tab, «(n) …» in `document.title` while the tab is hidden, and `navigator.setAppBadge` / `clearAppBadge` where supported (`RealtimeProvider`). The provider loads the chat list on start so this works on every page.
+- **Notification sound:** a Web Audio two-note chime (`lib/pwa/notification-sound.ts`), unlocked by the first tap or key. It plays for others' non-system messages in conversations that aren't open and visible, and only if the per-device setting is on.
+- **Settings** (profile page `SettingsSection`, per device): theme «سیستم / روشن / تیره» (next-themes), the notification-sound switch, «نصب اپ», and «درباره» with the package.json version. They're stored in localStorage through try/catch helpers (`lib/pwa/settings.ts`).
+- **Standalone feel:** no overscroll bounce on `html`/`body` (only page and message lists scroll), safe-area insets on header, bottom nav, composer and floating buttons, and `viewport-fit=cover` + `interactive-widget=resizes-content`.
 
 ## Users, contacts and conversations
 
@@ -326,7 +374,9 @@ npm run db:generate         # regenerate Prisma client
 npm run db:studio           # Prisma Studio
 npm run dev                 # custom server via tsx watch (Next HMR + Socket.IO), http://localhost:3000
 npm run lint
-npm run build               # prisma generate + next build + esbuild server -> dist/server.mjs
+npm run typecheck           # app + service worker (src/sw has its own tsconfig)
+npm run icons               # regenerate PWA icons/favicons from public/logo.svg
+npm run build               # prisma generate + next build + esbuild server -> dist/server.mjs + service worker -> public/sw.js
 npm start                   # NODE_ENV=production node dist/server.mjs
 ```
 

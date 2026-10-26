@@ -1,21 +1,31 @@
 "use client";
 
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
-import { Reply, SendHorizontal, X } from "lucide-react";
+import dynamic from "next/dynamic";
+import { Mic, Reply, SendHorizontal, X } from "lucide-react";
 import { EmojiButton } from "@/components/chat/emoji-button";
 import { AttachButton } from "@/components/chat/media/attach-button";
-import { VoiceControl } from "@/components/chat/voice-control";
 import type { VoiceRecording } from "@/hooks/use-media-sender";
 import type { PreparedFile } from "@/lib/media/client/prepare";
 import { previewText } from "@/components/chat/message-preview";
 import { Button } from "@/components/ui/button";
 import { useIsDesktop } from "@/hooks/use-media-query";
 import type { ChatMessage } from "@/lib/types/chat";
-import { MAX_MESSAGE_LENGTH } from "@/lib/validations/chat";
+import { MAX_MESSAGE_LENGTH } from "@/lib/chat/limits";
 
 const MAX_HEIGHT_PX = 5 * 24 + 20; // ~5 lines of text + vertical padding
 
 export type ComposerHandle = { focus: () => void };
+
+// The recorder (MediaRecorder, Web Audio, gestures) loads after the page.
+const VoiceControl = dynamic(() => import("@/components/chat/voice-control").then((m) => m.VoiceControl), {
+  ssr: false,
+  loading: () => (
+    <Button type="button" size="icon-lg" disabled aria-label="ضبط پیام صوتی" className="size-11 shrink-0 rounded-full">
+      <Mic className="size-5" />
+    </Button>
+  ),
+});
 
 type Props = {
   replyTo: ChatMessage | null;

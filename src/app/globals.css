@@ -131,8 +131,40 @@
     @apply font-sans;
     -webkit-tap-highlight-color: transparent;
   }
+  /* App feel: no pull-to-refresh/bounce on the shell; only lists and pages
+     (their own scroll containers) scroll. */
+  html,
   body {
     overscroll-behavior: none;
+  }
+  /* Chrome (not content) isn't selectable. Message text stays selectable. */
+  header,
+  nav,
+  button,
+  [role="button"],
+  [role="tab"],
+  [role="radio"] {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  /* Keyboard focus ring for custom interactive elements (shadcn components
+     bring their own ring). */
+  :where(a, button, [role="button"], [role="checkbox"], [role="radio"], [role="slider"], [tabindex]):focus-visible {
+    outline-width: 2px;
+    outline-style: solid;
+    outline-offset: 2px;
+  }
+}
+
+/* Respect reduced motion everywhere (tw-animate, transitions, smooth scroll). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 /* Subtle dotted backdrop behind chat messages. */

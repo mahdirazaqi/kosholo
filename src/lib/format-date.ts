@@ -1,3 +1,5 @@
+import { toFaDigits } from "@/lib/digits";
+
 // All chat dates are shown in one fixed time zone so server rendering and
 // hydration agree (the server runs in UTC). The audience is in Iran.
 export const TIME_ZONE = "Asia/Tehran";
@@ -85,7 +87,7 @@ export function formatLastSeen(value: DateInput, now: Date = new Date()) {
   const elapsed = now.getTime() - date.getTime();
   if (elapsed < MINUTE) return "لحظاتی پیش";
   if (elapsed < 60 * MINUTE) {
-    return `${Math.floor(elapsed / MINUTE).toLocaleString("fa-IR")} دقیقه پیش`;
+    return `${toFaDigits(Math.floor(elapsed / MINUTE))} دقیقه پیش`;
   }
   const diff = dayNumber(now) - dayNumber(date);
   if (diff === 0) return `امروز ساعت ${formatTime(date)}`;
@@ -105,5 +107,5 @@ export function formatDuration(seconds: number | null | undefined) {
   const m = Math.floor((total % 3600) / 60);
   const s = String(total % 60).padStart(2, "0");
   const text = h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
-  return text.replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
+  return toFaDigits(text);
 }

@@ -3,6 +3,7 @@
 import { useFormStatus } from "react-dom";
 import { LogOut } from "lucide-react";
 import { logout } from "@/app/(auth)/actions";
+import { clearAppCaches } from "@/lib/pwa/caches";
 import { SubmitButton } from "@/components/submit-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,7 +35,13 @@ export function LogoutButton() {
           <DialogTitle>خروج از حساب</DialogTitle>
           <DialogDescription>آیا مطمئن هستید که می‌خواهید خارج شوید؟</DialogDescription>
         </DialogHeader>
-        <form action={logout}>
+        <form
+          action={async () => {
+            // Nothing from this account may stay on the device.
+            await clearAppCaches();
+            await logout();
+          }}
+        >
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline" size="lg" className="h-11 rounded-xl text-base">

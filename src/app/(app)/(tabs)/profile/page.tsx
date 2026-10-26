@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { ProfileSkeleton } from "@/components/skeletons";
 import { ChangePasswordForm } from "@/components/profile/change-password-form";
 import { EditNameForm } from "@/components/profile/edit-name-form";
 import { LogoutButton } from "@/components/profile/logout-button";
 import { PageHeader } from "@/components/page-header";
 import { setProfilePhoto } from "@/app/(app)/photo-actions";
 import { AvatarEditor } from "@/components/avatar-editor";
-import { Skeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/lib/auth";
+import { SettingsSection } from "@/components/profile/settings-section";
+import pkg from "@/../package.json";
 
 export const metadata: Metadata = { title: "پروفایل | کوشولو" };
 
@@ -20,6 +22,7 @@ export default function ProfilePage() {
         <Suspense fallback={<ProfileSkeleton />}>
           <ProfileContent />
         </Suspense>
+        <SettingsSection version={pkg.version} />
         <Section title="خروج" description="از حساب کاربری خود در این دستگاه خارج شوید.">
           <LogoutButton />
         </Section>
@@ -74,16 +77,5 @@ function Section({
       </div>
       {children}
     </section>
-  );
-}
-
-function ProfileSkeleton() {
-  return (
-    <div className="flex flex-col items-center gap-3 rounded-2xl border bg-card px-5 py-7">
-      <Skeleton className="size-20 rounded-full" />
-      <Skeleton className="h-5 w-32" />
-      <Skeleton className="h-4 w-24" />
-      <Skeleton className="h-4 w-40" />
-    </div>
   );
 }

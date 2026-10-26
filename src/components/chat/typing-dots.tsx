@@ -1,11 +1,12 @@
 import { firstName } from "@/lib/chat/system-text";
 import { cn } from "@/lib/utils";
+import { toFaDigits } from "@/lib/digits";
 
 // DIRECT: «در حال نوشتن»; GROUP: «علی در حال نوشتن» or «۳ نفر در حال نوشتن».
 export function typingLabel(names: string[], isGroup: boolean) {
   if (!isGroup) return "در حال نوشتن";
   if (names.length === 1) return `${firstName(names[0])} در حال نوشتن`;
-  return `${names.length.toLocaleString("fa-IR")} نفر در حال نوشتن`;
+  return `${toFaDigits(names.length)} نفر در حال نوشتن`;
 }
 
 // Label followed by three bouncing dots.

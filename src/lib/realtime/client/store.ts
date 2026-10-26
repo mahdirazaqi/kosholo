@@ -38,6 +38,10 @@ const get = useRealtimeStore.getState;
 const sortByRecent = (items: ConversationListItem[]) =>
   items.sort((a, b) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
 
+// Sum of unread counts (tab badge, document title, installed-app badge).
+export const selectTotalUnread = (state: RealtimeState) =>
+  state.conversations?.reduce((total, item) => total + item.unreadCount, 0) ?? 0;
+
 // ---- Chat list ----
 
 // Merge server data into the list. `authoritative` (a fresh fetch) replaces

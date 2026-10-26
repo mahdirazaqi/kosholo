@@ -32,6 +32,7 @@ import type { ConversationRemovedPayload, ConversationUpdatedPayload } from "@/l
 import type { ChatMember, GroupInfo } from "@/lib/types/chat";
 import type { PublicUser } from "@/lib/users";
 import { groupTitleSchema, MAX_GROUP_MEMBERS } from "@/lib/validations/groups";
+import { toFaDigits } from "@/lib/digits";
 
 type Confirm =
   | { kind: "promote" | "demote" | "remove"; member: ChatMember }
@@ -207,7 +208,7 @@ export function GroupInfoView({
             </div>
           )}
           <p className="text-sm text-muted-foreground">
-            {info.members.length.toLocaleString("fa-IR")} عضو · ساخته‌شده در{" "}
+            {toFaDigits(info.members.length)} عضو · ساخته‌شده در{" "}
             <span suppressHydrationWarning>{formatFullDate(info.createdAt)}</span>
           </p>
         </section>
@@ -215,7 +216,7 @@ export function GroupInfoView({
         <section className="rounded-2xl border bg-card py-2">
           <div className="flex items-center justify-between px-4 py-2">
             <h2 className="text-sm font-semibold text-muted-foreground">
-              {info.members.length.toLocaleString("fa-IR")} عضو
+              {toFaDigits(info.members.length)} عضو
             </h2>
           </div>
           {isAdmin && info.members.length < MAX_GROUP_MEMBERS && (
@@ -375,7 +376,7 @@ export function GroupInfoView({
               className="h-12 w-full rounded-xl text-base"
             >
               {pending && <Loader2 className="animate-spin" />}
-              افزودن {toAdd.length > 0 && `(${toAdd.length.toLocaleString("fa-IR")})`}
+              افزودن {toAdd.length > 0 && `(${toFaDigits(toAdd.length)})`}
             </Button>
           </div>
         </BottomSheetContent>

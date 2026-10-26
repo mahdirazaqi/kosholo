@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import type { PreparedFile } from "@/lib/media/client/prepare";
 import { MAX_CAPTION_LENGTH } from "@/lib/media/limits";
+import { toFaDigits } from "@/lib/digits";
 
 // Full-screen preview of the selection: swipe through, remove items, add one
 // caption (applied to the first file), send all.
@@ -48,7 +49,7 @@ export function MediaPreviewDialog({
             <X className="size-6" />
           </button>
           <DialogTitle className="text-base font-semibold text-white">
-            {files.length.toLocaleString("fa-IR")} فایل انتخاب شده
+            {toFaDigits(files.length)} فایل انتخاب شده
           </DialogTitle>
           <DialogDescription className="sr-only">پیش‌نمایش فایل‌ها قبل از ارسال</DialogDescription>
         </div>
@@ -72,7 +73,7 @@ export function MediaPreviewDialog({
               </button>
               {files.length > 1 && (
                 <span className="absolute start-6 top-6 rounded-full bg-black/60 px-2.5 py-1 text-xs">
-                  {(index + 1).toLocaleString("fa-IR")} / {files.length.toLocaleString("fa-IR")}
+                  {toFaDigits(index + 1)} / {toFaDigits(files.length)}
                 </span>
               )}
             </div>

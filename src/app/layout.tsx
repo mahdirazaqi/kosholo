@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { ServiceWorkerRegistration } from "@/components/pwa/service-worker";
 import { ThemeProvider } from "@/components/theme-provider";
 import { DirectionProvider } from "@/components/ui/direction";
 import { Toaster } from "@/components/ui/sonner";
@@ -12,10 +13,27 @@ const vazirmatn = localFont({
   display: "swap",
 });
 
+const APP_NAME = "کوشولو";
+
 export const metadata: Metadata = {
-  title: "کوشولو",
+  title: APP_NAME,
   description: "پیام‌رسان سبک و سریع",
-  applicationName: "کوشولو",
+  applicationName: APP_NAME,
+  // Installed app (iOS): full screen, content under a translucent status bar
+  // (safe-area insets keep the UI clear of the notch).
+  appleWebApp: { capable: true, title: APP_NAME, statusBarStyle: "black-translucent" },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "48x48" },
+      { url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/logo.svg", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-capable": "yes",
+  },
 };
 
 export const viewport: Viewport = {
@@ -49,6 +67,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <DirectionProvider dir="rtl">
             {children}
             <Toaster position="top-center" dir="rtl" />
+            <ServiceWorkerRegistration />
           </DirectionProvider>
         </ThemeProvider>
       </body>

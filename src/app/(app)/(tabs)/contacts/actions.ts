@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { Prisma } from "@/generated/prisma/client";
 import { requireUser } from "@/lib/auth";
 import { directKeyFor } from "@/lib/chat/conversations";
+import { getContacts } from "@/lib/contacts";
 import { db } from "@/lib/db";
 import { isRateLimited, LIMITS, RATE_LIMIT_ERROR, recordHit } from "@/lib/rate-limit";
 import { publicUserSelect, type PublicUser } from "@/lib/users";
@@ -123,4 +124,10 @@ export async function startDirectConversation(otherUserId: string): Promise<Acti
   }
 
   redirect(`/chats/${conversationId}`);
+}
+
+// My contacts (public shape), for pickers opened outside the contacts page.
+export async function listMyContacts(): Promise<PublicUser[]> {
+  const me = await requireUser();
+  return getContacts(me.id);
 }

@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
+import { toFaDigits } from "@/lib/digits";
+import { playNotificationSound, unlockAudio } from "@/lib/pwa/notification-sound";
+import { getSettings } from "@/lib/pwa/settings";
 import { getConversation, listConversations } from "@/app/(app)/chats/actions";
 import { getSocket } from "@/lib/realtime/client/socket";
 import type {
@@ -18,6 +21,7 @@ import {
   markConversationRead,
   removeConversation,
   renameConversation,
+  selectTotalUnread,
   resubscribePresence,
   setAvatarOverride,
   setPresence,
@@ -35,11 +39,12 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     let hiddenAt: number | null = null;
 
     const refreshList = () => {
-      if (useRealtimeStore.getState().conversations === null) return;
       listConversations()
         .then((items) => hydrateConversations(items, true))
         .catch(() => {});
     };
+    // The list drives the unread badge on every page, not only the chat list.
+    if (useRealtimeStore.getState().conversations === null) refreshList();
 
     const onConnect = () => {
       useRealtimeStore.setState({ connected: true });
@@ -54,6 +59,13 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     const onMessage = ({ message }: MessageNewPayload) => {
       // A message ends the sender's typing state.
       setTyping(message.conversationId, message.sender.id, null);
+      const { me, activeConversationId } = useRealtimeStore.getState();
+      const openAndVisible =
+        activeConversationId === message.conversationId && document.visibilityState === "visible";
+      // A soft chime for others' messages in conversations not on screen.
+      if (message.sender.id !== me && message.type !== "SYSTEM" && !openAndVisible && getSettings().sound) {
+        playNotificationSound();
+      }
       if (!applyMessageToList(message)) {
         getConversation(message.conversationId)
           .then((item) => item && insertConversation(item))
@@ -102,6 +114,9 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     socket.on("typing:stop", onTypingStop);
     socket.on("presence:update", setPresence);
     document.addEventListener("visibilitychange", onVisibility);
+    // Audio may only start after a user gesture.
+    window.addEventListener("pointerdown", unlockAudio, { once: true });
+    window.addEventListener("keydown", unlockAudio, { once: true });
     socket.connect();
 
     return () => {
@@ -117,10 +132,39 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       socket.off("typing:stop", onTypingStop);
       socket.off("presence:update", setPresence);
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
       socket.disconnect();
       useRealtimeStore.setState({ connected: false, conversations: null, typing: {}, presence: {}, avatars: {}, me: null });
     };
   }, []);
 
+  useUnreadIndicators();
   return children;
+}
+
+const TITLE_PREFIX = /^\([^)]*\) /;
+
+// Total unread → «(۳) …» in the title while the tab is hidden, and the
+// installed app's icon badge where supported.
+function useUnreadIndicators() {
+  const total = useRealtimeStore(selectTotalUnread);
+  useEffect(() => {
+    const apply = () => {
+      const base = document.title.replace(TITLE_PREFIX, "");
+      document.title =
+        document.visibilityState === "hidden" && total > 0 ? `(${toFaDigits(total)}) ${base}` : base;
+    };
+    apply();
+    document.addEventListener("visibilitychange", apply);
+
+    const nav = navigator as Navigator & {
+      setAppBadge?: (count?: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+    if (total > 0) void nav.setAppBadge?.(total).catch(() => {});
+    else void nav.clearAppBadge?.().catch(() => {});
+
+    return () => document.removeEventListener("visibilitychange", apply);
+  }, [total]);
 }

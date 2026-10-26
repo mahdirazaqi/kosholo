@@ -1,108 +1,159 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import Link from "next/link";
-import { MessageCirclePlus, MessagesSquare } from "lucide-react";
+import { Loader2, MessageCirclePlus, MessagesSquare } from "lucide-react";
+import { toast } from "sonner";
+import { listMyContacts } from "@/app/(app)/(tabs)/contacts/actions";
 import { NewChatSheet } from "@/components/chat/new-chat-sheet";
 import { NewConversationSheet } from "@/components/chat/new-conversation-sheet";
-import { TypingIndicator, typingLabel } from "@/components/chat/typing-dots";
-import { firstName, systemMessageText } from "@/lib/chat/system-text";
 import { previewText } from "@/components/chat/message-preview";
-import { PageHeader } from "@/components/page-header";
+import { TypingIndicator, typingLabel } from "@/components/chat/typing-dots";
+import { EmptyState } from "@/components/empty-state";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
+import { firstName, systemMessageText } from "@/lib/chat/system-text";
+import { toFaDigits } from "@/lib/digits";
 import { formatListTime } from "@/lib/format-date";
 import { hydrateConversations, useRealtimeStore } from "@/lib/realtime/client/store";
 import type { ConversationListItem } from "@/lib/types/chat";
 import type { PublicUser } from "@/lib/users";
 import { cn } from "@/lib/utils";
 
+// The list on the «گفتگوها» tab (mobile/tablet). On desktop the same list
+// lives in the sidebar (DesktopSidebar) and this page shows an empty main pane.
 export function ChatListView({
   conversations: serverConversations,
-  contacts,
   currentUserId,
 }: {
   conversations: ConversationListItem[];
-  contacts: PublicUser[];
   currentUserId: string;
 }) {
-  const [choiceOpen, setChoiceOpen] = useState(false);
-  const [newChatOpen, setNewChatOpen] = useState(false);
-
   // The realtime store keeps the list live (new messages, unread counts);
   // server data seeds it and refreshes it on every visit.
   useEffect(() => hydrateConversations(serverConversations), [serverConversations]);
   const liveConversations = useRealtimeStore((state) => state.conversations);
-  const typing = useRealtimeStore((state) => state.typing);
   const conversations = liveConversations ?? serverConversations;
 
   return (
-    <>
-      <PageHeader title="گفتگوها" />
+    <ConversationList
+      conversations={conversations}
+      currentUserId={currentUserId}
+      empty={<NewConversationLauncher variant="inline" />}
+    />
+  );
+}
 
-      {conversations.length === 0 ? (
-        <div className="flex min-h-[calc(100%-3.5rem)] flex-col items-center justify-center gap-5 px-8 py-16 text-center">
-          <div className="flex size-24 items-center justify-center rounded-[2rem] bg-muted">
-            <MessagesSquare className="size-11 text-muted-foreground" strokeWidth={1.5} />
-          </div>
-          <div className="space-y-1.5">
-            <h2 className="text-lg font-bold">هنوز گفتگویی ندارید</h2>
-            <p className="text-sm leading-6 text-muted-foreground">
-              یکی از مخاطبینتان را انتخاب کنید و اولین پیام را بفرستید.
-            </p>
-          </div>
-          <Button size="lg" onClick={() => setChoiceOpen(true)} className="h-11 rounded-xl px-5 text-base">
-            <MessageCirclePlus />
-            شروع گفتگو
-          </Button>
-        </div>
-      ) : (
-        <ul className="px-2 pt-1 pb-28">
-          {conversations.map((conversation) => (
-            <li key={conversation.id}>
-              <ConversationRow
-                conversation={conversation}
-                currentUserId={currentUserId}
-                typingNames={typing[conversation.id] ? Object.values(typing[conversation.id]) : null}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {conversations.length > 0 && (
-        <Button
-          size="lg"
-          onClick={() => setChoiceOpen(true)}
-          className="absolute end-[calc(1rem+max(env(safe-area-inset-left),env(safe-area-inset-right)))] bottom-[calc(4rem+env(safe-area-inset-bottom)+1rem)] z-30 h-14 gap-2 rounded-2xl px-5 text-base shadow-lg shadow-primary/20"
-        >
-          <MessageCirclePlus className="size-5" />
-          گفتگوی جدید
-        </Button>
-      )}
-
-      <NewConversationSheet
-        open={choiceOpen}
-        onOpenChange={setChoiceOpen}
-        onNewChat={() => {
-          setChoiceOpen(false);
-          setNewChatOpen(true);
-        }}
+export function ConversationList({
+  conversations,
+  currentUserId,
+  selectedId,
+  empty,
+}: {
+  conversations: ConversationListItem[];
+  currentUserId: string | null;
+  selectedId?: string | null;
+  empty?: React.ReactNode; // action for the empty state
+}) {
+  if (conversations.length === 0) {
+    return (
+      <EmptyState
+        icon={<MessagesSquare />}
+        title="هنوز گفتگویی ندارید"
+        description="یکی از مخاطبینتان را انتخاب کنید و اولین پیام را بفرستید."
+        action={empty}
       />
-      <NewChatSheet open={newChatOpen} onOpenChange={setNewChatOpen} contacts={contacts} />
+    );
+  }
+  return (
+    <ul className="px-2 pt-1 pb-28 lg:pb-4">
+      {conversations.map((conversation) => (
+        <li key={conversation.id}>
+          <ConversationRow
+            conversation={conversation}
+            currentUserId={currentUserId}
+            selected={conversation.id === selectedId}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// «گفتگوی جدید»: choice sheet (chat or group) + contact picker. Contacts come
+// from props on the chat list page, or are loaded on demand (sidebar).
+export function NewConversationLauncher({
+  contacts: initialContacts,
+  variant,
+}: {
+  contacts?: PublicUser[];
+  variant: "fab" | "inline" | "sidebar";
+}) {
+  const [choiceOpen, setChoiceOpen] = useState(false);
+  const [newChatOpen, setNewChatOpen] = useState(false);
+  const [contacts, setContacts] = useState<PublicUser[] | null>(initialContacts ?? null);
+  const [loading, setLoading] = useState(false);
+
+  async function openNewChat() {
+    setChoiceOpen(false);
+    if (!contacts) {
+      setLoading(true);
+      try {
+        setContacts(await listMyContacts());
+      } catch {
+        return void toast.error("دریافت مخاطبین انجام نشد");
+      } finally {
+        setLoading(false);
+      }
+    }
+    setNewChatOpen(true);
+  }
+
+  const trigger =
+    variant === "fab" ? (
+      <Button
+        size="lg"
+        onClick={() => setChoiceOpen(true)}
+        className="absolute end-[calc(1rem+max(env(safe-area-inset-left),env(safe-area-inset-right)))] bottom-[calc(4rem+env(safe-area-inset-bottom)+1rem)] z-30 h-14 gap-2 rounded-2xl px-5 text-base shadow-lg shadow-primary/20 lg:bottom-6"
+      >
+        <MessageCirclePlus className="size-5" />
+        گفتگوی جدید
+      </Button>
+    ) : (
+      <Button
+        size="lg"
+        variant={variant === "sidebar" ? "outline" : "default"}
+        onClick={() => setChoiceOpen(true)}
+        disabled={loading}
+        className={cn("h-11 rounded-xl px-5 text-base", variant === "sidebar" && "w-full")}
+      >
+        {loading ? <Loader2 className="animate-spin" /> : <MessageCirclePlus />}
+        {variant === "sidebar" ? "گفتگوی جدید" : "شروع گفتگو"}
+      </Button>
+    );
+
+  return (
+    <>
+      {trigger}
+      <NewConversationSheet open={choiceOpen} onOpenChange={setChoiceOpen} onNewChat={() => void openNewChat()} />
+      <NewChatSheet open={newChatOpen} onOpenChange={setNewChatOpen} contacts={contacts ?? []} />
     </>
   );
 }
 
-function ConversationRow({
+// Memoized, and subscribes to its own typing state, so typing in one chat
+// doesn't re-render every row.
+export const ConversationRow = memo(function ConversationRow({
   conversation,
   currentUserId,
-  typingNames,
+  selected = false,
 }: {
   conversation: ConversationListItem;
-  currentUserId: string;
-  typingNames: string[] | null;
+  currentUserId: string | null;
+  selected?: boolean;
 }) {
+  const typing = useRealtimeStore((state) => state.typing[conversation.id]);
+  const typingNames = typing ? Object.values(typing) : null;
   const { lastMessage, unreadCount } = conversation;
   const isGroup = conversation.type === "GROUP";
   // «شما: …» for mine; «علی: …» for others in groups; system events as text.
@@ -128,7 +179,11 @@ function ConversationRow({
   return (
     <Link
       href={`/chats/${conversation.id}`}
-      className="flex items-center gap-3 rounded-2xl px-2 py-3 transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none active:bg-muted"
+      aria-current={selected ? "page" : undefined}
+      className={cn(
+        "flex items-center gap-3 rounded-2xl px-2 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+        selected ? "bg-primary/8 dark:bg-primary/12" : "hover:bg-muted/60 active:bg-muted",
+      )}
     >
       <UserAvatar user={avatarUser} size="lg" className="size-13" />
       <div className="min-w-0 flex-1 space-y-1">
@@ -138,10 +193,7 @@ function ConversationRow({
             <time
               dateTime={conversation.lastMessageAt}
               suppressHydrationWarning
-              className={cn(
-                "shrink-0 text-xs",
-                unreadCount > 0 ? "font-medium text-primary" : "text-muted-foreground",
-              )}
+              className={cn("shrink-0 text-xs", unreadCount > 0 ? "font-medium text-primary" : "text-muted-foreground")}
             >
               {formatListTime(conversation.lastMessageAt)}
             </time>
@@ -160,14 +212,14 @@ function ConversationRow({
           </p>
           {unreadCount > 0 && (
             <span
-              aria-label={`${unreadCount.toLocaleString("fa-IR")} پیام خوانده‌نشده`}
+              aria-label={`${toFaDigits(unreadCount)} پیام خوانده‌نشده`}
               className="flex h-5.5 min-w-5.5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground"
             >
-              {unreadCount > 99 ? "+۹۹" : unreadCount.toLocaleString("fa-IR")}
+              {unreadCount > 99 ? "+۹۹" : toFaDigits(unreadCount)}
             </span>
           )}
         </div>
       </div>
     </Link>
   );
-}
+});

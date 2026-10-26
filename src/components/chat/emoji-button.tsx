@@ -1,22 +1,24 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
+import { Loader2 } from "lucide-react";
 import { Smile } from "lucide-react";
 import { BottomSheetContent } from "@/components/bottom-sheet";
 import { Button } from "@/components/ui/button";
-import {
-  EmojiPicker,
-  EmojiPickerContent,
-  EmojiPickerFooter,
-  EmojiPickerSearch,
-} from "@/components/ui/emoji-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useIsDesktop } from "@/hooks/use-media-query";
 
-// Emoji data is self-hosted in public/emojibase (no CDN). emojibase has no
-// Persian locale, so search uses English keywords; category names are Persian.
-const EMOJIBASE_URL = "/emojibase";
+// The picker (frimousse + its data) loads on first open.
+const Picker = dynamic(() => import("@/components/chat/emoji-picker-panel"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[360px] w-80 max-w-full items-center justify-center text-muted-foreground">
+      <Loader2 className="size-5 animate-spin" />
+    </div>
+  ),
+});
 
 export function EmojiButton({
   onPick,
@@ -94,29 +96,5 @@ export function EmojiButton({
         </div>
       </BottomSheetContent>
     </Sheet>
-  );
-}
-
-function Picker({
-  className,
-  columns,
-  onPick,
-}: {
-  className: string;
-  columns: number;
-  onPick: (emoji: string) => void;
-}) {
-  return (
-    <EmojiPicker
-      className={className}
-      columns={columns}
-      locale="en"
-      emojibaseUrl={EMOJIBASE_URL}
-      onEmojiSelect={({ emoji }) => onPick(emoji)}
-    >
-      <EmojiPickerSearch placeholder="جستجوی ایموجی" aria-label="جستجوی ایموجی" />
-      <EmojiPickerContent />
-      <EmojiPickerFooter />
-    </EmojiPicker>
   );
 }

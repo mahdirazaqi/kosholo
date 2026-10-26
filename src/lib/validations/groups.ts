@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { toFaDigits } from "@/lib/digits";
 
 export const MAX_GROUP_MEMBERS = 50;
 
@@ -11,7 +12,7 @@ export const groupTitleSchema = z
 const memberIdsSchema = z
   .array(z.uuid({ error: "کاربر نامعتبر است" }), { error: "اعضا را انتخاب کنید" })
   .min(1, "حداقل یک عضو انتخاب کنید")
-  .max(MAX_GROUP_MEMBERS - 1, `گروه حداکثر ${MAX_GROUP_MEMBERS.toLocaleString("fa-IR")} عضو دارد`)
+  .max(MAX_GROUP_MEMBERS - 1, `گروه حداکثر ${toFaDigits(MAX_GROUP_MEMBERS)} عضو دارد`)
   .transform((ids) => [...new Set(ids)]);
 
 export const createGroupSchema = z.object({ title: groupTitleSchema, memberIds: memberIdsSchema });

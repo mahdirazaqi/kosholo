@@ -6,6 +6,7 @@ import { Loader2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { startDirectConversation } from "@/app/(app)/(tabs)/contacts/actions";
 import { BottomSheetContent } from "@/components/bottom-sheet";
+import { EmptyState } from "@/components/empty-state";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -29,15 +30,19 @@ export function NewChatSheet({
         </SheetHeader>
         <div className="px-2 pb-[max(env(safe-area-inset-bottom),1rem)]">
           {contacts.length === 0 ? (
-            <div className="flex flex-col items-center gap-4 px-6 py-8 text-center">
-              <Users className="size-10 text-muted-foreground" strokeWidth={1.5} />
-              <p className="text-sm text-muted-foreground">هنوز مخاطبی ندارید</p>
-              <Button asChild size="lg" className="h-11 rounded-xl px-5 text-base">
-                <Link href="/contacts" onClick={() => onOpenChange(false)}>
-                  افزودن مخاطب
-                </Link>
-              </Button>
-            </div>
+            <EmptyState
+              icon={<Users />}
+              title="هنوز مخاطبی ندارید"
+              description="ابتدا دوستانتان را به مخاطبین اضافه کنید."
+              className="py-8"
+              action={
+                <Button asChild size="lg" className="h-11 rounded-xl px-5 text-base">
+                  <Link href="/contacts" onClick={() => onOpenChange(false)}>
+                    افزودن مخاطب
+                  </Link>
+                </Button>
+              }
+            />
           ) : (
             <ul>
               {contacts.map((contact) => (

@@ -3,6 +3,7 @@ import "server-only";
 import type { MemberRole, Prisma } from "@/generated/prisma/client";
 import { messageSelect, toChatMember, toChatMessage, conversationSelect } from "@/lib/chat/queries";
 import { db } from "@/lib/db";
+import { toFaDigits } from "@/lib/digits";
 import type { ChatMember, ChatMessage, GroupInfo, SystemMeta } from "@/lib/types/chat";
 import { MAX_GROUP_MEMBERS } from "@/lib/validations/groups";
 import { userIdSchema } from "@/lib/validations/contacts";
@@ -108,7 +109,7 @@ export async function addMembers(actor: Actor, conversationId: string, userIds: 
     const newIds = userIds.filter((id) => !existingIds.has(id));
     if (newIds.length === 0) throw new GroupError("این افراد از قبل عضو گروه هستند");
     if (existing.length + newIds.length > MAX_GROUP_MEMBERS) {
-      throw new GroupError(`گروه حداکثر ${MAX_GROUP_MEMBERS.toLocaleString("fa-IR")} عضو دارد`);
+      throw new GroupError(`گروه حداکثر ${toFaDigits(MAX_GROUP_MEMBERS)} عضو دارد`);
     }
     await tx.conversationMember.createMany({
       data: newIds.map((userId) => ({ conversationId, userId, role: "MEMBER" as const })),

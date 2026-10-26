@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PublicUser } from "@/lib/users";
 import { groupTitleSchema, MAX_GROUP_MEMBERS } from "@/lib/validations/groups";
+import { toFaDigits } from "@/lib/digits";
 
 // Two steps: 1) pick members, 2) name the group.
 export function NewGroupFlow({ contacts }: { contacts: PublicUser[] }) {
@@ -39,7 +40,7 @@ export function NewGroupFlow({ contacts }: { contacts: PublicUser[] }) {
     });
   }
 
-  const count = (selected.length + 1).toLocaleString("fa-IR");
+  const count = toFaDigits(selected.length + 1);
 
   return (
     <div className="flex h-full flex-col">
@@ -54,7 +55,7 @@ export function NewGroupFlow({ contacts }: { contacts: PublicUser[] }) {
           )
         }
         title="گروه جدید"
-        subtitle={step === 1 ? `انتخاب اعضا · ${selected.length.toLocaleString("fa-IR")} نفر` : "نام گروه"}
+        subtitle={step === 1 ? `انتخاب اعضا · ${toFaDigits(selected.length)} نفر` : "نام گروه"}
       />
 
       {step === 1 ? (
