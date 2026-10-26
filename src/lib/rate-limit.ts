@@ -17,6 +17,7 @@ export const LIMITS = {
   loginFailures: { max: 5, windowMs: 15 * 60 * 1000 },
   registrations: { max: 5, windowMs: 60 * 60 * 1000 },
   userLookups: { max: 30, windowMs: 10 * 60 * 1000 },
+  messages: { max: 60, windowMs: 60 * 1000 },
 } as const;
 
 type Limit = { max: number; windowMs: number };

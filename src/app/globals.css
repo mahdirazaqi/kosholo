@@ -135,3 +135,20 @@
     overscroll-behavior: none;
   }
 }
+/* Subtle dotted backdrop behind chat messages. */
+.chat-bg {
+  background-color: var(--background);
+  background-image: radial-gradient(
+    color-mix(in oklch, var(--foreground) 7%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 20px 20px;
+}
+
+@keyframes message-highlight {
+  0%, 60% { background-color: color-mix(in oklch, var(--primary) 14%, transparent); }
+  100% { background-color: transparent; }
+}
+.message-highlight {
+  animation: message-highlight 1.5s ease-out;
+}

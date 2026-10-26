@@ -1,34 +1,42 @@
-import { MessageCircle } from "lucide-react";
+import { Suspense } from "react";
+import { ChatListView } from "@/components/chat/chat-list-view";
 import { PageHeader } from "@/components/page-header";
-import { PingButton, SocketStatusBadge } from "@/components/socket-status";
+import { Skeleton } from "@/components/ui/skeleton";
+import { requireUser } from "@/lib/auth";
+import { getConversations } from "@/lib/chat/conversations";
+import { getContacts } from "@/lib/contacts";
 
-export default function HomePage() {
+export default function ChatsPage() {
+  return (
+    <Suspense fallback={<ChatListSkeleton />}>
+      <ChatListContent />
+    </Suspense>
+  );
+}
+
+async function ChatListContent() {
+  const user = await requireUser();
+  const [conversations, contacts] = await Promise.all([
+    getConversations(user.id),
+    getContacts(user.id),
+  ]);
+  return <ChatListView conversations={conversations} contacts={contacts} />;
+}
+
+function ChatListSkeleton() {
   return (
     <>
-      <PageHeader title="کوشولو" />
-      <div className="flex min-h-[calc(100%-3.5rem)] flex-col items-center justify-center gap-8 px-6 py-10">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <div className="flex size-20 items-center justify-center rounded-3xl bg-primary text-primary-foreground shadow-lg shadow-primary/10">
-            <MessageCircle className="size-10" strokeWidth={1.75} />
+      <PageHeader title="گفتگوها" />
+      <div className="space-y-1 px-2 py-2">
+        {Array.from({ length: 6 }, (_, index) => (
+          <div key={index} className="flex items-center gap-3 px-2 py-3">
+            <Skeleton className="size-12 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-3 w-44" />
+            </div>
           </div>
-          <div className="space-y-2">
-            <h1 className="text-3xl font-extrabold tracking-tight">کوشولو</h1>
-            <p className="text-sm leading-7 text-muted-foreground">
-              پیام‌رسانی سبک، سریع و ساده برای گفتگو با دوستان
-            </p>
-          </div>
-          <SocketStatusBadge />
-        </div>
-
-        <div className="w-full max-w-xs space-y-3 rounded-2xl border bg-card p-5 text-card-foreground shadow-xs">
-          <div className="space-y-1">
-            <h2 className="text-sm font-semibold">آزمایش اتصال</h2>
-            <p className="text-xs leading-6 text-muted-foreground">
-              یک پیام «ping» به سرور بفرستید و پاسخ را دریافت کنید.
-            </p>
-          </div>
-          <PingButton />
-        </div>
+        ))}
       </div>
     </>
   );

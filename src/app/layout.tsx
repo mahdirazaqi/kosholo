@@ -22,6 +22,9 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // Android/Chrome shrink the layout when the keyboard opens, so the chat
+  // composer stays visible. iOS is handled by useVisualViewportHeight().
+  interactiveWidget: "resizes-content",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
     { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },

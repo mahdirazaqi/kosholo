@@ -17,7 +17,7 @@ A small, lightweight real-time chat web app (mini WhatsApp/Telegram). Persian UI
 Use only logical utilities: `ms-/me-`, `ps-/pe-`, `start-/end-`, `text-start/text-end`, `rounded-s/rounded-e`, `border-s/border-e`, `slide-in-from-start/end`.
 Never use physical left/right variants: `ml-`, `mr-`, `pl-`, `pr-`, `left-`, `right-`, `text-left`, `text-right`, `rounded-l/r`, `border-l/r`.
 
-- Directional icons (chevrons, arrows) get `rtl:rotate-180`.
+- Directional icons (chevrons, arrows) get `rtl:rotate-180`. Icons that should mirror rather than flip (e.g. the send icon) get `rtl:-scale-x-100`.
 - `SheetContent` takes `side="start" | "end" | "top" | "bottom"` (default `end`).
 - The only allowed physical classes are the `data-[side=left|right]` animations in `dropdown-menu.tsx`. Those sides are computed by Radix positioning, not by layout.
 - shadcn is configured with `"rtl": true` in `components.json`, so newly added components come out mostly logical. Still audit each one after adding it.
@@ -45,12 +45,16 @@ src/app/(app)/(tabs)/ protected tabs, AppShell with bottom nav: / , /contacts (+
 src/app/(app)/chats/  protected conversation screens, AppShell without bottom nav: /chats/[conversationId]
 src/components/       app components (app-shell, page-header, bottom-nav, bottom-sheet, user-avatar, back-button, form-field, ...)
 src/components/contacts/ contacts list, contact sheet, add-contact sheet
+src/components/chat/  chat list, new-chat sheet, chat view, message list/bubble, composer, emoji button
 src/components/auth/  login/register forms, auth card
 src/components/profile/ profile forms + logout dialog
 src/components/ui/    shadcn components (RTL-audited)
 src/generated/prisma/ generated Prisma client (do not edit)
-src/hooks/            client hooks (use-socket, use-form-feedback)
-src/lib/              db.ts, session.ts, auth.ts, users.ts, contacts.ts, conversations.ts, rate-limit.ts, form.ts, validations/, socket.ts, utils.ts
+src/hooks/            client hooks (use-socket, use-form-feedback, use-media-query, use-visual-viewport-height)
+src/lib/              db.ts, session.ts, auth.ts, users.ts, contacts.ts, rate-limit.ts, form.ts, validations/, format-date.ts, emoji.ts, client-utils.ts, socket.ts, utils.ts
+src/lib/chat/         server chat queries: queries.ts (selects + mappers), conversations.ts, messages.ts, limits.ts
+src/lib/types/chat.ts shared chat types (ChatMessage, ConversationListItem, ...)
+public/emojibase/     self-hosted emoji data for the picker (no CDN)
 src/server/           custom server: index.ts (entry), io.ts (getIO/setIO), socket.ts (event handlers)
 ```
 
@@ -103,7 +107,34 @@ Custom email/password auth. Do not add NextAuth or other auth libraries.
   - `Conversation.directKey` holds the two user ids sorted and joined with `:` (`directKeyFor()` in `src/lib/conversations.ts`). It's null for groups.
   - Its unique index guarantees one DIRECT conversation per pair.
   - `startDirectConversation` upserts by `directKey` in a transaction, adds both users as MEMBER, retries a lost race (P2002) by reading the existing row, then redirects to `/chats/[id]`.
-- **Access to a conversation goes through `getConversationForMember(id, userId)`.** It returns null for non-members and malformed ids, and the caller then calls `notFound()`.
+- **Access to a conversation goes through `getConversationForMember(id, userId)`** (pages) or `isMember(id, userId)` (actions), both in `src/lib/chat/conversations.ts`. They return null/false for non-members and malformed ids. Pages then call `notFound()`; actions return an error (or `null`).
+
+## Chat
+
+- **Shapes:** `src/lib/types/chat.ts`.
+  - `ChatMessage` has `id, conversationId, type, content, mediaUrl, createdAt` (ISO string), `sender` (a `PublicUser`), `replyTo` (`ReplyPreview | null | "deleted"`), and client-only `status` (`sending | sent | failed`) plus `tempId`.
+  - `ConversationListItem` has `id, type, title, avatarUrl, otherUser, lastMessage {type, content, isMine}, lastMessageAt, unreadCount`.
+  - `ChatConversation` is the chat screen header data. `MessagesPage` is `{ messages (oldest → newest), nextCursor }`.
+- **Queries** (server-only, `src/lib/chat/`):
+  - Always select with `messageSelect` / `conversationSelect` and map with `toChatMessage()` (`queries.ts`), so every query returns the same shape and never private user fields.
+  - `getConversations(userId)` returns only conversations with at least one message, sorted by `updatedAt`. Unread counts come from one raw SQL query: messages from others after `lastReadAt`.
+  - `getMessages(conversationId, cursor?)` pages 40 at a time, newest first from the DB, returned oldest → newest. `cursor` is the id of the oldest loaded message. It does **not** check membership, so callers must.
+- **Actions** (`src/app/(app)/chats/actions.ts`):
+  - `sendMessage({ conversationId, content, replyToId? })`: zod-validated (trim, 1–4000 chars), checks membership, requires `replyToId` to be in the same conversation, and is rate limited to 60/min per user. In one transaction it creates the message, bumps `conversation.updatedAt` and sets the sender's `lastReadAt`. Returns `{ ok, message }`.
+  - `markAsRead(conversationId)` and `loadOlderMessages(conversationId, cursor)`.
+  - Chat actions call `revalidatePath("/")` so the chat list refetches on the next visit, without re-rendering the open chat.
+- **Client** (`src/components/chat/`):
+  - `ChatView` owns the message state. Sending is optimistic: a temp message with `status: "sending"` and `tempId` is replaced by the server message (which keeps `tempId` so the React key is stable) or marked `failed` with a retry.
+  - `MessageList` handles scroll anchoring (opens at the bottom, prepends older pages without a jump, follows new messages), day separators, 5-minute grouping, the scroll-to-bottom button and jumping to quotes (loads up to 10 older pages).
+  - `MessageBubble` handles swipe-to-reply and long-press (touch), the hover menu (desktop), quotes, status and emoji-only messages.
+  - The sender name line is already wired for `GROUP` conversations.
+  - Desktop vs touch is `useIsDesktop()` (`(hover: hover) and (pointer: fine)`): Enter-to-send, hover menus and an emoji popover vs a bottom sheet.
+- **Dates:** use `src/lib/format-date.ts` only.
+  - Everything is formatted in the fixed `Asia/Tehran` zone with the Persian calendar and digits, so SSR and hydration match.
+  - Day/yesterday logic uses `dayNumber()`.
+- **Keyboard:** the viewport has `interactive-widget=resizes-content` (Android). `useVisualViewportHeight()` sets `--app-height` from `visualViewport` for iOS, and `AppShell` uses it. In the chat, the message list is the only scroll area.
+- **Emoji picker:** the frimousse-based shadcn `ui/emoji-picker.tsx`. Data is self-hosted in `public/emojibase/en`, with Persian category names in `messages.json`; search is English because emojibase has no Persian. Don't point it at a CDN (jsDelivr is often blocked in Iran).
+- **Reply deletion:** `Message.replyTo` is `onDelete: SetNull`, so a deleted original currently drops the link. `"deleted"` is rendered as «پیام در دسترس نیست» for when message deletion lands.
 
 ## Realtime
 

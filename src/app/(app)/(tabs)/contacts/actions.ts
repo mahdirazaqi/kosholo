@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma } from "@/generated/prisma/client";
 import { requireUser } from "@/lib/auth";
-import { directKeyFor } from "@/lib/conversations";
+import { directKeyFor } from "@/lib/chat/conversations";
 import { db } from "@/lib/db";
 import { isRateLimited, LIMITS, RATE_LIMIT_ERROR, recordHit } from "@/lib/rate-limit";
 import { publicUserSelect, type PublicUser } from "@/lib/users";
