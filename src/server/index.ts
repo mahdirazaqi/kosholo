@@ -1,12 +1,12 @@
+// Must stay the first import: loads .env before anything reads process.env.
+import "./env";
 import { createServer } from "node:http";
-import { loadEnvConfig } from "@next/env";
 import next from "next";
 import { Server } from "socket.io";
-import { setIO } from "./io";
+import { setIO, type AppServer } from "./io";
 import { registerSocketHandlers } from "./socket";
 
 const dev = process.env.NODE_ENV !== "production";
-loadEnvConfig(process.cwd(), dev);
 
 const port = Number.parseInt(process.env.PORT || "3000", 10);
 const hostname = process.env.HOSTNAME || "0.0.0.0";
@@ -25,7 +25,7 @@ async function main() {
     handle(req, res);
   });
 
-  const io = new Server(httpServer, { path: "/socket.io" });
+  const io: AppServer = new Server(httpServer, { path: "/socket.io" });
   setIO(io);
   registerSocketHandlers(io);
 

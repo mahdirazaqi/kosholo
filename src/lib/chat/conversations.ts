@@ -50,15 +50,27 @@ export async function getConversationForMember(
     id: conversation.id,
     type: conversation.type,
     memberCount: conversation.members.length,
+    readStates: conversation.members
+      .filter((member) => member.userId !== userId)
+      .map((member) => ({ userId: member.userId, lastReadAt: member.lastReadAt?.toISOString() ?? null })),
     ...describe(conversation, userId),
   };
 }
 
 // Conversations the user belongs to that have at least one message, newest first.
-export async function getConversations(userId: string): Promise<ConversationListItem[]> {
+// `onlyId` narrows it to one conversation (for inserting a new chat-list row).
+export async function getConversations(
+  userId: string,
+  onlyId?: string,
+): Promise<ConversationListItem[]> {
+  if (onlyId !== undefined && !userIdSchema.safeParse(onlyId).success) return [];
   const [conversations, unread] = await Promise.all([
     db.conversation.findMany({
-      where: { members: { some: { userId } }, messages: { some: {} } },
+      where: {
+        ...(onlyId ? { id: onlyId } : {}),
+        members: { some: { userId } },
+        messages: { some: {} },
+      },
       orderBy: { updatedAt: "desc" },
       select: {
         ...conversationSelect,

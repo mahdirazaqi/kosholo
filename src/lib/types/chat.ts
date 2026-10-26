@@ -50,6 +50,12 @@ export type ConversationListItem = {
   unreadCount: number;
 };
 
+// Another member's read position, for read receipts (✓✓).
+export type MemberReadState = {
+  userId: string;
+  lastReadAt: string | null; // ISO
+};
+
 // What the chat screen needs to render its header and bubbles.
 export type ChatConversation = {
   id: string;
@@ -58,4 +64,5 @@ export type ChatConversation = {
   avatarUrl: string | null;
   otherUser: PublicUser | null; // DIRECT only
   memberCount: number;
+  readStates: MemberReadState[]; // every member except the viewer
 };

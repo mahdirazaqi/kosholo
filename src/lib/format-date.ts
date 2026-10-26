@@ -75,3 +75,20 @@ export function formatDaySeparator(value: DateInput, now: Date = new Date()) {
   const sameYear = yearFormat.format(date) === yearFormat.format(now);
   return (sameYear ? longDateFormat : longDateWithYearFormat).format(date);
 }
+
+const MINUTE = 60_000;
+
+// "Last seen" phrase: «لحظاتی پیش», «۵ دقیقه پیش», «امروز ساعت ۱۴:۰۵»,
+// «دیروز ساعت ۲۳:۱۰», otherwise the Jalali date.
+export function formatLastSeen(value: DateInput, now: Date = new Date()) {
+  const date = toDate(value);
+  const elapsed = now.getTime() - date.getTime();
+  if (elapsed < MINUTE) return "لحظاتی پیش";
+  if (elapsed < 60 * MINUTE) {
+    return `${Math.floor(elapsed / MINUTE).toLocaleString("fa-IR")} دقیقه پیش`;
+  }
+  const diff = dayNumber(now) - dayNumber(date);
+  if (diff === 0) return `امروز ساعت ${formatTime(date)}`;
+  if (diff === 1) return `دیروز ساعت ${formatTime(date)}`;
+  return shortDateFormat.format(date);
+}

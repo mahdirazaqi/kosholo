@@ -1,26 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { MessageCirclePlus, MessagesSquare } from "lucide-react";
 import { NewChatSheet } from "@/components/chat/new-chat-sheet";
+import { TypingIndicator } from "@/components/chat/typing-dots";
 import { previewText } from "@/components/chat/message-preview";
 import { PageHeader } from "@/components/page-header";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import { formatListTime } from "@/lib/format-date";
+import { hydrateConversations, useRealtimeStore } from "@/lib/realtime/client/store";
 import type { ConversationListItem } from "@/lib/types/chat";
 import type { PublicUser } from "@/lib/users";
 import { cn } from "@/lib/utils";
 
 export function ChatListView({
-  conversations,
+  conversations: serverConversations,
   contacts,
 }: {
   conversations: ConversationListItem[];
   contacts: PublicUser[];
 }) {
   const [newChatOpen, setNewChatOpen] = useState(false);
+
+  // The realtime store keeps the list live (new messages, unread counts);
+  // server data seeds it and refreshes it on every visit.
+  useEffect(() => hydrateConversations(serverConversations), [serverConversations]);
+  const liveConversations = useRealtimeStore((state) => state.conversations);
+  const typing = useRealtimeStore((state) => state.typing);
+  const conversations = liveConversations ?? serverConversations;
 
   return (
     <>
@@ -46,7 +55,10 @@ export function ChatListView({
         <ul className="px-2 pt-1 pb-28">
           {conversations.map((conversation) => (
             <li key={conversation.id}>
-              <ConversationRow conversation={conversation} />
+              <ConversationRow
+                conversation={conversation}
+                typing={Boolean(typing[conversation.id])}
+              />
             </li>
           ))}
         </ul>
@@ -68,7 +80,13 @@ export function ChatListView({
   );
 }
 
-function ConversationRow({ conversation }: { conversation: ConversationListItem }) {
+function ConversationRow({
+  conversation,
+  typing,
+}: {
+  conversation: ConversationListItem;
+  typing: boolean;
+}) {
   const { lastMessage, unreadCount } = conversation;
   const avatarUser = conversation.otherUser ?? {
     id: conversation.id,
@@ -100,8 +118,14 @@ function ConversationRow({ conversation }: { conversation: ConversationListItem 
         </div>
         <div className="flex items-center gap-2">
           <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-            {lastMessage?.isMine && <span className="text-foreground/70">شما: </span>}
-            {lastMessage && <bdi>{previewText(lastMessage)}</bdi>}
+            {typing ? (
+              <TypingIndicator className="font-medium" />
+            ) : (
+              <>
+                {lastMessage?.isMine && <span className="text-foreground/70">شما: </span>}
+                {lastMessage && <bdi>{previewText(lastMessage)}</bdi>}
+              </>
+            )}
           </p>
           {unreadCount > 0 && (
             <span

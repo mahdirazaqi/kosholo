@@ -18,10 +18,12 @@ type Props = {
   replyTo: ChatMessage | null;
   onCancelReply: () => void;
   onSend: (content: string) => void;
+  onInput?: (value: string) => void; // typing indicator
+  onBlur?: () => void;
 };
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
-  { replyTo, onCancelReply, onSend },
+  { replyTo, onCancelReply, onSend, onInput, onBlur },
   ref,
 ) {
   const isDesktop = useIsDesktop();
@@ -67,6 +69,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     const { start, end } = selection.current;
     const next = value.slice(0, start) + emoji + value.slice(end);
     update(next, start + emoji.length);
+    onInput?.(next);
   }
 
   function submit() {
@@ -123,10 +126,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           enterKeyHint={isDesktop ? "send" : "enter"}
           onChange={(event) => {
             setValue(event.target.value);
+            onInput?.(event.target.value);
             resize();
           }}
           onSelect={rememberSelection}
-          onBlur={rememberSelection}
+          onBlur={() => {
+            rememberSelection();
+            onBlur?.();
+          }}
           onKeyDown={(event) => {
             // Desktop: Enter sends, Shift+Enter is a newline. Touch: Enter is always a newline.
             if (

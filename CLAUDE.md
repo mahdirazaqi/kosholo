@@ -50,12 +50,15 @@ src/components/auth/  login/register forms, auth card
 src/components/profile/ profile forms + logout dialog
 src/components/ui/    shadcn components (RTL-audited)
 src/generated/prisma/ generated Prisma client (do not edit)
-src/hooks/            client hooks (use-socket, use-form-feedback, use-media-query, use-visual-viewport-height)
-src/lib/              db.ts, session.ts, auth.ts, users.ts, contacts.ts, rate-limit.ts, form.ts, validations/, format-date.ts, emoji.ts, client-utils.ts, socket.ts, utils.ts
+src/hooks/            client hooks (use-conversation-realtime, use-presence, use-now, use-form-feedback, use-media-query, use-visual-viewport-height)
+src/lib/              db.ts, session.ts, session-token.ts, auth.ts, users.ts, contacts.ts, rate-limit.ts, form.ts, validations/, format-date.ts, emoji.ts, client-utils.ts, utils.ts
+src/lib/realtime/     events.ts (typed event contract + rooms), membership.ts (cached), emit.ts (from Server Actions)
+src/lib/realtime/client/ socket.ts (typed client), store.ts (zustand), merge.ts (dedupe rule)
 src/lib/chat/         server chat queries: queries.ts (selects + mappers), conversations.ts, messages.ts, limits.ts
 src/lib/types/chat.ts shared chat types (ChatMessage, ConversationListItem, ...)
 public/emojibase/     self-hosted emoji data for the picker (no CDN)
-src/server/           custom server: index.ts (entry), io.ts (getIO/setIO), socket.ts (event handlers)
+src/server/           custom server: index.ts (entry), env.ts (loads .env first), io.ts (getIO/setIO/tryGetIO)
+src/server/socket/    index.ts (handlers), auth.ts (handshake), presence.ts
 ```
 
 ## Auth
@@ -136,11 +139,65 @@ Custom email/password auth. Do not add NextAuth or other auth libraries.
 - **Emoji picker:** the frimousse-based shadcn `ui/emoji-picker.tsx`. Data is self-hosted in `public/emojibase/en`, with Persian category names in `messages.json`; search is English because emojibase has no Persian. Don't point it at a CDN (jsDelivr is often blocked in Iran).
 - **Reply deletion:** `Message.replyTo` is `onDelete: SetNull`, so a deleted original currently drops the link. `"deleted"` is rendered as «پیام در دسترس نیست» for when message deletion lands.
 
-## Realtime
+## Realtime (Socket.IO)
 
-- Server code, such as Server Actions and route handlers, emits through `getIO()` from `@/server/io`. The instance lives on `globalThis` because Next bundles and the custom server load separate module copies.
-- Socket event handlers live in `src/server/socket.ts`.
-- The client uses `getSocket()` from `@/lib/socket` (lazy, `autoConnect: false`) and the `useSocket()` hook, which connects on mount and exposes `connected`.
+One process: Socket.IO is attached to the custom server.
+- **Shared instances:** the io instance, the Prisma client, the membership cache and the rate limiter are all shared through `globalThis`. Next bundles and the custom server load separate copies of the same modules.
+- **No `server-only` in socket code:** `src/server/socket/*` and everything it imports (`db.ts`, `session-token.ts`, `lib/realtime/*`) must not import `"server-only"` or `next/headers`. The custom server runs in plain Node, where `server-only` throws.
+- **Server bundle format:** the server bundle is ESM (`dist/server.mjs`), because the generated Prisma client uses `import.meta.url`.
+- **Env loading:** `.env` is loaded by `src/server/env.ts` (`process.loadEnvFile`), which must stay the first import of `src/server/index.ts`.
+
+**Event contract:** `src/lib/realtime/events.ts` defines every event name, payload type and room helper, typed through Socket.IO's generics on both sides. Add new events there.
+
+| Direction | Event | Payload | Delivered to |
+|---|---|---|---|
+| S→C | `session:ready` | `{ userId }` | the socket, after auth |
+| S→C | `message:new` | `{ message: ChatMessage, tempId }` | `user:{id}` of **every** member (incl. sender's other tabs) |
+| S→C | `conversation:read` | `{ conversationId, userId, lastReadAt }` | `user:{id}` of every member |
+| S→C | `typing:start` / `typing:stop` | `{ conversationId, userId, name }` | `user:{id}` of the other members |
+| S→C | `presence:update` | `{ userId, online, lastSeenAt }` | `presence:{userId}` |
+| C→S | `conversation:join` (ack `{ ok }`) / `conversation:leave` | `conversationId` | joins/leaves `conv:{id}` after a membership check |
+| C→S | `typing:start` / `typing:stop` | `conversationId` | membership-checked; `start` ignored if faster than 1/s per socket |
+| C→S | `presence:subscribe` (ack: states) / `presence:unsubscribe` | `{ userIds }` | joins `presence:{id}`; only for people I share a conversation with or have as contacts |
+
+**Rooms** (`userRoom`, `conversationRoom`, `presenceRoom`):
+- `user:{id}`: every socket of a user, joined on connect. All per-user delivery goes here.
+- `conv:{id}`: sockets with that chat open.
+- `presence:{id}`: watchers of a user's status.
+
+Typing goes to user rooms rather than `conv:{id}` so the chat list can show it too.
+
+**Auth:** the handshake reads the httpOnly `session` cookie and verifies it with `verifySession` (`session-token.ts`), then sets `socket.data.userId` and `socket.data.name`. Invalid or missing sessions are rejected with `unauthorized`.
+
+**Membership:** every client event that names a conversation is checked with `isConversationMember` (`lib/realtime/membership.ts`). It has a 60s in-memory TTL; call `invalidateMembership(id)` when members change.
+
+**Emitting from Server Actions:** use `emitToMembers(conversationId, event, payload)` (`lib/realtime/emit.ts`). It's a no-op without a socket server, so mutations never fail because of realtime.
+- `sendMessage` emits `message:new` plus `conversation:read` for the sender.
+- `markAsRead` emits `conversation:read`.
+
+**Dedupe rule** (`lib/realtime/client/merge.ts`, `mergeMessage`): a message is identified by its server id.
+1. Already present by id → ignored.
+2. Matches an optimistic message by `tempId` → replaced in place, keeping `tempId` as the React key.
+3. Otherwise inserted in `createdAt` order.
+
+Both the Server Action response and `message:new` go through it, so either can arrive first and nothing is duplicated. The chat list also ignores a message id it has already applied.
+
+**Client:**
+- **Provider:** `RealtimeProvider` (in `src/app/(app)/layout.tsx`) owns the socket for the signed-in app: connect on mount, disconnect on logout/unmount.
+  - Its global listeners feed the zustand store (`lib/realtime/client/store.ts`): chat list, `activeConversationId`, typing (5s expiry), presence and `connected`.
+  - The store is only mutated in effects and handlers, never during render (it's module-level, so it must stay empty on the server).
+- **Chat list:** `ChatListView` renders `store.conversations ?? serverProps`. Server data seeds the store, and a fresh fetch (`listConversations`) replaces it.
+  - On `message:new` for an unknown conversation, the row is fetched with `getConversation(id)` and inserted.
+  - Unread counts don't grow for the open, visible conversation.
+- **Open chat:** `useConversationRealtime` joins `conv:{id}` (and re-joins after reconnects) and delivers `message:new` / `conversation:read` for the conversation.
+  - It calls `markAsRead` at most once every 2s, only while `document.visibilityState === "visible"`.
+  - After a reconnect, or when the tab becomes visible again, it catches up with `getMessagesSince(id, lastConfirmedAt)`, which also returns the other members' read states.
+- **Read receipts:** one check when sent, two when another member's `lastReadAt` ≥ `createdAt` (DIRECT). `ChatConversation.readStates` seeds them.
+- **Presence:**
+  - Server: an in-memory socket count per user. The first socket triggers `online`. After the last one disconnects there's a 5s grace period, then `User.lastSeenAt` is written and `offline` is emitted.
+  - Client: `usePresence(userId)` (ref-counted subscriptions, re-subscribed on reconnect). The header uses `formatLastSeen()` and refreshes every minute.
+- **Header subtitle priority:** «در حال اتصال...» (disconnected) → «در حال نوشتن» → «آنلاین» / «آخرین بازدید …».
+- **Socket transports:** websocket first with a polling fallback, and default auto-reconnect.
 
 ## Commands
 
@@ -153,10 +210,10 @@ npm run db:generate         # regenerate Prisma client
 npm run db:studio           # Prisma Studio
 npm run dev                 # custom server via tsx watch (Next HMR + Socket.IO), http://localhost:3000
 npm run lint
-npm run build               # prisma generate + next build + esbuild server -> dist/server.cjs
-npm start                   # NODE_ENV=production node dist/server.cjs
+npm run build               # prisma generate + next build + esbuild server -> dist/server.mjs
+npm start                   # NODE_ENV=production node dist/server.mjs
 ```
 
-In dev, `tsx watch` restarts only on server-side changes. UI changes go through Next HMR.
+In dev, `tsx watch` restarts the whole server when a file the custom server imports changes (`src/server/**`, `src/lib/db.ts`, `src/lib/realtime/**`, `src/lib/session-token.ts`). UI changes go through Next HMR. Only one `next dev` can run per project directory (Next holds a lock), so stop an old `npm run dev` before starting another.
 
 In a non-interactive shell (e.g. an agent), `prisma migrate dev` refuses to run. Write the migration SQL with `npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` into `prisma/migrations/<timestamp>_<name>/migration.sql`, then apply it with `npx prisma migrate deploy` and `npx prisma generate`.

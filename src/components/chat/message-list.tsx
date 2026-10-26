@@ -1,16 +1,6 @@
 "use client";
 
-import {
-  forwardRef,
-  Fragment,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Copy, Loader2, Reply } from "lucide-react";
 import { toast } from "sonner";
 import { previewText } from "@/components/chat/message-preview";
@@ -21,7 +11,7 @@ import { Sheet, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { useIsDesktop } from "@/hooks/use-media-query";
 import { copyText, nextFrame } from "@/lib/client-utils";
 import { dayNumber, formatDaySeparator } from "@/lib/format-date";
-import type { ChatMessage, ConversationType } from "@/lib/types/chat";
+import type { ChatMessage, ConversationType, MemberReadState } from "@/lib/types/chat";
 import { cn } from "@/lib/utils";
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
@@ -30,14 +20,11 @@ const NEAR_BOTTOM = 120; // px from the bottom
 const SHOW_JUMP_BUTTON = 400;
 const MAX_JUMP_PAGES = 10;
 
-export type MessageListHandle = {
-  scrollToBottom: (smooth?: boolean) => void;
-};
-
 type Props = {
   messages: ChatMessage[];
   currentUserId: string;
   conversationType: ConversationType;
+  readStates: MemberReadState[]; // other members
   hasMore: boolean;
   loadingOlder: boolean;
   // Loads the previous page; resolves to false when nothing more was loaded.
@@ -48,15 +35,29 @@ type Props = {
 
 const keyOf = (message: ChatMessage) => message.tempId ?? message.id;
 
-export const MessageList = forwardRef<MessageListHandle, Props>(function MessageList(
-  { messages, currentUserId, conversationType, hasMore, loadingOlder, onLoadOlder, onReply, onRetry },
-  ref,
-) {
+export function MessageList({
+  messages,
+  currentUserId,
+  conversationType,
+  readStates,
+  hasMore,
+  loadingOlder,
+  onLoadOlder,
+  onReply,
+  onRetry,
+}: Props) {
   const isDesktop = useIsDesktop();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
   const lastCommit = useRef<{ first?: string; last?: string; height: number } | null>(null);
   const [showJump, setShowJump] = useState(false);
+  const [atBottom, setAtBottom] = useState(true);
+  // Key of the newest message the user has seen at the bottom; incoming
+  // messages after it are counted on the scroll-to-bottom button.
+  const [seenKey, setSeenKey] = useState(() => {
+    const last = messages.at(-1);
+    return last ? keyOf(last) : null;
+  });
   const [highlight, setHighlight] = useState<string | null>(null);
   const [actionsFor, setActionsFor] = useState<ChatMessage | null>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -69,8 +70,6 @@ export const MessageList = forwardRef<MessageListHandle, Props>(function Message
     if (!scroller) return;
     scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth ? "smooth" : "auto" });
   }, []);
-
-  useImperativeHandle(ref, () => ({ scrollToBottom }), [scrollToBottom]);
 
   // Keep the viewport stable when messages change:
   // - first render: start at the bottom,
@@ -114,7 +113,10 @@ export const MessageList = forwardRef<MessageListHandle, Props>(function Message
     if (!scroller) return;
     const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
     nearBottom.current = distance < NEAR_BOTTOM;
+    setAtBottom(nearBottom.current);
     setShowJump(distance > SHOW_JUMP_BUTTON);
+    const last = messages.at(-1);
+    if (nearBottom.current && last) setSeenKey(keyOf(last));
     loadIfNeeded();
   }
 
@@ -162,6 +164,18 @@ export const MessageList = forwardRef<MessageListHandle, Props>(function Message
     [onReply, onCopy, onOpenActions, jumpTo, onRetry],
   );
 
+  const seenIndex = seenKey === null ? -1 : messages.findIndex((m) => keyOf(m) === seenKey);
+  const unseen = atBottom
+    ? 0
+    : messages.slice(seenIndex + 1).filter((m) => m.sender.id !== currentUserId).length;
+
+  // DIRECT: read once the other member's lastReadAt reaches the message.
+  // (Groups can switch this to "read by everyone" or a count in phase 5.)
+  const isRead = (message: ChatMessage) =>
+    message.sender.id === currentUserId &&
+    message.status === "sent" &&
+    readStates.some((state) => state.lastReadAt !== null && state.lastReadAt >= message.createdAt);
+
   return (
     <div className="relative min-h-0 flex-1">
       <div
@@ -199,6 +213,7 @@ export const MessageList = forwardRef<MessageListHandle, Props>(function Message
                 showSenderName={conversationType === "GROUP"}
                 isDesktop={isDesktop}
                 highlighted={highlight === message.id}
+                read={isRead(message)}
                 {...actions}
               />
             </Fragment>
@@ -207,15 +222,22 @@ export const MessageList = forwardRef<MessageListHandle, Props>(function Message
       </div>
 
       <Button
-        size="icon-lg"
+        size="lg"
         variant="outline"
-        aria-label="رفتن به آخرین پیام"
+        aria-label={unseen > 0 ? `${unseen.toLocaleString("fa-IR")} پیام جدید` : "رفتن به آخرین پیام"}
         onClick={() => scrollToBottom(true)}
         className={cn(
-          "absolute end-3 bottom-3 size-11 rounded-full bg-background/95 shadow-md transition-all duration-200",
-          showJump ? "scale-100 opacity-100" : "pointer-events-none scale-75 opacity-0",
+          "absolute end-3 bottom-3 h-11 min-w-11 gap-1.5 rounded-full bg-background/95 px-3 shadow-md transition-all duration-200",
+          !atBottom && (showJump || unseen > 0)
+            ? "scale-100 opacity-100"
+            : "pointer-events-none scale-75 opacity-0",
         )}
       >
+        {unseen > 0 && (
+          <span className="text-sm font-medium text-primary">
+            {unseen.toLocaleString("fa-IR")} پیام جدید
+          </span>
+        )}
         <ChevronDown className="size-5" />
       </Button>
 
@@ -260,7 +282,7 @@ export const MessageList = forwardRef<MessageListHandle, Props>(function Message
       </Sheet>
     </div>
   );
-});
+}
 
 // Same sender within 5 minutes → same visual group.
 function continues(a: ChatMessage, b: ChatMessage) {

@@ -2,12 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
-import { isMember } from "@/lib/chat/conversations";
-import { getMessages } from "@/lib/chat/messages";
+import { getConversations, isMember } from "@/lib/chat/conversations";
+import { getMessages, getMessagesSince as queryMessagesSince } from "@/lib/chat/messages";
 import { messageSelect, toChatMessage } from "@/lib/chat/queries";
 import { db } from "@/lib/db";
 import { isRateLimited, LIMITS, RATE_LIMIT_ERROR, recordHit } from "@/lib/rate-limit";
-import type { ChatMessage, MessagesPage } from "@/lib/types/chat";
+import { emitToMembers } from "@/lib/realtime/emit";
+import type {
+  ChatMessage,
+  ConversationListItem,
+  MemberReadState,
+  MessagesPage,
+} from "@/lib/types/chat";
 import { sendMessageSchema, type SendMessageInput } from "@/lib/validations/chat";
 
 const NOT_FOUND = "گفتگو پیدا نشد";
@@ -18,7 +24,7 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
   const me = await requireUser();
   const parsed = sendMessageSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
-  const { conversationId, content, replyToId } = parsed.data;
+  const { conversationId, content, replyToId, tempId } = parsed.data;
 
   if (!(await isMember(conversationId, me.id))) return { ok: false, error: NOT_FOUND };
 
@@ -44,19 +50,34 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
       data: { lastReadAt: now },
     }),
   ]);
+  const message = toChatMessage(row);
+
+  // Every member's user room, including the sender's other tabs/devices.
+  await emitToMembers(conversationId, "message:new", { message, tempId: tempId ?? null });
+  await emitToMembers(conversationId, "conversation:read", {
+    conversationId,
+    userId: me.id,
+    lastReadAt: now.toISOString(),
+  });
 
   // Refreshes the chat list on the next visit (not the current chat screen).
   revalidatePath("/");
-  return { ok: true, message: toChatMessage(row) };
+  return { ok: true, message };
 }
 
 export async function markAsRead(conversationId: string): Promise<void> {
   const me = await requireUser();
   if (!(await isMember(conversationId, me.id))) return;
 
+  const lastReadAt = new Date();
   await db.conversationMember.update({
     where: { conversationId_userId: { conversationId, userId: me.id } },
-    data: { lastReadAt: new Date() },
+    data: { lastReadAt },
+  });
+  await emitToMembers(conversationId, "conversation:read", {
+    conversationId,
+    userId: me.id,
+    lastReadAt: lastReadAt.toISOString(),
   });
   revalidatePath("/");
 }
@@ -75,4 +96,41 @@ export async function loadOlderMessages(
   } catch {
     return { messages: [], nextCursor: null };
   }
+}
+
+// Catch-up after a reconnect or the tab becoming visible again: missed
+// messages plus the other members' current read positions.
+export async function getMessagesSince(
+  conversationId: string,
+  since: string,
+): Promise<{ messages: ChatMessage[]; hasMore: boolean; readStates: MemberReadState[] } | null> {
+  const me = await requireUser();
+  if (!(await isMember(conversationId, me.id))) return null;
+  const date = new Date(since);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const [result, members] = await Promise.all([
+    queryMessagesSince(conversationId, date),
+    db.conversationMember.findMany({
+      where: { conversationId, userId: { not: me.id } },
+      select: { userId: true, lastReadAt: true },
+    }),
+  ]);
+  return {
+    ...result,
+    readStates: members.map((m) => ({ userId: m.userId, lastReadAt: m.lastReadAt?.toISOString() ?? null })),
+  };
+}
+
+// One chat-list row, e.g. when someone messages me for the first time.
+export async function getConversation(conversationId: string): Promise<ConversationListItem | null> {
+  const me = await requireUser();
+  const [item] = await getConversations(me.id, conversationId);
+  return item ?? null;
+}
+
+// The whole chat list, for refreshing after a reconnect.
+export async function listConversations(): Promise<ConversationListItem[]> {
+  const me = await requireUser();
+  return getConversations(me.id);
 }

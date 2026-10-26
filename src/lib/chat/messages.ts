@@ -26,3 +26,20 @@ export async function getMessages(conversationId: string, cursor?: string): Prom
     nextCursor: hasMore && oldest ? oldest.id : null,
   };
 }
+
+export const SINCE_LIMIT = 200;
+
+// Messages created at or after `since` (oldest → newest), for catching up after
+// a reconnect. Callers must check membership and dedupe by id.
+export async function getMessagesSince(conversationId: string, since: Date) {
+  const rows = await db.message.findMany({
+    where: { conversationId, createdAt: { gte: since } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    take: SINCE_LIMIT + 1,
+    select: messageSelect,
+  });
+  return {
+    messages: rows.slice(0, SINCE_LIMIT).map(toChatMessage),
+    hasMore: rows.length > SINCE_LIMIT,
+  };
+}

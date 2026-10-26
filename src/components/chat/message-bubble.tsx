@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useRef, useState } from "react";
-import { AlertCircle, Check, Clock3, Copy, MoreHorizontal, Reply, RotateCw } from "lucide-react";
+import { AlertCircle, Check, CheckCheck, Clock3, Copy, MoreHorizontal, Reply, RotateCw } from "lucide-react";
 import { previewText } from "@/components/chat/message-preview";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +36,7 @@ type Props = BubbleActions & {
   showSenderName: boolean; // GROUP conversations only
   isDesktop: boolean;
   highlighted: boolean;
+  read: boolean; // my message, seen by the other member (DIRECT)
 };
 
 export const MessageBubble = memo(function MessageBubble({
@@ -46,6 +47,7 @@ export const MessageBubble = memo(function MessageBubble({
   showSenderName,
   isDesktop,
   highlighted,
+  read,
   ...actions
 }: Props) {
   const canInteract = message.status === "sent";
@@ -157,7 +159,7 @@ export const MessageBubble = memo(function MessageBubble({
               <time dateTime={message.createdAt} suppressHydrationWarning>
                 {formatTime(message.createdAt)}
               </time>
-              {isMine && <StatusIcon status={message.status} />}
+              {isMine && <StatusIcon status={message.status} read={read} />}
             </div>
           </div>
         </Swipeable>
@@ -178,10 +180,11 @@ export const MessageBubble = memo(function MessageBubble({
   );
 });
 
-function StatusIcon({ status }: { status: ChatMessage["status"] }) {
+function StatusIcon({ status, read }: { status: ChatMessage["status"]; read: boolean }) {
   if (status === "sending") return <Clock3 aria-label="در حال ارسال" className="size-3.5" />;
   if (status === "failed")
     return <AlertCircle aria-label="ارسال نشد" className="size-3.5 text-destructive" />;
+  if (read) return <CheckCheck aria-label="خوانده شد" className="size-3.5" />;
   return <Check aria-label="ارسال شد" className="size-3.5" />;
 }
 

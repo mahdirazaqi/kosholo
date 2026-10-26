@@ -56,5 +56,5 @@ export const conversationSelect = {
   type: true,
   title: true,
   avatarUrl: true,
-  members: { select: { userId: true, user: { select: publicUserSelect } } },
+  members: { select: { userId: true, lastReadAt: true, user: { select: publicUserSelect } } },
 } satisfies Prisma.ConversationSelect;
