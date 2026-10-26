@@ -62,6 +62,9 @@ model Conversation {
   type        ConversationType
   title       String?
   avatarUrl   String?          @map("avatar_url")
+  // DIRECT only: both user ids sorted and joined with ":". Null for groups.
+  // The unique index guarantees one direct conversation per pair.
+  directKey   String?          @unique @map("direct_key")
   createdById String           @map("created_by_id") @db.Uuid
   createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz

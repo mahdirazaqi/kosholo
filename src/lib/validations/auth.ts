@@ -2,14 +2,14 @@ import { z } from "zod";
 
 // Shared by client forms (instant feedback) and Server Actions (source of truth).
 
-const email = z
+export const emailSchema = z
   .string({ error: "ایمیل را وارد کنید" })
   .trim()
   .toLowerCase()
   .min(1, "ایمیل را وارد کنید")
   .pipe(z.email({ error: "ایمیل معتبر نیست" }));
 
-const username = z
+export const usernameSchema = z
   .string({ error: "نام کاربری را وارد کنید" })
   .trim()
   .toLowerCase()
@@ -34,7 +34,12 @@ const password = z
     "رمز عبور بیش از حد طولانی است",
   );
 
-export const registerSchema = z.object({ name, username, email, password });
+export const registerSchema = z.object({
+  name,
+  username: usernameSchema,
+  email: emailSchema,
+  password,
+});
 
 export const loginSchema = z.object({
   identifier: z

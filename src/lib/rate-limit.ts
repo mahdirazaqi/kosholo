@@ -16,6 +16,7 @@ export const RATE_LIMIT_ERROR =
 export const LIMITS = {
   loginFailures: { max: 5, windowMs: 15 * 60 * 1000 },
   registrations: { max: 5, windowMs: 60 * 60 * 1000 },
+  userLookups: { max: 30, windowMs: 10 * 60 * 1000 },
 } as const;
 
 type Limit = { max: number; windowMs: number };

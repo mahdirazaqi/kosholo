@@ -41,14 +41,16 @@ prisma.config.ts      Prisma CLI config
 src/proxy.ts          route protection (Next 16's renamed middleware)
 src/app/              root layout (providers only), globals.css, fonts/ (self-hosted Vazirmatn)
 src/app/(auth)/       /login, /register (centered card, no bottom nav) + actions.ts (all auth Server Actions)
-src/app/(app)/        protected app: layout renders AppShell (header + bottom nav); /, /contacts, /profile
-src/components/       app components (app-shell, bottom-nav, form-field, password-input, submit-button, ...)
+src/app/(app)/(tabs)/ protected tabs, AppShell with bottom nav: / , /contacts (+ actions.ts), /profile
+src/app/(app)/chats/  protected conversation screens, AppShell without bottom nav: /chats/[conversationId]
+src/components/       app components (app-shell, page-header, bottom-nav, bottom-sheet, user-avatar, back-button, form-field, ...)
+src/components/contacts/ contacts list, contact sheet, add-contact sheet
 src/components/auth/  login/register forms, auth card
 src/components/profile/ profile forms + logout dialog
 src/components/ui/    shadcn components (RTL-audited)
 src/generated/prisma/ generated Prisma client (do not edit)
 src/hooks/            client hooks (use-socket, use-form-feedback)
-src/lib/              db.ts, session.ts, auth.ts, rate-limit.ts, form.ts, validations/, socket.ts, utils.ts
+src/lib/              db.ts, session.ts, auth.ts, users.ts, contacts.ts, conversations.ts, rate-limit.ts, form.ts, validations/, socket.ts, utils.ts
 src/server/           custom server: index.ts (entry), io.ts (getIO/setIO), socket.ts (event handlers)
 ```
 
@@ -67,7 +69,9 @@ Custom email/password auth. Do not add NextAuth or other auth libraries.
   - Logged-out users go to `/login?from=<path>`.
   - Logged-in users visiting `/login` or `/register` go to `/`.
   - Add any new public routes to `AUTH_ROUTES`.
-- **Cache Components:** reading the session is request-time data. Put components that call `requireUser()`/`getCurrentUser()` inside `<Suspense>`, not at the top level of a layout (see `(app)/profile/page.tsx`).
+- **Cache Components:** reading the session is request-time data. Put components that call `requireUser()`/`getCurrentUser()` inside `<Suspense>`, not at the top level of a layout (see `(app)/(tabs)/profile/page.tsx`).
+  - Under Cache Components the static shell streams first, so `notFound()` from a request-time check shows the not-found page with `noindex` but an HTTP 200. That's accepted. A real 404 status would need the check in `proxy.ts`.
+  - Client components in the shell that read URL data (`usePathname`, `useSearchParams`) break the build on dynamic routes unless they're behind `<Suspense>`. That's why `/chats` uses its own layout without `BottomNav`.
 - **Validation:** zod schemas in `src/lib/validations/` with Persian messages. They're shared by the client (instant feedback) and the Server Actions (the source of truth).
 - **Forms:**
   - Server Actions return `FormState` (`src/lib/form.ts`). Field errors, the message and echoed non-secret values go back to the form.
@@ -79,6 +83,27 @@ Custom email/password auth. Do not add NextAuth or other auth libraries.
   - The client IP comes from `X-Forwarded-For`, which the reverse proxy must set. The custom server fills it from the socket address when it's missing.
 - **LTR fields:** email, username and password inputs use `dir="ltr"` + `text-start`. Labels and errors stay RTL.
 - **Inputs are always 16px** (`text-base`, also on desktop) so iOS Safari doesn't zoom on focus. `md:text-sm` was removed from `ui/input.tsx` and `ui/textarea.tsx` on purpose.
+
+## Layout conventions
+
+- `AppShell` is the app frame: a centered column on desktop with a scrollable `main`. Pass `nav` to show the bottom navigation.
+- Each page renders its own sticky `PageHeader` (title, subtitle, `start`/`end` slots).
+- Use `UserAvatar` for avatars, which shows initials with a deterministic tint. Use `BottomSheetContent` for bottom sheets.
+- Display a username inside RTL text as `<bdi dir="ltr">@{username}</bdi>` so it stays aligned with the RTL line. Only inputs get `dir="ltr"` + `text-start`.
+
+## Users, contacts and conversations
+
+- **Public user shape:** `{ id, name, username, avatarUrl }` (`publicUserSelect` / `PublicUser` in `src/lib/users.ts`). This is the only user data that may reach another user's browser. Never select email or other private fields for other users, including in props passed to Client Components.
+- **Contacts are one-directional,** like Telegram: adding someone only puts them in my list. Adding an existing contact is a no-op.
+- **Lookup is exact match only** on username or email, never partial and never a listing, so the user base can't be enumerated.
+  - Input is normalized by `userLookupSchema` (trim, lowercase, strip a leading `@`).
+  - Lookups are rate limited to 30 per user per 10 minutes.
+  - You can't add yourself.
+- **Direct conversations:**
+  - `Conversation.directKey` holds the two user ids sorted and joined with `:` (`directKeyFor()` in `src/lib/conversations.ts`). It's null for groups.
+  - Its unique index guarantees one DIRECT conversation per pair.
+  - `startDirectConversation` upserts by `directKey` in a transaction, adds both users as MEMBER, retries a lost race (P2002) by reading the existing row, then redirects to `/chats/[id]`.
+- **Access to a conversation goes through `getConversationForMember(id, userId)`.** It returns null for non-members and malformed ids, and the caller then calls `notFound()`.
 
 ## Realtime
 
@@ -92,7 +117,7 @@ Custom email/password auth. Do not add NextAuth or other auth libraries.
 cp .env.example .env        # first time only
 docker compose up -d        # start Postgres
 npm install                 # also runs prisma generate
-npm run db:migrate          # prisma migrate dev (create/apply migrations)
+npm run db:migrate          # prisma migrate dev (create/apply migrations; needs an interactive terminal)
 npm run db:generate         # regenerate Prisma client
 npm run db:studio           # Prisma Studio
 npm run dev                 # custom server via tsx watch (Next HMR + Socket.IO), http://localhost:3000
@@ -102,3 +127,5 @@ npm start                   # NODE_ENV=production node dist/server.cjs
 ```
 
 In dev, `tsx watch` restarts only on server-side changes. UI changes go through Next HMR.
+
+In a non-interactive shell (e.g. an agent), `prisma migrate dev` refuses to run. Write the migration SQL with `npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` into `prisma/migrations/<timestamp>_<name>/migration.sql`, then apply it with `npx prisma migrate deploy` and `npx prisma generate`.
