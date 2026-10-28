@@ -57,3 +57,12 @@ export function applyEdit(
     return message;
   });
 }
+
+// Merges a fetched page into the loaded messages: dedupe by id, then order by
+// (createdAt, id), the same order the server pages in.
+export function mergePage(current: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+  const known = new Set(current.map((message) => message.id));
+  const added = incoming.filter((message) => !known.has(message.id));
+  if (added.length === 0) return current;
+  return [...current, ...added].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+}

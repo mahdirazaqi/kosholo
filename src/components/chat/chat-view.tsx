@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell, BellOff, Bookmark, EllipsisVertical, Forward, Megaphone, Trash2, UserX, X } from "lucide-react";
 import { toast } from "sonner";
-import { getChannelStats, loadOlderMessages, sendMessage, setMuted } from "@/app/(app)/chats/actions";
+import { getChannelStats, getFirstUnreadMessageId, getMessagesSince, loadMessages, sendMessage, setMuted } from "@/app/(app)/chats/actions";
 import { deleteMessages } from "@/app/(app)/chats/delete-actions";
 import { editMessage } from "@/app/(app)/chats/edit-actions";
 import { ensureDirectConversation, forwardMessages } from "@/app/(app)/chats/forward-actions";
@@ -16,7 +16,7 @@ import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { conversationActionItems, useConversationActions } from "@/components/chat/conversation-actions";
 import { DeleteDialog } from "@/components/chat/delete-dialog";
 import { ForwardPicker, type ForwardDraft, type PickedTarget } from "@/components/chat/forward-picker";
-import { MessageList } from "@/components/chat/message-list";
+import { MessageList, type MessageListHandle } from "@/components/chat/message-list";
 import { PageHeader } from "@/components/page-header";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
@@ -31,15 +31,16 @@ import { useConversationRealtime } from "@/hooks/use-conversation-realtime";
 import { useFileSender } from "@/hooks/use-file-sender";
 import { useMediaSender } from "@/hooks/use-media-sender";
 import { PREVIEW_LENGTH } from "@/lib/chat/limits";
-import { setPendingJump } from "@/lib/chat/pending-jump";
+import { setPendingJump, takePendingJump } from "@/lib/chat/pending-jump";
+import { encodeCursor } from "@/lib/chat/cursor";
 import { canDeleteForEveryone, canPost, editBlock } from "@/lib/chat/permissions";
 import { tempId, vibrate } from "@/lib/client-utils";
 import { audioManager } from "@/lib/media/client/audio-manager";
 import { formatCount } from "@/lib/numbers";
-import { applyEdit, lastConfirmedAt, mergeMessage } from "@/lib/realtime/client/merge";
+import { applyEdit, lastConfirmedAt, mergeMessage, mergePage } from "@/lib/realtime/client/merge";
 import { getSocket } from "@/lib/realtime/client/socket";
 import { TYPING_CLIENT_THROTTLE_MS } from "@/lib/realtime/events";
-import { isLocalDelete, patchConversation, removeConversation, renameConversation, setPendingForward, useRealtimeStore } from "@/lib/realtime/client/store";
+import { cacheMessages, getCachedMessages, isLocalDelete, patchConversation, removeConversation, renameConversation, setPendingForward, useRealtimeStore } from "@/lib/realtime/client/store";
 import type {
   ChatConversation,
   ChatLocation,
@@ -63,20 +64,47 @@ export function ChatView({
   initialPage: MessagesPage;
 }) {
 
-  const [messages, setMessages] = useState(initialPage.messages);
-  // The first message I hadn't read when opening the chat. The divider above
-  // it stays until I leave; later messages don't move it.
-  const [firstUnreadId] = useState(
-    () =>
-      initialPage.messages.find(
-        (m) =>
-          m.type !== "SYSTEM" &&
-          m.sender.id !== currentUser.id &&
-          (conversation.lastReadAt === null || m.createdAt > conversation.lastReadAt),
-      )?.id ?? null,
-  );
-  const [cursor, setCursor] = useState(initialPage.nextCursor);
+  // Messages in the cache (this session) are shown at once and merged with the
+  // fresh latest page, but only if the two overlap (otherwise there'd be a gap).
+  const [{ messages: startMessages, hasOlder: startHasOlder, fromCache }] = useState(() => {
+    const cached = getCachedMessages(conversation.id);
+    const first = initialPage.messages[0];
+    const last = cached?.messages.at(-1);
+    if (cached && first && last && first.createdAt <= last.createdAt) {
+      return { messages: mergePage(cached.messages, initialPage.messages), hasOlder: cached.hasOlder, fromCache: cached.messages };
+    }
+    return { messages: initialPage.messages, hasOlder: initialPage.hasOlder, fromCache: null };
+  });
+  const [messages, setMessages] = useState(startMessages);
+  // Paging state (the contract is in lib/chat/messages.ts). `hasNewer` means the
+  // list is a window in the middle of the history (after a jump), not attached to the latest.
+  const [hasOlder, setHasOlder] = useState(startHasOlder);
+  const [hasNewer, setHasNewer] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [loadingNewer, setLoadingNewer] = useState(false);
+  const [olderError, setOlderError] = useState(false);
+  // A new window (jump / back to latest) remounts the list; `initialMessageId`
+  // is where it starts (centered), null = the bottom.
+  const [windowKey, setWindowKey] = useState(0);
+  const [initialMessageId, setInitialMessageId] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const listRef = useRef<MessageListHandle>(null);
+  // The first message I hadn't read when opening the chat. The divider above it
+  // stays while I'm in the chat; it only exists if that message is in the loaded
+  // range (a first unread older than the page is reached with the jump button).
+  const [firstUnreadId] = useState(() => {
+    const index = startMessages.findIndex(
+      (m) =>
+        m.type !== "SYSTEM" &&
+        m.sender.id !== currentUser.id &&
+        (conversation.lastReadAt === null || m.createdAt > conversation.lastReadAt),
+    );
+    return index < 0 || (index === 0 && startHasOlder) ? null : startMessages[index].id;
+  });
+  // Unread count at open, for the jump button (the store clears it as I read).
+  const [unreadAtOpen, setUnreadAtOpen] = useState(
+    () => useRealtimeStore.getState().unread?.[conversation.id]?.count ?? 0,
+  );
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   // The forward picker (messages chosen to forward) and the forward waiting in
   // this composer (kept in the store so it survives navigating away and back).
@@ -118,8 +146,14 @@ export function ChatView({
   );
 
   // Refs so loadOlder stays stable and concurrent callers share one request.
-  const cursorRef = useRef(cursor);
-  const inflight = useRef<Promise<boolean> | null>(null);
+  const inflightOlder = useRef(false);
+  const inflightNewer = useRef(false);
+  const hasOlderRef = useRef(hasOlder);
+  const hasNewerRef = useRef(hasNewer);
+  useEffect(() => {
+    hasOlderRef.current = hasOlder;
+    hasNewerRef.current = hasNewer;
+  }, [hasOlder, hasNewer]);
   const messagesRef = useRef(messages);
   useEffect(() => {
     messagesRef.current = messages;
@@ -127,8 +161,12 @@ export function ChatView({
 
   const requestRead = useConversationRealtime({
     conversationId: conversation.id,
-    onMessage: (message, incomingTempId) =>
-      setMessages((current) => mergeMessage(current, message, incomingTempId)),
+    onMessage: (message, incomingTempId) => {
+      // Detached (a window after a jump): newer messages are loaded when the
+      // list reconnects with the latest; only my own pending sends merge now.
+      if (hasNewerRef.current && !messagesRef.current.some((m) => m.tempId !== undefined && m.tempId === incomingTempId)) return;
+      setMessages((current) => mergeMessage(current, message, incomingTempId));
+    },
     onRead: (userId, lastReadAt) =>
       setReadStates((current) =>
         current.map((state) =>
@@ -342,33 +380,138 @@ export function ChatView({
       canDeleteForEveryone({ id: currentUser.id, role: myRole, conversationType: chat.type }, { senderId: m.sender.id, type: m.type }),
     );
 
-  const loadOlder = useCallback((): Promise<boolean> => {
-    if (inflight.current) return inflight.current;
-    const before = cursorRef.current;
-    if (!before) return Promise.resolve(false);
-
+  // One request in flight at a time, repeated triggers are ignored, and nothing
+  // is requested once there is nothing older. Prepending keeps the view still
+  // (the list shifts its firstItemIndex by the number of items added).
+  const loadOlder = useCallback(async () => {
+    if (inflightOlder.current || !hasOlderRef.current) return;
+    const first = messagesRef.current.find((m) => m.status === "sent");
+    if (!first) return;
+    inflightOlder.current = true;
     setLoadingOlder(true);
-    inflight.current = loadOlderMessages(conversation.id, before)
-      .then((page) => {
-        if (!page) return false;
-        cursorRef.current = page.nextCursor;
-        setCursor(page.nextCursor);
-        setMessages((current) => {
-          const known = new Set(current.map((message) => message.id));
-          return [...page.messages.filter((message) => !known.has(message.id)), ...current];
-        });
-        return page.messages.length > 0;
-      })
-      .catch(() => {
-        toast.error("Couldn't load older messages");
-        return false;
-      })
-      .finally(() => {
-        inflight.current = null;
-        setLoadingOlder(false);
-      });
-    return inflight.current;
+    setOlderError(false);
+    try {
+      const page = await loadMessages(conversation.id, { before: encodeCursor(first) });
+      if (!page) throw new Error("no page");
+      setMessages((current) => mergePage(current, page.messages));
+      setHasOlder(page.hasOlder);
+    } catch {
+      setOlderError(true); // a small "Try again" at the top, no toast
+    } finally {
+      inflightOlder.current = false;
+      setLoadingOlder(false);
+    }
   }, [conversation.id]);
+
+  // Detached: scrolling down loads newer pages until hasNewer is false, which
+  // reattaches the list to the latest messages.
+  const loadNewer = useCallback(async () => {
+    if (inflightNewer.current || !hasNewerRef.current) return;
+    const last = [...messagesRef.current].reverse().find((m) => m.status === "sent");
+    if (!last) return;
+    inflightNewer.current = true;
+    setLoadingNewer(true);
+    try {
+      const page = await loadMessages(conversation.id, { after: encodeCursor(last) });
+      if (!page) throw new Error("no page");
+      setMessages((current) => mergePage(current, page.messages));
+      setHasNewer(page.hasNewer);
+    } catch {
+      // The next scroll to the end tries again.
+    } finally {
+      inflightNewer.current = false;
+      setLoadingNewer(false);
+    }
+  }, [conversation.id]);
+
+  // Starts a new window: the list remounts positioned at `startAt` (or the bottom).
+  const openWindow = useCallback((page: MessagesPage, startAt: string | null) => {
+    // What is still being sent stays (sorted by time at the end).
+    setMessages((current) => mergePage(current.filter((m) => m.status !== "sent"), page.messages));
+    setHasOlder(page.hasOlder);
+    setHasNewer(page.hasNewer);
+    setOlderError(false);
+    setInitialMessageId(startAt);
+    setWindowKey((key) => key + 1);
+  }, []);
+
+  const flash = useCallback((messageId: string) => {
+    setHighlightId(messageId);
+    setTimeout(() => setHighlightId((current) => (current === messageId ? null : current)), 1500);
+  }, []);
+
+  // Jump to a message (a quote's original, a forward's original): the window
+  // around it, never "load everything in between".
+  const jumpTo = useCallback(
+    async (messageId: string) => {
+      try {
+        const page = await loadMessages(conversation.id, { around: messageId });
+        if (!page) return void toast.error("Original message not found");
+        openWindow(page, messageId);
+        flash(messageId);
+      } catch {
+        toast.error("Couldn't load the message, please try again");
+      }
+    },
+    [conversation.id, openWindow, flash],
+  );
+
+  // Back to the latest: the newest page, not everything in between.
+  const jumpToLatest = useCallback(async () => {
+    try {
+      const page = await loadMessages(conversation.id);
+      if (!page) return;
+      openWindow(page, null);
+    } catch {
+      toast.error("Couldn't load the latest messages");
+    }
+  }, [conversation.id, openWindow]);
+
+  const jumpToFirstUnread = useCallback(async () => {
+    setUnreadAtOpen(0);
+    try {
+      const id = await getFirstUnreadMessageId(conversation.id, conversation.lastReadAt);
+      if (id) await jumpTo(id);
+    } catch {
+      toast.error("Couldn't load the message, please try again");
+    }
+  }, [conversation.id, conversation.lastReadAt, jumpTo]);
+
+  // "Forwarded from …" opened this chat to show one message.
+  useEffect(() => {
+    const target = takePendingJump(conversation.id);
+    if (target) queueMicrotask(() => void jumpTo(target));
+    // Once per mount: the request is consumed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sending from a detached window first goes back to the latest.
+  const sendingWhileDetached = hasNewer && messages.some((m) => m.status === "sending");
+  useEffect(() => {
+    if (sendingWhileDetached) queueMicrotask(() => void jumpToLatest());
+  }, [sendingWhileDetached, jumpToLatest]);
+
+  // Cache what was loaded (the latest window) for the next visit, and drop
+  // messages deleted while this chat was closed when it was restored from cache.
+  const hasOlderForCache = useRef(hasOlder);
+  useEffect(() => {
+    hasOlderForCache.current = hasOlder;
+  }, [hasOlder]);
+  useEffect(() => {
+    if (!fromCache) return;
+    const since = initialPage.messages[0]?.createdAt;
+    if (!since) return;
+    getMessagesSince(conversation.id, since, fromCache.map((m) => m.id))
+      .then((result) => result?.goneIds.length && removeLocally(result.goneIds))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(
+    () => () => {
+      if (!hasNewerRef.current) cacheMessages(conversation.id, messagesRef.current, hasOlderForCache.current);
+    },
+    [conversation.id],
+  );
 
   const deliver = useCallback(
     async (optimistic: ChatMessage) => {
@@ -977,17 +1120,29 @@ export function ChatView({
       )}
 
       <MessageList
+        ref={listRef}
         messages={messages}
+        windowKey={windowKey}
+        initialMessageId={initialMessageId}
+        highlightId={highlightId}
         firstUnreadId={firstUnreadId}
+        unreadAtOpen={unreadAtOpen}
         currentUserId={currentUser.id}
         conversationType={chat.type}
         channelTitle={isChannel ? chat.title : undefined}
         isAdmin={myRole === "ADMIN"}
         memberNames={memberNames}
         readStates={readStates}
-        hasMore={cursor !== null}
+        hasOlder={hasOlder}
+        hasNewer={hasNewer}
         loadingOlder={loadingOlder}
-        onLoadOlder={loadOlder}
+        loadingNewer={loadingNewer}
+        olderError={olderError}
+        onLoadOlder={() => void loadOlder()}
+        onLoadNewer={() => void loadNewer()}
+        onJumpToLatest={() => void jumpToLatest()}
+        onJumpToFirstUnread={() => void jumpToFirstUnread()}
+        onJumpToMessage={(id) => void jumpTo(id)}
         onReply={startReply}
         onRetry={retry}
         onCancelUpload={cancelUpload}
@@ -1000,7 +1155,6 @@ export function ChatView({
         canEditMessage={canEditMessage}
         onEdit={startEdit}
         editing={editing !== null}
-        conversationId={chat.id}
         onSave={saveOne}
         onForward={forwardOne}
         onOpenForward={openForward}

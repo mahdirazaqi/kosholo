@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { getConversations, isMember } from "@/lib/chat/conversations";
-import { getGoneIds, getMessages, getMessagesSince as queryMessagesSince } from "@/lib/chat/messages";
+import {
+  getFirstUnreadId,
+  getGoneIds,
+  getMessages,
+  getMessagesAround,
+  getMessagesSince as queryMessagesSince,
+} from "@/lib/chat/messages";
 import { messageSelect, quoteHiddenFor, toChatMessage, type MessageRow } from "@/lib/chat/queries";
 import { canPost } from "@/lib/chat/permissions";
 import { getUnreadSummary } from "@/lib/chat/unread";
@@ -216,15 +222,34 @@ export async function getChannelStats(
   return { views, memberCount };
 }
 
-export async function loadOlderMessages(
+// One page of messages (lib/chat/messages.ts has the contract). Exactly one of
+// `before` (older than the cursor), `after` (newer than the cursor), `around`
+// (the window around a message id) or none (the latest) applies.
+export async function loadMessages(
   conversationId: string,
-  cursor: string,
+  request: { before?: string; after?: string; around?: string } = {},
 ): Promise<MessagesPage | null> {
   const me = await requireUser();
   const viewer = await getViewer(conversationId, me.id);
   if (!viewer) return null;
-  if (typeof cursor !== "string" || cursor.length > 100) return null;
-  return getMessages(conversationId, viewer, cursor);
+  if (request.around !== undefined) {
+    if (!UUID.test(request.around)) return null;
+    return getMessagesAround(conversationId, viewer, request.around);
+  }
+  const cursor = request.before ?? request.after;
+  if (cursor !== undefined && (typeof cursor !== "string" || cursor.length > 120)) return null;
+  return getMessages(conversationId, viewer, { before: request.before, after: request.after });
+}
+
+// The first message I hadn't read when the chat was opened (`lastReadAt` is the
+// position I had then), to jump to it from the unread button.
+export async function getFirstUnreadMessageId(conversationId: string, lastReadAt: string | null): Promise<string | null> {
+  const me = await requireUser();
+  const viewer = await getViewer(conversationId, me.id);
+  if (!viewer) return null;
+  const since = lastReadAt ? new Date(lastReadAt) : null;
+  if (since && Number.isNaN(since.getTime())) return null;
+  return getFirstUnreadId(conversationId, viewer, since);
 }
 
 const MAX_KNOWN_IDS = 500;

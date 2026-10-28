@@ -284,6 +284,7 @@ export const isLocalDelete = (conversationId: string) => localDeletes.has(conver
 
 export function removeConversation(conversationId: string) {
   dropUnread(conversationId);
+  messageCache.delete(conversationId);
   const conversations = get().conversations;
   if (conversations) set({ conversations: conversations.filter((item) => item.id !== conversationId) });
   setTypingFor(conversationId, null);
@@ -374,4 +375,39 @@ export function resubscribePresence() {
 
 export function setPresence(state: PresenceState) {
   set({ presence: { ...get().presence, [state.userId]: state } });
+}
+
+// ---- Per-conversation message cache ----
+// Reopening a chat in this session starts from what was loaded last time (the
+// newest messages at the bottom), then the latest page is fetched and merged.
+// At most ~300 messages per conversation and ~10 conversations (LRU: the Map's
+// insertion order is the recency order). Lost on reload and on logout.
+const CACHE_MESSAGES = 300;
+const CACHE_CONVERSATIONS = 10;
+const messageCache = new Map<string, { messages: ChatMessage[]; hasOlder: boolean }>();
+
+export function cacheMessages(conversationId: string, messages: ChatMessage[], hasOlder: boolean) {
+  const sent = messages.filter((m) => m.status === "sent");
+  if (sent.length === 0) return;
+  const kept = sent.slice(-CACHE_MESSAGES);
+  messageCache.delete(conversationId);
+  messageCache.set(conversationId, { messages: kept, hasOlder: hasOlder || kept.length < sent.length });
+  while (messageCache.size > CACHE_CONVERSATIONS) messageCache.delete(messageCache.keys().next().value!);
+}
+
+export function getCachedMessages(conversationId: string) {
+  const entry = messageCache.get(conversationId);
+  if (entry) {
+    messageCache.delete(conversationId); // touch: most recently used
+    messageCache.set(conversationId, entry);
+  }
+  return entry ?? null;
+}
+
+export function dropCachedMessages(conversationId: string) {
+  messageCache.delete(conversationId);
+}
+
+export function clearMessageCache() {
+  messageCache.clear();
 }

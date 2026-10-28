@@ -111,7 +111,8 @@ export type LocalUpload = {
 
 export type MessagesPage = {
   messages: ChatMessage[]; // oldest → newest
-  nextCursor: string | null; // id of the oldest message, when more exist
+  hasOlder: boolean; // more messages before the first one
+  hasNewer: boolean; // more messages after the last one (the page isn't the latest)
 };
 
 export type LastMessagePreview = {

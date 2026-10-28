@@ -22,6 +22,7 @@ import type {
 } from "@/lib/realtime/events";
 import {
   applyEditToList,
+  clearMessageCache,
   bumpPhotosVersion,
   applyMessageToList,
   countIncomingUnread,
@@ -187,6 +188,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("keydown", unlockAudio);
       socket.disconnect();
       clearBadges();
+      clearMessageCache();
       useRealtimeStore.setState({ connected: false, conversations: null, unread: null, pendingForwards: {}, photosVersions: {}, typing: {}, presence: {}, avatars: {}, me: null });
     };
   }, []);

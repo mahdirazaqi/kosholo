@@ -166,7 +166,8 @@ model Message {
   forwardFromMessage      Message?      @relation("ForwardedFromMessage", fields: [forwardFromMessageId], references: [id], onDelete: SetNull)
   forwardedCopies         Message[]     @relation("ForwardedFromMessage")
 
-  @@index([conversationId, createdAt])
+  // Cursor pagination: (conversationId, createdAt, id) in both directions.
+  @@index([conversationId, createdAt, id])
   @@index([uploadId])
   @@map("messages")
 }
