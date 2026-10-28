@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronDown, Copy, Bookmark, Download, Forward, Loader2, Pencil, Reply, Trash2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, Copy, Bookmark, Download, Forward, Loader2, Pencil, Reply, TextSelect, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { previewText } from "@/components/chat/message-preview";
 import { MessageBubble, type BubbleActions } from "@/components/chat/message-bubble";
@@ -10,6 +10,7 @@ import { MediaViewer, type ViewerTarget } from "@/components/chat/media/media-vi
 import { BottomSheetContent } from "@/components/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { useBackLayer } from "@/hooks/use-back-layer";
 import { useIsDesktop } from "@/hooks/use-media-query";
 import { takePendingJump } from "@/lib/chat/pending-jump";
 import { copyText, nextFrame, scrollBehavior } from "@/lib/client-utils";
@@ -121,6 +122,10 @@ export function MessageList({
   const viewerGone =
     viewer?.messageId !== undefined && !messages.some((m) => m.id === viewer.messageId && !removing.has(m.id));
   const shownViewer = viewerGone ? null : viewer;
+  // The lightbox isn't a Radix layer (video and map viewers are): back closes it.
+  useBackLayer(shownViewer?.kind === "image", () => setViewer(null));
+  // "Select text": the full text in a read-only, selectable field (touch).
+  const [selectTextFor, setSelectTextFor] = useState<ChatMessage | null>(null);
 
   const scrollToBottom = useCallback((smooth = false) => {
     const scroller = scrollerRef.current;
@@ -295,6 +300,12 @@ export function MessageList({
       <div
         ref={scrollerRef}
         onScroll={onScroll}
+        // Tapping the list (not a control) dismisses the keyboard on touch devices.
+        onClick={(event) => {
+          if (isDesktop || (event.target as Element).closest("button, a, [role='button'], textarea, input")) return;
+          const active = document.activeElement;
+          if (active instanceof HTMLElement && (active.tagName === "TEXTAREA" || active.tagName === "INPUT")) active.blur();
+        }}
         className="chat-bg h-full overflow-y-auto overscroll-contain pb-3 [overflow-anchor:none]"
       >
         <div className="flex h-8 items-center justify-center">
@@ -403,6 +414,23 @@ export function MessageList({
         }
       />
 
+      <Sheet open={selectTextFor !== null} onOpenChange={(open) => !open && setSelectTextFor(null)}>
+        <BottomSheetContent showCloseButton={false}>
+          <SheetTitle className="px-4 text-base font-semibold">Select text</SheetTitle>
+          <SheetDescription className="sr-only">Press and hold to select part of the message, then copy it</SheetDescription>
+          <div className="px-4 pb-[max(env(safe-area-inset-bottom),1rem)]">
+            <textarea
+              readOnly
+              dir="auto"
+              value={selectTextFor?.content ?? ""}
+              rows={6}
+              aria-label="Message text"
+              className="selectable-always max-h-[50dvh] min-h-32 w-full resize-none rounded-xl border bg-muted/40 p-3 leading-6 outline-none"
+            />
+          </div>
+        </BottomSheetContent>
+      </Sheet>
+
       <Sheet open={actionsOpen} onOpenChange={setActionsOpen}>
         <BottomSheetContent
           showCloseButton={false}
@@ -451,6 +479,16 @@ export function MessageList({
                     onClick={() => {
                       setActionsOpen(false);
                       onSave(actionsFor);
+                    }}
+                  />
+                )}
+                {actionsFor.content && (
+                  <ActionButton
+                    icon={<TextSelect />}
+                    label="Select text"
+                    onClick={() => {
+                      setActionsOpen(false);
+                      setSelectTextFor(actionsFor);
                     }}
                   />
                 )}

@@ -38,7 +38,7 @@ export function MediaFrame({
     >
       {placeholder && !loaded && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={placeholder} alt="" aria-hidden className="absolute inset-0 size-full scale-110 object-cover blur-lg" />
+        <img draggable={false} src={placeholder} alt="" aria-hidden className="absolute inset-0 size-full scale-110 object-cover blur-lg" />
       )}
       {src && !failed && (
         // Authenticated, already-sized images: next/image would only add a proxy hop.

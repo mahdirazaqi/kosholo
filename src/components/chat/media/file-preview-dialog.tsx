@@ -35,7 +35,7 @@ export function FilePreviewDialog({
     <Dialog open={open} onOpenChange={(next) => !next && close()}>
       <DialogContent
         showCloseButton={false}
-        className="inset-0 top-0 start-0 flex h-dvh max-h-dvh w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none p-0 rtl:translate-x-0 sm:inset-auto sm:top-1/2 sm:start-1/2 sm:h-auto sm:max-h-[85dvh] sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:rtl:translate-x-1/2"
+        className="inset-0 top-0 start-0 flex h-dvh max-h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none p-0 rtl:translate-x-0 sm:inset-auto sm:top-1/2 sm:start-1/2 sm:h-auto sm:max-h-[85dvh] sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:rtl:translate-x-1/2"
       >
         <div className="flex shrink-0 items-center gap-2 border-b px-3 pt-[max(env(safe-area-inset-top),0.75rem)] pb-2 sm:pt-3">
           <Button type="button" variant="ghost" size="icon-lg" onClick={close} aria-label="Cancel" className="size-11 rounded-full">
@@ -56,7 +56,7 @@ export function FilePreviewDialog({
                   <Icon className="size-5" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p dir="auto" title={file.name} className="truncate text-sm font-medium">
+                  <p dir="auto" className="truncate text-sm font-medium">
                     {shortFileName(file.name, 36)}
                   </p>
                   <p className="text-xs text-muted-foreground">{formatBytes(file.size)}</p>

@@ -159,7 +159,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           <Pencil className="size-5 shrink-0 text-primary" />
           {editing.media?.thumbUrl && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={editing.media.thumbUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" />
+            <img draggable={false} src={editing.media.thumbUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" />
           )}
           <div className="min-w-0 flex-1 border-s-2 border-primary ps-2">
             <p className="truncate text-xs font-semibold text-primary">{isCaption ? "Edit caption" : "Edit message"}</p>
@@ -196,7 +196,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           {replyTo.location && <LocationThumb location={replyTo.location} className="size-10 shrink-0 rounded-md" />}
           {replyTo.media?.thumbUrl && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={replyTo.media.thumbUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" />
+            <img draggable={false} src={replyTo.media.thumbUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" />
           )}
           <div className="min-w-0 flex-1 border-s-2 border-primary ps-2">
             <p className="truncate text-xs font-semibold text-primary">Reply to {replyTo.sender.name}</p>
@@ -246,6 +246,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           placeholder={isCaption ? "Caption" : "Message"}
           aria-label="Message text"
           enterKeyHint={isDesktop ? "send" : "enter"}
+          // Chat text: spell-check and autocorrect on, no browser history suggestions.
+          autoComplete="off"
+          autoCorrect="on"
+          spellCheck
           onChange={(event) => {
             setValue(event.target.value);
             if (!editing) onInput?.(event.target.value); // no typing indicator while editing
@@ -346,7 +350,7 @@ function ForwardBar({
             <Forward className="size-5 shrink-0 text-primary" />
             {messages.length === 1 && first.media?.thumbUrl && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={first.media.thumbUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" />
+              <img draggable={false} src={first.media.thumbUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" />
             )}
             <span className="min-w-0 flex-1 border-s-2 border-primary ps-2">
               <span className="block truncate text-xs font-semibold text-primary">

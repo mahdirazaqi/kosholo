@@ -15,6 +15,8 @@ export function useVisualViewportHeight() {
       root.style.setProperty("--app-height", `${viewport.height}px`);
       // iOS scrolls the whole page to reveal the focused input; undo that.
       if (window.scrollY !== 0) window.scrollTo(0, 0);
+      const scroller = document.scrollingElement;
+      if (scroller && scroller.scrollTop !== 0) scroller.scrollTop = 0;
     };
     update();
     viewport.addEventListener("resize", update);

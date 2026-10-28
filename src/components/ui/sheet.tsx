@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { cn } from "cn"
+import { useBackLayer } from "@/hooks/use-back-layer"
 import { Dialog as SheetPrimitive } from "radix-ui"
 
 import { Button } from "@/components/ui/button"
@@ -55,6 +56,8 @@ function SheetContent({
   side?: "top" | "end" | "bottom" | "start"
   showCloseButton?: boolean
 }) {
+  // Android back / browser back closes this layer before leaving the page.
+  useBackLayer(true)
   return (
     <SheetPortal>
       <SheetOverlay />

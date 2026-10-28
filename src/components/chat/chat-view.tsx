@@ -26,14 +26,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useBackLayer } from "@/hooks/use-back-layer";
 import { useConversationRealtime } from "@/hooks/use-conversation-realtime";
 import { useFileSender } from "@/hooks/use-file-sender";
 import { useMediaSender } from "@/hooks/use-media-sender";
-import { useVisualViewportHeight } from "@/hooks/use-visual-viewport-height";
 import { PREVIEW_LENGTH } from "@/lib/chat/limits";
 import { setPendingJump } from "@/lib/chat/pending-jump";
 import { canDeleteForEveryone, canPost, editBlock } from "@/lib/chat/permissions";
-import { tempId } from "@/lib/client-utils";
+import { tempId, vibrate } from "@/lib/client-utils";
 import { audioManager } from "@/lib/media/client/audio-manager";
 import { formatCount } from "@/lib/numbers";
 import { applyEdit, lastConfirmedAt, mergeMessage } from "@/lib/realtime/client/merge";
@@ -62,7 +62,6 @@ export function ChatView({
   currentUser: PublicUser;
   initialPage: MessagesPage;
 }) {
-  useVisualViewportHeight();
 
   const [messages, setMessages] = useState(initialPage.messages);
   // The first message I hadn't read when opening the chat. The divider above
@@ -108,6 +107,11 @@ export function ChatView({
   const isChannel = chat.type === "CHANNEL";
   const isSaved = chat.type === "SAVED";
   const mayPost = canPost(chat.type, myRole);
+  // Android back / browser back closes these before leaving the chat.
+  useBackLayer(selection !== null, () => setSelection(null));
+  useBackLayer(replyTo !== null, () => setReplyTo(null));
+  useBackLayer(editing !== null, () => setEditing(null));
+  useBackLayer(pendingForward !== null, () => setPendingForward(conversation.id, null));
   const conversationActions = useConversationActions(
     { id: chat.id, type: chat.type, title: chat.title, myRole, muted: chat.muted, isOwner: chat.isOwner },
     { onMuted: (muted) => setChat((current) => ({ ...current, muted })) },
@@ -245,6 +249,7 @@ export function ChatView({
 
   const startSelection = useCallback((message: ChatMessage) => {
     if (editingRef.current) return; // no multi-select while editing
+    vibrate(10);
     setReplyTo(null);
     setSelection(new Set([message.id]));
   }, []);

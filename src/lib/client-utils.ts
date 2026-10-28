@@ -24,8 +24,16 @@ export async function copyText(text: string) {
   textarea.remove();
 }
 
-export function vibrate(ms: number) {
-  if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(ms);
+// Short haptic tick (long-press menus, swipe-to-reply, recording, selection).
+// Feature-detected, and skipped for people who asked for reduced motion.
+export function vibrate(ms = 10) {
+  if (typeof navigator === "undefined" || !("vibrate" in navigator)) return;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  try {
+    navigator.vibrate(ms);
+  } catch {
+    // Blocked by the browser: ignore.
+  }
 }
 
 export const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));

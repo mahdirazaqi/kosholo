@@ -123,7 +123,7 @@ export function NewChannelFlow({ contacts }: { contacts: PublicUser[] }) {
               >
                 {photo ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={photo.previewUrl} alt="" className="size-full object-cover" />
+                  <img draggable={false} src={photo.previewUrl} alt="" className="size-full object-cover" />
                 ) : (
                   <Megaphone className="size-10" />
                 )}

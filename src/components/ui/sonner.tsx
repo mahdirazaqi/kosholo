@@ -11,6 +11,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      // Below the status bar / notch; at the top they never cover the bottom nav or the composer.
+      offset="calc(env(safe-area-inset-top) + 8px)"
+      mobileOffset={{ top: "calc(env(safe-area-inset-top) + 8px)", left: 12, right: 12 }}
+      swipeDirections={["top", "left", "right"]}
       icons={{
         success: (
           <CircleCheckIcon className="size-4" />

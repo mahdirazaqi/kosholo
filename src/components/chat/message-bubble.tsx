@@ -109,11 +109,12 @@ export const MessageBubble = memo(function MessageBubble({
   // "Reply" from the dropdown is applied after it closes: the menu's focus trap
   // would otherwise pull focus back from the composer.
   const replyAfterClose = useRef(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const downloadable = isChannel && message.media !== null && message.status === "sent";
   const hasMenuItems = canReply || canDelete || canEdit || canSave || canForward || Boolean(message.content) || downloadable;
   const menu = isDesktop && canInteract && hasMenuItems && (
-    <DropdownMenu>
+    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
@@ -194,6 +195,14 @@ export const MessageBubble = memo(function MessageBubble({
   return (
     <div
       data-message-id={message.id}
+      // Desktop right-click opens our menu (unless text is selected: then the
+      // native menu can copy the selection).
+      onContextMenu={(event) => {
+        if (!isDesktop || !canInteract || !hasMenuItems || selecting) return;
+        if (window.getSelection()?.toString()) return;
+        event.preventDefault();
+        setMenuOpen(true);
+      }}
       className={cn(
         "group/msg relative flex flex-col px-3 transition-colors",
         isMine ? "items-end" : "items-start",
@@ -316,7 +325,7 @@ export const MessageBubble = memo(function MessageBubble({
               <p
                 dir="auto"
                 className={cn(
-                  "break-words whitespace-pre-wrap",
+                  "selectable-text break-words whitespace-pre-wrap",
                   emojiOnly ? "text-5xl leading-tight" : "text-[15px] leading-6",
                   visual && "px-2 pt-1",
                 )}
@@ -387,7 +396,10 @@ export function SelectToggle({ selected, onToggle }: { selected: boolean; onTogg
       role="checkbox"
       aria-checked={selected}
       aria-label="Select message"
-      onClick={onToggle}
+      onClick={() => {
+        vibrate(10);
+        onToggle();
+      }}
       className="absolute inset-0 z-10 flex min-h-11 items-center ps-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
     >
       <span
@@ -496,7 +508,7 @@ function Quote({
       ) : (
         replyTo.thumbUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={replyTo.thumbUrl} alt="" className="size-8 shrink-0 rounded object-cover" />
+          <img draggable={false} src={replyTo.thumbUrl} alt="" className="size-8 shrink-0 rounded object-cover" />
         )
       )}
       <span className="flex min-w-0 flex-1 flex-col items-start">

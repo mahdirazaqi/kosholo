@@ -245,7 +245,7 @@ export const ConversationRow = memo(function ConversationRow({
         }}
         onPointerMove={(event) => {
           const current = press.current;
-          if (current && Math.hypot(event.clientX - current.x, event.clientY - current.y) > 10) cancelPress();
+          if (current && Math.hypot(event.clientX - current.x, event.clientY - current.y) > 8) cancelPress();
         }}
         onPointerUp={cancelPress}
         onPointerCancel={cancelPress}

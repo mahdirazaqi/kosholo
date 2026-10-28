@@ -1,10 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { NativeBehaviors } from "@/components/native-behaviors";
 import { ServiceWorkerRegistration } from "@/components/pwa/service-worker";
 import { ThemeProvider } from "@/components/theme-provider";
 import { DirectionProvider } from "@/components/ui/direction";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
+import "./native.css";
 
 // UI text uses the system font. Vazirmatn only covers Arabic-script characters
 // (Persian/Arabic messages and names), so the browser downloads it only when
@@ -46,6 +48,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // No pinch/double-tap zoom (the image viewer and maps zoom on their own).
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
   // Android/Chrome shrink the layout when the keyboard opens, so the chat
   // composer stays visible. iOS is handled by useVisualViewportHeight().
@@ -72,7 +77,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           disableTransitionOnChange
         >
           <DirectionProvider dir="ltr">
-            {children}
+            {/* Pages outside AppShell scroll here, never on the body. */}
+            <div id="root-scroll">{children}</div>
+            <NativeBehaviors />
             <Toaster position="top-center" />
             <ServiceWorkerRegistration />
           </DirectionProvider>

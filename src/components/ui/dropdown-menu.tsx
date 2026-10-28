@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { cn } from "cn"
+import { useBackLayer } from "@/hooks/use-back-layer"
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui"
 import { CheckIcon, ChevronRightIcon } from "lucide-react"
 
@@ -36,6 +37,8 @@ function DropdownMenuContent({
   sideOffset = 4,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+  // Android back / browser back closes this layer before leaving the page.
+  useBackLayer(true)
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content

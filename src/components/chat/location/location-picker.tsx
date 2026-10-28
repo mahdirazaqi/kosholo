@@ -69,7 +69,7 @@ export default function LocationPicker({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="inset-0 top-0 start-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none bg-background p-0 ring-0 rtl:translate-x-0 sm:max-w-none"
+        className="inset-0 top-0 start-0 flex h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none bg-background p-0 ring-0 rtl:translate-x-0 sm:max-w-none"
       >
         <div className="flex shrink-0 items-center gap-2 border-b px-2 pt-[max(env(safe-area-inset-top),0.5rem)] pb-2">
           <Button
@@ -85,7 +85,7 @@ export default function LocationPicker({
           <DialogDescription className="sr-only">Drag the map to place the pin, then send the point or your current location.</DialogDescription>
         </div>
 
-        <div dir="ltr" className="relative min-h-0 flex-1">
+        <div dir="ltr" data-allow-zoom className="relative min-h-0 flex-1 touch-none">
           <MapContainer
             ref={setMap}
             center={[FALLBACK_CENTER.latitude, FALLBACK_CENTER.longitude]}

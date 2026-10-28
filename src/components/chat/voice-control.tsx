@@ -103,6 +103,7 @@ export function VoiceControl({ onSend }: { onSend: (recording: VoiceRecording) =
             event.currentTarget.setPointerCapture(event.pointerId);
             const rtl = getComputedStyle(event.currentTarget).direction === "rtl";
             gesture.current = { x: event.clientX, y: event.clientY, at: performance.now(), sign: rtl ? 1 : -1, done: false };
+            vibrate(10);
             void recorder.start();
           }}
           onPointerMove={(event) => {

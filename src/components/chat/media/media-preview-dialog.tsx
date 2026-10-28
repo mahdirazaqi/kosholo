@@ -42,7 +42,7 @@ export function MediaPreviewDialog({
     <Dialog open={open} onOpenChange={(next) => !next && close()}>
       <DialogContent
         showCloseButton={false}
-        className="inset-0 top-0 start-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none bg-black p-0 text-white ring-0 rtl:translate-x-0 sm:max-w-none"
+        className="inset-0 top-0 start-0 flex h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none bg-black p-0 text-white ring-0 rtl:translate-x-0 sm:max-w-none"
       >
         <div className="flex shrink-0 items-center gap-2 px-3 pt-[max(env(safe-area-inset-top),0.75rem)] pb-2">
           <button
@@ -64,7 +64,7 @@ export function MediaPreviewDialog({
             <div key={file.previewUrl} className="relative flex w-full shrink-0 snap-center items-center justify-center p-4">
               {file.kind === "IMAGE" ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={file.previewUrl} alt="" className="max-h-full max-w-full rounded-lg object-contain" />
+                <img draggable={false} src={file.previewUrl} alt="" className="max-h-full max-w-full rounded-lg object-contain" />
               ) : (
                 <video src={file.previewUrl} controls playsInline muted className="max-h-full max-w-full rounded-lg" />
               )}

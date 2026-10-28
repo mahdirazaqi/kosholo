@@ -45,7 +45,7 @@ export function FileMedia({
       <div className="relative size-12 shrink-0">
         {media.thumbUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={media.thumbUrl} alt="" loading="lazy" className="size-12 rounded-xl object-cover" />
+          <img draggable={false} src={media.thumbUrl} alt="" loading="lazy" className="size-12 rounded-xl object-cover" />
         ) : (
           <span className={cn("flex size-12 items-center justify-center rounded-xl", tone)}>
             <Icon className="size-6" />

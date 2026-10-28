@@ -10,7 +10,7 @@ export default function VideoPlayer({ target, onClose }: { target: Extract<Viewe
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         showCloseButton={false}
-        className="inset-0 top-0 start-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 items-center justify-center rounded-none bg-black p-0 ring-0 rtl:translate-x-0 sm:max-w-none"
+        className="inset-0 top-0 start-0 flex h-dvh w-full max-w-none translate-x-0 translate-y-0 items-center justify-center rounded-none bg-black p-0 ring-0 rtl:translate-x-0 sm:max-w-none"
       >
         <DialogTitle className="sr-only">Play video</DialogTitle>
         <video src={target.url} controls autoPlay playsInline className="max-h-full max-w-full" />

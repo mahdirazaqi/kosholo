@@ -2,6 +2,8 @@
 
 import * as React from "react"
 import { cn } from "cn"
+import { useBackLayer } from "@/hooks/use-back-layer"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import { Popover as PopoverPrimitive } from "radix-ui"
 
 function Popover({
@@ -22,6 +24,9 @@ function PopoverContent({
   sideOffset = 4,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+  // Touch only: a hover popover on desktop must not add history entries.
+  const coarse = useMediaQuery("(pointer: coarse)")
+  useBackLayer(coarse)
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content

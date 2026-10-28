@@ -77,7 +77,7 @@ export default function LocationViewer({ location, onClose }: { location: ChatLo
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         showCloseButton={false}
-        className="inset-0 top-0 start-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none bg-background p-0 ring-0 rtl:translate-x-0 sm:max-w-none"
+        className="inset-0 top-0 start-0 flex h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none bg-background p-0 ring-0 rtl:translate-x-0 sm:max-w-none"
       >
         <div className="flex shrink-0 items-center gap-2 border-b px-2 pt-[max(env(safe-area-inset-top),0.5rem)] pb-2">
           <Button variant="ghost" size="icon-lg" aria-label="Close" onClick={onClose} className="size-11 rounded-full">
@@ -119,7 +119,7 @@ export default function LocationViewer({ location, onClose }: { location: ChatLo
           </DropdownMenu>
         </div>
 
-        <div dir="ltr" className="relative min-h-0 flex-1">
+        <div dir="ltr" data-allow-zoom className="relative min-h-0 flex-1 touch-none">
           <MapContainer
             ref={setMap}
             center={[location.latitude, location.longitude]}

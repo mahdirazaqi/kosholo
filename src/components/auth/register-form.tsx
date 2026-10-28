@@ -50,6 +50,8 @@ export function RegisterForm() {
           dir="ltr"
           className="h-11 text-start"
           autoComplete="email"
+          inputMode="email"
+          autoCorrect="off"
           autoCapitalize="none"
           spellCheck={false}
           defaultValue={state.values?.email}
