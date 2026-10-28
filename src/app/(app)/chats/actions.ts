@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma } from "@/generated/prisma/client";
 import { requireUser } from "@/lib/auth";
 import { getConversations, isMember } from "@/lib/chat/conversations";
 import { getGoneIds, getMessages, getMessagesSince as queryMessagesSince } from "@/lib/chat/messages";
@@ -24,6 +23,8 @@ import { sendMessageSchema, type SendMessageInput } from "@/lib/validations/chat
 
 const NOT_FOUND = "Chat not found";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+class AlreadySent extends Error {}
 
 export type SendMessageResult = { ok: true; message: ChatMessage } | { ok: false; error: string };
 
@@ -52,12 +53,11 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
   }
 
   // Media: the upload must be mine, unused, and a message kind (not an avatar).
+  // Uploads can be shared by several messages (saved copies), but only the
+  // server-side save path may do that: here an attached upload is rejected.
   let type: "TEXT" | "IMAGE" | "VIDEO" | "VOICE" | "FILE" | "LOCATION" = location ? "LOCATION" : "TEXT";
   if (uploadId) {
-    const upload = await db.upload.findFirst({
-      where: { id: uploadId, ownerId: me.id, message: null },
-      select: { kind: true },
-    });
+    const upload = await db.upload.findFirst({ where: { id: uploadId, ownerId: me.id }, select: { kind: true } });
     if (!upload || upload.kind === "AVATAR") return { ok: false, error: "File not found, please send it again" };
     type = upload.kind;
   }
@@ -65,8 +65,13 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
   const now = new Date();
   let row;
   try {
-    [row] = await db.$transaction([
-      db.message.create({
+    row = await db.$transaction(async (tx) => {
+      if (uploadId) {
+        // Lock the upload row so two concurrent sends can't both attach it.
+        await tx.$queryRaw`SELECT id FROM uploads WHERE id = ${uploadId}::uuid FOR UPDATE`;
+        if ((await tx.message.count({ where: { uploadId } })) > 0) throw new AlreadySent();
+      }
+      const created = await tx.message.create({
         data: {
           conversationId,
           senderId: me.id,
@@ -80,19 +85,17 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
             : {}),
         },
         select: messageSelect,
-      }),
-      db.conversation.update({ where: { id: conversationId }, data: { updatedAt: now } }),
+      });
+      await tx.conversation.update({ where: { id: conversationId }, data: { updatedAt: now } });
       // Sending counts as reading everything before it.
-      db.conversationMember.update({
+      await tx.conversationMember.update({
         where: { conversationId_userId: { conversationId, userId: me.id } },
         data: { lastReadAt: now },
-      }),
-    ]);
+      });
+      return created;
+    });
   } catch (error) {
-    // uploadId is unique: a concurrent send with the same upload lost the race.
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return { ok: false, error: "This file has already been sent" };
-    }
+    if (error instanceof AlreadySent) return { ok: false, error: "This file has already been sent" };
     throw error;
   }
   const isChannel = viewer.conversationType === "CHANNEL";

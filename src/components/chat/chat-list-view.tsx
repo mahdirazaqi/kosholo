@@ -174,11 +174,12 @@ export const ConversationRow = memo(function ConversationRow({
   const { lastMessage } = conversation;
   // The count comes from the unread store, like every other badge.
   const unreadCount = useRealtimeStore(selectUnreadCount(conversation.id));
-  const isGroup = conversation.type !== "DIRECT";
+  const isGroup = conversation.type === "GROUP" || conversation.type === "CHANNEL";
+  const isSaved = conversation.type === "SAVED";
   // "You: …" for mine; "Jane: …" for others in groups; system events as text.
   // Channel posts have no sender prefix.
   const prefix =
-    !lastMessage || lastMessage.type === "SYSTEM" || conversation.type === "CHANNEL"
+    !lastMessage || lastMessage.type === "SYSTEM" || conversation.type === "CHANNEL" || isSaved
       ? null
       : lastMessage.isMine
         ? "You: "
@@ -258,7 +259,7 @@ export const ConversationRow = memo(function ConversationRow({
           selected ? "bg-primary/8 dark:bg-primary/12" : "hover:bg-muted/60 active:bg-muted",
         )}
       >
-        <UserAvatar user={avatarUser} size="lg" className="size-13" />
+        <UserAvatar user={avatarUser} size="lg" className="size-13" saved={isSaved} />
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-baseline gap-2">
             <span className="flex min-w-0 flex-1 items-center gap-1">

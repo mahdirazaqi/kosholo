@@ -8,7 +8,8 @@ import { absolutePath, removeFiles, uploadRoot } from "@/lib/media/storage";
 const HOUR = 60 * 60 * 1000;
 const ORPHAN_AFTER = 24 * HOUR;
 
-// Deletes uploads (rows + files) older than 24h that no message uses and that
+// Deletes uploads (rows + files) older than 24h that no message references
+// (saved copies share uploads, so "none", not "one") and that
 // aren't a user/group avatar: abandoned optimistic sends, replaced avatars,
 // and files of messages that were deleted (e.g. a deleted group). Also clears
 // stale temp files from interrupted uploads and resumable FILE upload sessions
@@ -26,7 +27,7 @@ export async function cleanupUploads() {
   let deleted = 0;
   for (;;) {
     const batch = await db.upload.findMany({
-      where: { createdAt: { lt: cutoff }, message: null, id: { notIn: [...avatarIds] as string[] } },
+      where: { createdAt: { lt: cutoff }, messages: { none: {} }, id: { notIn: [...avatarIds] as string[] } },
       select: { id: true, path: true, thumbPath: true },
       take: 200,
     });

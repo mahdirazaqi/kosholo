@@ -22,7 +22,7 @@ function describe(conversation: ConversationRow, userId: string) {
       : null;
   return {
     otherUser,
-    title: otherUser?.name ?? conversation.title ?? "Chat",
+    title: conversation.type === "SAVED" ? "Saved Messages" : (otherUser?.name ?? conversation.title ?? "Chat"),
     avatarUrl: otherUser?.avatarUrl ?? conversation.avatarUrl,
   };
 }
@@ -49,14 +49,16 @@ export async function getConversationForMember(
   if (!conversation) return null;
 
   const me = conversation.members.find((member) => member.userId === userId);
+  // Channels and Saved Messages never expose a member list.
   const isChannel = conversation.type === "CHANNEL";
+  const hideMembers = isChannel || conversation.type === "SAVED";
   return {
     id: conversation.id,
     type: conversation.type,
     // Channels: the loaded rows are only mine, and no member data goes out.
-    members: isChannel ? [] : conversation.members.map(toChatMember),
+    members: hideMembers ? [] : conversation.members.map(toChatMember),
     memberCount: conversation._count.members,
-    readStates: isChannel ? [] : conversation.members.filter((member) => member.userId !== userId).map(toReadState),
+    readStates: hideMembers ? [] : conversation.members.filter((member) => member.userId !== userId).map(toReadState),
     myRole: me?.role ?? "MEMBER",
     lastReadAt: me?.lastReadAt?.toISOString() ?? null,
     editWindowHours: editWindowHours(),

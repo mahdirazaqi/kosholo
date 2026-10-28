@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, EllipsisVertical, Megaphone, Trash2, UserX, X } from "lucide-react";
+import { Bell, BellOff, Bookmark, EllipsisVertical, Megaphone, Trash2, UserX, X } from "lucide-react";
 import { toast } from "sonner";
 import { getChannelStats, loadOlderMessages, sendMessage, setMuted } from "@/app/(app)/chats/actions";
 import { deleteMessages } from "@/app/(app)/chats/delete-actions";
 import { editMessage } from "@/app/(app)/chats/edit-actions";
+import { checkForwardOrigin, saveMessages } from "@/app/(app)/chats/saved-actions";
 import { BackButton } from "@/components/back-button";
 import { ChatStatus } from "@/components/chat/chat-status";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
@@ -28,6 +29,7 @@ import { useFileSender } from "@/hooks/use-file-sender";
 import { useMediaSender } from "@/hooks/use-media-sender";
 import { useVisualViewportHeight } from "@/hooks/use-visual-viewport-height";
 import { PREVIEW_LENGTH } from "@/lib/chat/limits";
+import { setPendingJump } from "@/lib/chat/pending-jump";
 import { canDeleteForEveryone, canPost, editBlock } from "@/lib/chat/permissions";
 import { tempId } from "@/lib/client-utils";
 import { audioManager } from "@/lib/media/client/audio-manager";
@@ -95,6 +97,7 @@ export function ChatView({
   // From the conversation itself: channels never send their member list to subscribers.
   const myRole = chat.myRole;
   const isChannel = chat.type === "CHANNEL";
+  const isSaved = chat.type === "SAVED";
   const mayPost = canPost(chat.type, myRole);
   const conversationActions = useConversationActions(
     { id: chat.id, type: chat.type, title: chat.title, myRole, muted: chat.muted, isOwner: chat.isOwner },
@@ -398,13 +401,14 @@ export function ChatView({
   }, [conversation.id]);
   const onInput = useCallback(
     (value: string) => {
+      if (conversation.type === "SAVED") return; // nobody to tell
       if (!value.trim()) return stopTyping();
       const now = Date.now();
       if (now - typing.current.lastStart < TYPING_CLIENT_THROTTLE_MS) return;
       typing.current = { active: true, lastStart: now };
       getSocket().emit("typing:start", conversation.id);
     },
-    [conversation.id, stopTyping],
+    [conversation.id, conversation.type, stopTyping],
   );
 
   // Text and location messages: an optimistic bubble, then sendMessage.
@@ -535,10 +539,57 @@ export function ChatView({
       message.status === "sent" &&
       editBlock(
         { id: currentUser.id, role: myRole, conversationType: chat.type },
-        { senderId: message.sender.id, type: message.type, createdAt: message.createdAt },
+        { senderId: message.sender.id, type: message.type, createdAt: message.createdAt, forwarded: Boolean(message.forward) },
         chat.editWindowHours,
       ) === null,
     [currentUser.id, myRole, chat.type, chat.editWindowHours],
+  );
+
+  // Copies messages into Saved Messages (independent copies; files are shared,
+  // not duplicated). The toast links to the Saved Messages chat.
+  const save = useCallback(
+    async (targets: ChatMessage[]) => {
+      const ids = targets.filter((m) => m.status === "sent" && m.type !== "SYSTEM").map((m) => m.id);
+      if (ids.length === 0) return toast.error("Service messages can't be saved");
+      try {
+        const result = await saveMessages({ conversationId: conversation.id, messageIds: ids });
+        if (!result.ok) return void toast.error(result.error);
+        toast.success(
+          ids.length === 1 ? "Saved to Saved Messages" : `${formatCount(ids.length, "message")} saved`,
+          { action: { label: "View", onClick: () => router.push(`/chats/${result.savedConversationId}`) } },
+        );
+      } catch {
+        toast.error("Couldn't save, please try again");
+      }
+    },
+    [conversation.id, router],
+  );
+  const saveOne = useCallback((message: ChatMessage) => void save([message]), [save]);
+  const saveSelection = useCallback(() => {
+    const ids = selectionRef.current;
+    if (!ids?.size) return;
+    // In their original order.
+    const picked = messagesRef.current.filter((m) => ids.has(m.id));
+    setSelection(null);
+    void save(picked);
+  }, [save]);
+
+  // "Forwarded from …": open the original and scroll to it, if it still exists
+  // and I can see it.
+  const openForward = useCallback(
+    async (message: ChatMessage) => {
+      const origin = message.forward;
+      const unavailable = () => toast("The original message isn't available");
+      if (!origin?.conversationId || !origin.messageId) return unavailable();
+      try {
+        if (!(await checkForwardOrigin(origin.conversationId, origin.messageId))) return unavailable();
+      } catch {
+        return unavailable();
+      }
+      setPendingJump(origin.conversationId, origin.messageId);
+      router.push(`/chats/${origin.conversationId}`);
+    },
+    [router],
   );
 
   const startEdit = useCallback((message: ChatMessage) => {
@@ -623,16 +674,30 @@ export function ChatView({
           }
           title={<span aria-live="polite">{formatCount(selectedCount, "message")} selected</span>}
           end={
+            <div className="-me-2 flex items-center">
+            {!isSaved && (
+              <Button
+                variant="ghost"
+                size="icon-lg"
+                aria-label="Save selected messages"
+                disabled={selectedCount === 0}
+                onClick={saveSelection}
+                className="size-11 rounded-full"
+              >
+                <Bookmark className="size-5.5" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon-lg"
               aria-label="Delete selected messages"
               disabled={selectedCount === 0}
               onClick={askDeleteSelection}
-              className="-me-2 size-11 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+              className="size-11 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
             >
               <Trash2 className="size-5.5" />
             </Button>
+            </div>
           }
         />
       ) : (
@@ -665,24 +730,36 @@ export function ChatView({
             )
           }
           title={
-            // Tapping the header opens the info page.
-            <Link
-              href={`/chats/${chat.id}/info`}
-              className="flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-            >
-              <UserAvatar
-                user={other ?? { id: chat.id, name: chat.title, avatarUrl: chat.avatarUrl }}
-                size="sm"
-              />
-              <span className="min-w-0">
-                <span className="flex items-center gap-1 text-base leading-tight">
-                  {isChannel && <Megaphone aria-label="Channel" className="size-4 shrink-0 text-muted-foreground" />}
-                  <span className="truncate">{chat.title}</span>
-                  {chat.muted && <BellOff aria-label="Muted" className="size-3.5 shrink-0 text-muted-foreground" />}
-                </span>
-                <ChatStatus conversation={chat} currentUserId={currentUser.id} />
-              </span>
-            </Link>
+            // Tapping the header opens the info page (Saved Messages has none).
+            (() => {
+              const content = (
+                <>
+                  <UserAvatar
+                    user={other ?? { id: chat.id, name: chat.title, avatarUrl: chat.avatarUrl }}
+                    size="sm"
+                    saved={isSaved}
+                  />
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1 text-base leading-tight">
+                      {isChannel && <Megaphone aria-label="Channel" className="size-4 shrink-0 text-muted-foreground" />}
+                      <span className="truncate">{chat.title}</span>
+                      {chat.muted && <BellOff aria-label="Muted" className="size-3.5 shrink-0 text-muted-foreground" />}
+                    </span>
+                    <ChatStatus conversation={chat} currentUserId={currentUser.id} />
+                  </span>
+                </>
+              );
+              return isSaved ? (
+                <div className="flex items-center gap-3">{content}</div>
+              ) : (
+                <Link
+                  href={`/chats/${chat.id}/info`}
+                  className="flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                  {content}
+                </Link>
+              );
+            })()
           }
         />
       )}
@@ -711,6 +788,9 @@ export function ChatView({
         canEditMessage={canEditMessage}
         onEdit={startEdit}
         editing={editing !== null}
+        conversationId={chat.id}
+        onSave={saveOne}
+        onOpenForward={openForward}
       />
 
       {removed ? (
@@ -776,7 +856,7 @@ export function ChatView({
         everyoneLabel={
           everyoneAllowed ? (chat.type === "DIRECT" ? `Also delete for ${chat.title}` : "Delete for everyone") : null
         }
-        alwaysEveryone={isChannel}
+        alwaysEveryone={isChannel || isSaved}
         description={isChannel ? "It will be removed for every subscriber." : undefined}
         onConfirm={confirmDelete}
       />

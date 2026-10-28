@@ -11,6 +11,7 @@ enum ConversationType {
   DIRECT
   GROUP
   CHANNEL // admins publish, members (subscribers) only read
+  SAVED // "Saved Messages": one private conversation per user, only the owner in it
 }
 
 enum MemberRole {
@@ -78,8 +79,9 @@ model Conversation {
   type        ConversationType
   title       String?
   avatarUrl   String?          @map("avatar_url")
-  // DIRECT only: both user ids sorted and joined with ":". Null for groups.
-  // The unique index guarantees one direct conversation per pair.
+  // DIRECT: both user ids sorted and joined with ":". SAVED: "saved:{userId}".
+  // Null for groups/channels. The unique index guarantees one direct
+  // conversation per pair and one Saved Messages per user.
   directKey   String?          @unique @map("direct_key")
   // GROUP / CHANNEL: optional description (≤255, validated in application code).
   description String?          @db.VarChar(255)
@@ -97,6 +99,8 @@ model Conversation {
   owner     User?                @relation("ChannelOwner", fields: [ownerId], references: [id])
   members   ConversationMember[]
   messages  Message[]
+  // Copies (saved messages) made from messages of this conversation.
+  forwardedMessages Message[] @relation("ForwardedFromConversation")
 
   @@map("conversations")
 }
@@ -131,8 +135,10 @@ model Message {
   // Set when the quoted message was hard-deleted (replyToId is then nulled by
   // the FK), so the quote still renders as "Message unavailable".
   replyToDeleted Boolean     @default(false) @map("reply_to_deleted")
-  // IMAGE / VIDEO / VOICE messages point at their processed file.
-  uploadId       String?     @unique @map("upload_id") @db.Uuid
+  // IMAGE / VIDEO / VOICE / FILE messages point at their processed file. Several
+  // messages may share one Upload (saved copies): the file is deleted only when
+  // no message references it any more.
+  uploadId       String?     @map("upload_id") @db.Uuid
   meta           Json?
   // LOCATION only (6 decimals, validated in sendMessageSchema).
   latitude       Float?
@@ -142,6 +148,12 @@ model Message {
   // Time of the last edit (null = never edited). Edits overwrite `content` in
   // place; no history is kept.
   editedAt       DateTime?   @map("edited_at") @db.Timestamptz
+  // Saved copies are independent snapshots: who/where/when the original was at
+  // the time of saving. The ids become null when the original is deleted.
+  forwardFromName           String?   @map("forward_from_name")
+  forwardFromConversationId String?   @map("forward_from_conversation_id") @db.Uuid
+  forwardFromMessageId      String?   @map("forward_from_message_id") @db.Uuid
+  forwardOriginalDate       DateTime? @map("forward_original_date") @db.Timestamptz
 
   conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User          @relation(fields: [senderId], references: [id])
@@ -149,8 +161,12 @@ model Message {
   upload       Upload?       @relation(fields: [uploadId], references: [id], onDelete: SetNull)
   replies      Message[]     @relation("MessageReplies")
   hides        MessageHide[]
+  forwardFromConversation Conversation? @relation("ForwardedFromConversation", fields: [forwardFromConversationId], references: [id], onDelete: SetNull)
+  forwardFromMessage      Message?      @relation("ForwardedFromMessage", fields: [forwardFromMessageId], references: [id], onDelete: SetNull)
+  forwardedCopies         Message[]     @relation("ForwardedFromMessage")
 
   @@index([conversationId, createdAt])
+  @@index([uploadId])
   @@map("messages")
 }
 
@@ -189,7 +205,7 @@ model Upload {
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
 
   owner   User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  message Message?
+  messages Message[]
 
   @@index([createdAt])
   @@map("uploads")

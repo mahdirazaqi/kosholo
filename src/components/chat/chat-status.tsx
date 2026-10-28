@@ -21,7 +21,10 @@ export function ChatStatus({
 }) {
   const connected = useRealtimeStore((state) => state.connected);
   const typing = useRealtimeStore((state) => state.typing[conversation.id]);
-  const isGroup = conversation.type !== "DIRECT";
+  const isGroup = conversation.type === "GROUP" || conversation.type === "CHANNEL";
+
+  // Saved Messages has no subtitle: no presence, no typing.
+  if (conversation.type === "SAVED") return null;
 
   let content: React.ReactNode;
   if (!connected) {

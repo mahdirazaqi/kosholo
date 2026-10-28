@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronDown, Copy, Download, Loader2, Pencil, Reply, Trash2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, Copy, Bookmark, Download, Loader2, Pencil, Reply, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { previewText } from "@/components/chat/message-preview";
 import { MessageBubble, type BubbleActions } from "@/components/chat/message-bubble";
@@ -11,6 +11,7 @@ import { BottomSheetContent } from "@/components/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { useIsDesktop } from "@/hooks/use-media-query";
+import { takePendingJump } from "@/lib/chat/pending-jump";
 import { copyText, nextFrame, scrollBehavior } from "@/lib/client-utils";
 import { dayNumber, formatDaySeparator } from "@/lib/format-date";
 import { useTimeZone } from "@/hooks/use-time-zone";
@@ -52,6 +53,9 @@ type Props = {
   canEditMessage: (message: ChatMessage) => boolean;
   onEdit: (message: ChatMessage) => void;
   editing: boolean; // the composer is in edit mode
+  conversationId: string;
+  onSave: (message: ChatMessage) => void;
+  onOpenForward: (message: ChatMessage) => void;
 };
 
 const keyOf = (message: ChatMessage) => message.tempId ?? message.id;
@@ -80,6 +84,9 @@ export function MessageList({
   canEditMessage,
   onEdit,
   editing,
+  conversationId,
+  onSave,
+  onOpenForward,
 }: Props) {
   const timeZone = useTimeZone();
   const isDesktop = useIsDesktop();
@@ -88,6 +95,7 @@ export function MessageList({
   // Everyone may reply and delete in chats; in channels only admins.
   const canReply = !isChannel || isAdmin;
   const canDelete = !isChannel || isAdmin;
+  const isSaved = conversationType === "SAVED";
   const scrollerRef = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
   const lastCommit = useRef<{ first?: string; last?: string; height: number } | null>(null);
@@ -201,6 +209,14 @@ export function MessageList({
     [onLoadOlder],
   );
 
+  // Coming from "Forwarded from …": scroll to (and highlight) that message.
+  useEffect(() => {
+    const target = takePendingJump(conversationId);
+    if (target) void jumpTo(target);
+    // Once per mount: the request is consumed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const onCopy = useCallback(async (message: ChatMessage) => {
     if (!message.content) return;
     try {
@@ -247,8 +263,10 @@ export function MessageList({
       onToggleSelect,
       onDelete,
       onEdit,
+      onSave,
+      onOpenForward,
     }),
-    [onReply, onCopy, onOpenActions, jumpTo, onRetry, onOpenMedia, onCancelUpload, onResumeUpload, onSelect, onToggleSelect, onDelete, onEdit],
+    [onSave, onOpenForward, onReply, onCopy, onOpenActions, jumpTo, onRetry, onOpenMedia, onCancelUpload, onResumeUpload, onSelect, onToggleSelect, onDelete, onEdit],
   );
 
   const seenIndex = seenKey === null ? -1 : messages.findIndex((m) => keyOf(m) === seenKey);
@@ -335,6 +353,8 @@ export function MessageList({
                 canDelete={canDelete}
                 canEdit={canEditMessage(message)}
                 editing={editing}
+                canSave={!isSaved && message.status === "sent"}
+                savedChat={isSaved}
                 {...actions}
               />
             </Fragment>
@@ -362,7 +382,18 @@ export function MessageList({
         <ChevronDown className="size-5" />
       </Button>
 
-      <MediaViewer target={shownViewer} onClose={() => setViewer(null)} />
+      <MediaViewer
+        target={shownViewer}
+        onClose={() => setViewer(null)}
+        onSave={
+          !isSaved && shownViewer?.messageId
+            ? () => {
+                const message = messages.find((m) => m.id === shownViewer.messageId);
+                if (message) onSave(message);
+              }
+            : undefined
+        }
+      />
 
       <Sheet open={actionsOpen} onOpenChange={setActionsOpen}>
         <BottomSheetContent
@@ -392,6 +423,16 @@ export function MessageList({
                     onClick={() => {
                       pendingReply.current = actionsFor;
                       setActionsOpen(false);
+                    }}
+                  />
+                )}
+                {!isSaved && actionsFor.status === "sent" && (
+                  <ActionButton
+                    icon={<Bookmark />}
+                    label="Save"
+                    onClick={() => {
+                      setActionsOpen(false);
+                      onSave(actionsFor);
                     }}
                   />
                 )}

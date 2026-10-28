@@ -22,6 +22,10 @@ export const messageSelect = {
   locationLabel: true,
   createdAt: true,
   editedAt: true,
+  forwardFromName: true,
+  forwardFromConversationId: true,
+  forwardFromMessageId: true,
+  forwardOriginalDate: true,
   replyToId: true,
   replyToDeleted: true,
   sender: { select: publicUserSelect },
@@ -76,6 +80,15 @@ function toAdminMessage(row: MessageRow, viewer?: Pick<Viewer, "userId" | "clear
     meta: row.type === "SYSTEM" ? (row.meta as SystemMeta | null) : null,
     createdAt: row.createdAt.toISOString(),
     editedAt: row.editedAt?.toISOString() ?? null,
+    forward:
+      row.forwardFromName && row.forwardOriginalDate
+        ? {
+            name: row.forwardFromName,
+            conversationId: row.forwardFromConversationId,
+            messageId: row.forwardFromMessageId,
+            originalDate: row.forwardOriginalDate.toISOString(),
+          }
+        : null,
     sender: row.sender,
     replyTo: row.replyTo && quoteVisible
       ? {

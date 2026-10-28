@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import Link from "next/link";
-import { Loader2, Users } from "lucide-react";
+import { Bookmark, Loader2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { startDirectConversation } from "@/app/(app)/(tabs)/contacts/actions";
 import { BottomSheetContent } from "@/components/bottom-sheet";
@@ -29,6 +29,17 @@ export function NewChatSheet({
           <SheetDescription>Choose one of your contacts.</SheetDescription>
         </SheetHeader>
         <div className="px-2 pb-[max(env(safe-area-inset-bottom),1rem)]">
+          <Link
+            href="/saved"
+            prefetch={false}
+            onClick={() => onOpenChange(false)}
+            className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-start transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none active:bg-muted"
+          >
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+              <Bookmark className="size-5 fill-current" />
+            </span>
+            <span className="min-w-0 flex-1 truncate font-medium">Saved Messages</span>
+          </Link>
           {contacts.length === 0 ? (
             <EmptyState
               icon={<Users />}

@@ -1,5 +1,6 @@
 "use client";
 
+import { Bookmark } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { avatarTint } from "@/lib/colors";
 import { avatarThumbUrl } from "@/lib/media/serialize";
@@ -19,8 +20,10 @@ export function UserAvatar({
   user,
   size = "md",
   className,
+  saved = false,
 }: {
   user: { id: string; name: string; avatarUrl: string | null };
+  saved?: boolean; // the "Saved Messages" bookmark instead of initials
   size?: keyof typeof sizes;
   className?: string;
 }) {
@@ -29,6 +32,16 @@ export function UserAvatar({
   const avatarUrl = override !== undefined ? override : user.avatarUrl;
   // 128px thumb for list/bubble sizes; the 512px original for big ones.
   const src = size === "xl" || size === "2xl" ? avatarUrl : avatarThumbUrl(avatarUrl);
+
+  if (saved) {
+    return (
+      <Avatar className={cn(sizes[size], "after:hidden", className)}>
+        <AvatarFallback className="bg-primary text-primary-foreground">
+          <Bookmark className="size-1/2 fill-current" aria-label="Saved Messages" />
+        </AvatarFallback>
+      </Avatar>
+    );
+  }
 
   return (
     <Avatar className={cn(sizes[size], "after:hidden", className)}>

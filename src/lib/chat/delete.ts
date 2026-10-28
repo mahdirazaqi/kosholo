@@ -109,7 +109,7 @@ export async function clearHistory(
   });
 }
 
-// DIRECT only (groups use "leave and delete" or the admin's "delete group").
+// DIRECT and SAVED only (groups use "leave and delete" or the admin's "delete group").
 // For me: clears my history, so the chat leaves my list until a new message
 // arrives. For everyone: hard-deletes the conversation.
 export async function deleteDirectConversation(
@@ -118,7 +118,7 @@ export async function deleteDirectConversation(
   forEveryone: boolean,
 ): Promise<{ purged: Purged; clearedAt: Date | null }> {
   const me = await db.$transaction((tx) => membershipOf(tx, conversationId, actor.id));
-  if (me.type !== "DIRECT") throw new DeleteError(NOT_FOUND);
+  if (me.type !== "DIRECT" && me.type !== "SAVED") throw new DeleteError(NOT_FOUND);
   if (!forEveryone) {
     const { purged, clearedAt } = await clearHistory(actor, conversationId, false);
     return { purged, clearedAt };

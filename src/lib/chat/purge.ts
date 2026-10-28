@@ -19,7 +19,7 @@ export type Purged = {
 
 const nothing = (): Purged => ({ files: [], messageIds: [], deletedConversation: null });
 
-// Deletes the matching messages and the uploads they used (message uploads are
+// Deletes the matching messages and the uploads only they used (message uploads are
 // never avatars: sendMessage rejects AVATAR uploads, and avatars are never
 // attached to a message). Replies to them keep a "Message unavailable" quote.
 export async function purgeMessages(tx: Tx, where: Prisma.MessageWhereInput): Promise<Purged> {
@@ -35,7 +35,18 @@ export async function purgeMessages(tx: Tx, where: Prisma.MessageWhereInput): Pr
   });
   await tx.message.deleteMany({ where: { id: { in: ids } } });
 
-  const uploads = rows.flatMap((row) => (row.upload && row.upload.kind !== "AVATAR" ? [row.upload] : []));
+  // Uploads may be shared by saved copies: a file goes only when no remaining
+  // message references it (the purged ones are already deleted above).
+  const candidates = rows.flatMap((row) => (row.upload && row.upload.kind !== "AVATAR" ? [row.upload] : []));
+  const stillUsed = candidates.length
+    ? await tx.message.findMany({
+        where: { uploadId: { in: candidates.map((upload) => upload.id) } },
+        select: { uploadId: true },
+        distinct: ["uploadId"],
+      })
+    : [];
+  const used = new Set(stillUsed.map((row) => row.uploadId));
+  const uploads = [...new Map(candidates.filter((upload) => !used.has(upload.id)).map((u) => [u.id, u])).values()];
   if (uploads.length) await tx.upload.deleteMany({ where: { id: { in: uploads.map((upload) => upload.id) } } });
   return {
     files: uploads.flatMap((upload) => (upload.thumbPath ? [upload.path, upload.thumbPath] : [upload.path])),

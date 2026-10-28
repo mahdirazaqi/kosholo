@@ -8,6 +8,8 @@ import { PageHeader } from "@/components/page-header";
 import { setProfilePhoto } from "@/app/(app)/photo-actions";
 import { AvatarEditor } from "@/components/avatar-editor";
 import { requireUser } from "@/lib/auth";
+import Link from "next/link";
+import { Bookmark, ChevronRight } from "lucide-react";
 import { SettingsSection } from "@/components/profile/settings-section";
 import pkg from "@/../package.json";
 
@@ -22,6 +24,18 @@ export default function ProfilePage() {
         <Suspense fallback={<ProfileSkeleton />}>
           <ProfileContent />
         </Suspense>
+        {/* No prefetch: opening it creates the conversation the first time. */}
+        <Link
+          href="/saved"
+          prefetch={false}
+          className="flex items-center gap-3 rounded-2xl border bg-card px-4 py-3.5 transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          <span className="flex size-11 items-center justify-center rounded-full bg-primary text-primary-foreground">
+            <Bookmark className="size-5 fill-current" />
+          </span>
+          <span className="min-w-0 flex-1 font-semibold">Saved Messages</span>
+          <ChevronRight className="size-5 text-muted-foreground rtl:rotate-180" />
+        </Link>
         <SettingsSection version={pkg.version} />
         <Section title="Log out" description="Log out of your account on this device.">
           <LogoutButton />

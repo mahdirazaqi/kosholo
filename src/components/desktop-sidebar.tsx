@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Bookmark } from "lucide-react";
 import { ConversationList, NewConversationLauncher } from "@/components/chat/chat-list-view";
 import { InstallBanner } from "@/components/pwa/install";
 import { isTabActive, NAV_TABS, UnreadBadge } from "@/components/bottom-nav";
@@ -25,6 +26,15 @@ export function DesktopSidebar() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.svg" alt="" width={28} height={28} className="rounded-lg" />
         <span className="flex-1 text-lg font-bold">Kosholo</span>
+        <Link
+          href="/saved"
+          prefetch={false}
+          aria-label="Saved Messages"
+          title="Saved Messages"
+          className="flex size-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          <Bookmark className="size-5" strokeWidth={1.75} />
+        </Link>
         <nav aria-label="Main sections" className="flex items-center gap-1">
           {NAV_TABS.map(({ href, label, icon: Icon, unread }) => {
             const active = isTabActive(href, pathname);

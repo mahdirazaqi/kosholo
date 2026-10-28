@@ -24,12 +24,14 @@ export const canDeleteForMe = (conversationType: ConversationType) => conversati
 
 export function canDeleteForEveryone(actor: Actor, message: { senderId: string; type: MessageType }) {
   if (actor.conversationType === "CHANNEL") return actor.role === "ADMIN";
+  if (actor.conversationType === "SAVED") return true; // I'm the only member: always a hard delete
   if (actor.conversationType === "DIRECT") return message.type !== "SYSTEM";
   if (actor.role === "ADMIN") return true;
   return message.type !== "SYSTEM" && message.senderId === actor.id;
 }
 
 export function canClearForEveryone(actor: Pick<Actor, "role" | "conversationType">) {
+  if (actor.conversationType === "SAVED") return false; // clearing for me already purges everything
   return actor.conversationType === "DIRECT" || actor.role === "ADMIN";
 }
 
@@ -39,15 +41,18 @@ export function canClearForEveryone(actor: Pick<Actor, "role" | "conversationTyp
 // within the edit window. CHANNEL: any admin, any time. Subscribers never.
 export const EDITABLE_TYPES: readonly MessageType[] = ["TEXT", "IMAGE", "VIDEO", "FILE"];
 
-export type EditBlock = "type" | "forbidden" | "expired";
+export type EditBlock = "type" | "forbidden" | "expired" | "forwarded";
 
 export function editBlock(
   actor: { id: string; role: MemberRole; conversationType: ConversationType },
-  message: { senderId: string; type: MessageType; createdAt: string | Date },
+  message: { senderId: string; type: MessageType; createdAt: string | Date; forwarded?: boolean },
   windowHours: number,
   now = Date.now(),
 ): EditBlock | null {
   if (!EDITABLE_TYPES.includes(message.type)) return "type";
+  if (message.forwarded) return "forwarded"; // saved copies are never editable
+  // Saved Messages: my own messages, with no time limit.
+  if (actor.conversationType === "SAVED") return message.senderId === actor.id ? null : "forbidden";
   if (actor.conversationType === "CHANNEL") return actor.role === "ADMIN" ? null : "forbidden";
   if (message.senderId !== actor.id) return "forbidden";
   return now - new Date(message.createdAt).getTime() > windowHours * 3_600_000 ? "expired" : null;
@@ -57,6 +62,7 @@ export const EDIT_ERRORS: Record<EditBlock, string> = {
   type: "This kind of message can't be edited",
   forbidden: "You can only edit your own messages",
   expired: "The time to edit this message has passed",
+  forwarded: "Saved copies can't be edited",
 };
 
 // Channels: only admins post, reply and send typing events.

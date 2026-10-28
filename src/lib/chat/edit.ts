@@ -41,13 +41,13 @@ export async function editMessage(
   const where = { AND: [{ id: messageId, conversationId }, visibleMessageWhere(viewer)] };
   const current = await db.message.findFirst({
     where,
-    select: { senderId: true, type: true, content: true, createdAt: true },
+    select: { senderId: true, type: true, content: true, createdAt: true, forwardFromName: true },
   });
   if (!current) throw new EditError(MESSAGE_GONE, true);
 
   const block = editBlock(
     { id: userId, role: viewer.role, conversationType: viewer.conversationType },
-    current,
+    { ...current, forwarded: current.forwardFromName !== null },
     editWindowHours(),
   );
   if (block) throw new EditError(EDIT_ERRORS[block]);

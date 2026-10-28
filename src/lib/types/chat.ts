@@ -88,6 +88,16 @@ export type ChatMessage = {
   views?: number;
   // ISO time of the last edit; null/absent = never edited.
   editedAt?: string | null;
+  // Saved copies only: a snapshot of where the message came from. Independent of
+  // the original (it stays if the original is edited or deleted).
+  forward?: ForwardInfo | null;
+};
+
+export type ForwardInfo = {
+  name: string; // sender (or channel title, plus the signature if the channel signs)
+  conversationId: string | null; // null once the original conversation is gone
+  messageId: string | null; // null once the original message is gone
+  originalDate: string; // ISO
 };
 
 export type LocalUpload = {

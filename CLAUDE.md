@@ -76,7 +76,7 @@ src/lib/realtime/     events.ts (typed event contract + rooms), membership.ts (c
 src/lib/realtime/client/ socket.ts (typed client), store.ts (zustand), merge.ts (dedupe rule)
 src/lib/media/        limits.ts (shared), storage.ts, ffmpeg.ts, serialize.ts (no server-only: also used by the custom server);
                       process.ts (sharp/ffmpeg), access.ts, serve.ts, routes.ts (server-only); client/ (prepare, upload, audio-manager)
-src/lib/chat/         edit.ts + edit-config.ts (message editing), queries.ts (selects + mappers), conversations.ts, messages.ts, groups.ts (group rules), channels.ts (channel rules), channel-view.ts (subscriber copy of a post, client-safe), views.ts (post view counts), limits.ts, system-text.ts (client-safe),
+src/lib/chat/         saved.ts (Saved Messages: get-or-create, save/copy), pending-jump.ts, edit.ts + edit-config.ts (message editing), queries.ts (selects + mappers), conversations.ts, messages.ts, groups.ts (group rules), channels.ts (channel rules), channel-view.ts (subscriber copy of a post, client-safe), views.ts (post view counts), limits.ts, system-text.ts (client-safe),
                       visibility.ts (the visibility rule), delete.ts (deletion rules), purge.ts (hard delete + GC), permissions.ts (client-safe)
 src/lib/colors.ts     stable per-id colors (avatar tints, group sender names)
 src/lib/types/chat.ts shared chat types (ChatMessage, ConversationListItem, ...)
@@ -258,6 +258,17 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
   - They do show as the chat-list preview.
 - **Creation:** `recordEvent()` in `groups.ts` creates them and bumps `conversation.updatedAt` in the same transaction.
 
+## Saved Messages
+
+Telegram-style "Saved Messages": every user has exactly one private conversation with only themselves in it (`ConversationType.SAVED`, `directKey = "saved:{userId}"`, one `ConversationMember`). It reuses the normal chat UI, composer, message types, reply, edit, delete, select, uploads and realtime.
+- **Create:** lazily, by `getOrCreateSavedConversation(userId)` (`lib/chat/saved.ts`): find by `directKey`, else create and, on the unique-constraint race (P2002, e.g. two tabs), read the winner. `/saved` (a page; links use `prefetch={false}` so a prefetch never creates it) creates it and redirects to `/chats/{id}`. Shortcuts: the profile page, the desktop sidebar header, and the first row of the new-chat picker. It shows in the chat list like any chat (only once it has a message).
+- **Looks and behaviour:** title "Saved Messages" (`describe()` in `conversations.ts`), bookmark avatar on the primary color (`UserAvatar saved`), no subtitle/presence/typing/read receipts/ticks, never unread (my own messages never count), no member list and no info page (`ChatConversation.members`/`readStates` empty). The header menu only has "Clear history" and "Delete chat". Deleting messages is always a hard delete (no "for everyone" checkbox); clearing the history purges everything (nobody else can see it); deleting the chat hard-deletes it and it is recreated empty on the next open.
+- **Saving (copy):** `saveMessages({ conversationId, messageIds })` (≤100; `chats/saved-actions.ts` → `lib/chat/saved.ts`), in one transaction: membership + visibility for every message, SYSTEM messages and messages already in Saved Messages are refused, copies are created in the original order (1 ms apart) with the same type, content/caption, location and **the same `uploadId`**, `editedAt` null and no `replyToId`. Rate limited (`LIMITS.saves`). `message:new` goes only to my own rooms. Entry points: "Save" in the message menu (all chat types, channel subscribers too), the Save button in the selection bar, and the media viewer's Save button; none inside Saved Messages. The toast has a "View" action.
+- **Forward snapshot** (`Message.forwardFromName`, `forwardFromConversationId`, `forwardFromMessageId`, `forwardOriginalDate`; exposed as `ChatMessage.forward`): independent of the original, which may later be edited or deleted (the two ids become null through `onDelete: SetNull`; the name and date stay). `forwardFromName` is the sender's name, or for a channel post the **channel title (plus the signature if `signMessages` is on)**, never an admin's identity for subscribers. An existing snapshot is kept, never nested.
+- **Editing:** my own non-forwarded messages in Saved Messages can be edited with no time limit; forwarded copies can never be edited (`editBlock` → "forwarded", enforced by the server too).
+- **Rendering:** "Forwarded from {name}" with a forward icon at the top of the bubble (primary color; on my own primary bubble the contrasting color). Tapping it calls `checkForwardOrigin` (the original exists and I can see it): then `setPendingJump` + navigation, and the target `MessageList` scrolls to and highlights it (same logic as quote jumps, `lib/chat/pending-jump.ts`); otherwise the toast "The original message isn't available". The time popover also shows "Original date". Quotes and the chat-list preview show the content normally.
+- **Access:** `/api/media` serves an upload when the user can see at least one message that references it, so nobody else reaches my saved copies' media unless they can still see the original message.
+
 ## Editing messages
 
 Telegram-style, **in place**: `Message.editedAt` (nullable) and the new `content`; no history is stored (like hard deletion). Server: `src/lib/chat/edit.ts` (`editMessage`, `getEditsSince`, `EditError`) and `chats/edit-actions.ts` (`editMessage`, `getEditsSince`); the rules live in `permissions.ts` (`editBlock`, client-safe, used by both sides).
@@ -328,7 +339,7 @@ Telegram-style, **in place**: `Message.editedAt` (nullable) and the new `content
 **Data:**
 - `Upload` stores `{ path, thumbPath, originalName (FILE), mime, size (BigInt), width, height, duration, placeholder, waveform }`.
   - `path` is relative to `UPLOAD_DIR`: `yyyy/mm/{uuid}.{ext}`, plus `{uuid}.thumb.webp`.
-- `Message.uploadId` (unique) links a message to its file.
+- `Message.uploadId` (indexed, **not unique**) links a message to its file. **Shared-upload rule:** several messages may reference one `Upload` (saved copies share it; the file is never duplicated on disk). An upload and its files are deleted only when **no** message references it any more and it isn't an avatar: `purgeMessages()` re-checks after deleting its messages, and the cleanup job uses `messages: { none: {} }`. Any new code that deletes uploads must follow this.
 - `ChatMessage.media` is a `ChatMedia`: `{ id, kind, url, thumbUrl, mime, width, height, duration, placeholder, waveform, originalName, size }` (`size` is a number; BigInt in the DB). URLs are always `/api/media/{id}` and `/api/media/{id}/thumb`; never select or send `path`.
 - `User.avatarUrl` and `Conversation.avatarUrl` store `/api/media/{uploadId}`, and `avatarThumbUrl()` maps it to the 128px thumb.
 
@@ -341,7 +352,7 @@ Telegram-style, **in place**: `Message.editedAt` (nullable) and the new `content
    - **Avatar:** 512×512 center-cropped WebP plus a 128×128 thumb.
    - ffmpeg runs at most 2 jobs at a time.
 3. **Send:** `sendMessage({ conversationId, uploadId, content?, replyToId?, tempId })`.
-   - The upload must be the sender's, unused and not an avatar. The message type comes from the upload kind.
+   - The upload must be the sender's, not attached to any message yet (checked under a row lock, so two concurrent sends can't both attach it) and not an avatar. Only the server-side save path (`saveMessages`) may attach an already-used upload. The message type comes from the upload kind.
    - The content becomes an optional caption (≤1000 chars).
 4. **Client flow:** `useMediaSender` shows optimistic bubbles from local object URLs, with a progress ring, cancel during upload/processing, and retry on failure (re-uploading only if needed).
    - Uploads run in parallel, but messages are sent in **selection order**.
@@ -349,12 +360,12 @@ Telegram-style, **in place**: `Message.editedAt` (nullable) and the new `content
 
 **Serving and access** (`/api/media/[uploadId]`, `/thumb`; excluded from `proxy.ts` because Next limits bodies passing through the proxy, so these handlers authenticate themselves):
 - `AVATAR`: any signed-in user.
-- A message's file: only users who can **see** that message (the visibility rule, so not after "delete for me" or "clear history").
+- A message's file: users who can **see at least one** message that references it (the visibility rule, so not after "delete for me" or "clear history"; copies count).
 - An upload not attached to a message yet: its uploader (their pending optimistic message).
 - Everything else, unknown ids included, gets 404; no session gets 401.
 - Files stream from disk with HTTP Range (206/416), HEAD, `ETag` (304) and `Cache-Control: private, max-age=31536000, immutable`. They're never served statically.
 
-**Cleanup:** `src/server/media-cleanup.ts` runs hourly in the custom server. It deletes uploads (rows and files) older than 24h that no message uses and that aren't a user or group avatar, and `UploadSession`s not updated for 24h with their temp files. This covers abandoned sends and replaced avatars; files of deleted messages and conversations are unlinked right away by the deletion code (see Deleting). It also clears stale temp files.
+**Cleanup:** `src/server/media-cleanup.ts` runs hourly in the custom server. It deletes uploads (rows and files) older than 24h that no message references and that aren't a user or group avatar, and `UploadSession`s not updated for 24h with their temp files. This covers abandoned sends and replaced avatars; files of deleted messages and conversations are unlinked right away by the deletion code (see Deleting). It also clears stale temp files.
 
 **UI:**
 - **Images:** a fixed aspect-ratio frame with the blur placeholder, then the thumb (the original for GIFs). The caption goes underneath, or the time overlays the image when there's no caption. Tapping opens `yet-another-react-lightbox` (zoom, download, pull down to close).

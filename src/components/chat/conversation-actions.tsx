@@ -49,6 +49,13 @@ export function conversationActionItems(
   target: ConversationActionTarget,
   { withDeleteGroup = false } = {},
 ): ConversationActionItem[] {
+  // Saved Messages: just clear and delete (no mute, no info actions).
+  if (target.type === "SAVED") {
+    return [
+      { kind: "clear", label: "Clear history", icon: <Eraser />, destructive: false },
+      { kind: "delete", label: "Delete chat", icon: <Trash2 />, destructive: true },
+    ];
+  }
   const items: ConversationActionItem[] = [
     ...((target.unread ?? 0) > 0
       ? [{ kind: "markRead" as const, label: "Mark as read", icon: <CheckCheck />, destructive: false }]
@@ -115,9 +122,11 @@ export function useConversationActions(
       });
   }
 
-  function run(forEveryone: boolean) {
+  function run(requestedForEveryone: boolean) {
     const kind = action;
     if (!kind) return;
+    // Saved Messages has one member: deleting it is always a hard delete.
+    const forEveryone = kind === "delete" && target.type === "SAVED" ? true : requestedForEveryone;
     markLocalDelete(target.id);
     startTransition(async () => {
       const result =
@@ -184,8 +193,11 @@ function copyFor(action: ConversationAction, target: ConversationActionTarget) {
     case "delete":
       return {
         title: "Delete chat?",
-        description: "This chat and its messages will be deleted for you.",
-        everyoneLabel: `Also delete for ${target.title}`,
+        description:
+          target.type === "SAVED"
+            ? "All your saved messages will be deleted. Saved Messages is created again, empty, when you next open it."
+            : "This chat and its messages will be deleted for you.",
+        everyoneLabel: target.type === "SAVED" ? null : `Also delete for ${target.title}`,
         confirmLabel: "Delete",
       };
     case "leave":

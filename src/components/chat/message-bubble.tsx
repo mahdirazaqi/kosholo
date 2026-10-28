@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useRef, useState } from "react";
-import { AlertCircle, Check, CheckCheck, CheckCircle2, Clock3, Copy, Download, Eye, MoreHorizontal, Pencil, Reply, RotateCw, Trash2 } from "lucide-react";
+import { AlertCircle, Check, CheckCheck, CheckCircle2, Clock3, Copy, Download, Bookmark, Eye, Forward, MoreHorizontal, Pencil, Reply, RotateCw, Trash2 } from "lucide-react";
 import { ImageMedia } from "@/components/chat/media/image-media";
 import { VideoMedia } from "@/components/chat/media/video-media";
 import { FileMedia } from "@/components/chat/media/file-media";
@@ -44,6 +44,8 @@ export type BubbleActions = {
   onToggleSelect: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onEdit: (message: ChatMessage) => void;
+  onSave: (message: ChatMessage) => void; // copy into Saved Messages
+  onOpenForward: (message: ChatMessage) => void; // "Forwarded from …": open the original
 };
 
 type Props = BubbleActions & {
@@ -66,6 +68,8 @@ type Props = BubbleActions & {
   canDelete: boolean;
   canEdit: boolean; // own message / channel admin, editable type, inside the window
   editing: boolean; // the composer is in edit mode: no swipe-to-reply, no selecting
+  canSave: boolean; // not offered inside Saved Messages itself
+  savedChat: boolean; // Saved Messages: no ticks
 };
 
 export const MessageBubble = memo(function MessageBubble({
@@ -86,6 +90,8 @@ export const MessageBubble = memo(function MessageBubble({
   canDelete,
   canEdit,
   editing,
+  canSave,
+  savedChat,
   ...actions
 }: Props) {
   const isChannel = channelTitle !== undefined;
@@ -102,7 +108,7 @@ export const MessageBubble = memo(function MessageBubble({
   const replyAfterClose = useRef(false);
 
   const downloadable = isChannel && message.media !== null && message.status === "sent";
-  const hasMenuItems = canReply || canDelete || canEdit || Boolean(message.content) || downloadable;
+  const hasMenuItems = canReply || canDelete || canEdit || canSave || Boolean(message.content) || downloadable;
   const menu = isDesktop && canInteract && hasMenuItems && (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -141,6 +147,12 @@ export const MessageBubble = memo(function MessageBubble({
           <DropdownMenuItem onSelect={() => actions.onCopy(message)}>
             <Copy />
             Copy text
+          </DropdownMenuItem>
+        )}
+        {canSave && (
+          <DropdownMenuItem onSelect={() => actions.onSave(message)}>
+            <Bookmark />
+            Save
           </DropdownMenuItem>
         )}
         {downloadable && message.media && (
@@ -231,6 +243,26 @@ export const MessageBubble = memo(function MessageBubble({
               </p>
             )}
 
+            {message.forward && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  actions.onOpenForward(message);
+                }}
+                className={cn(
+                  "mb-0.5 flex max-w-full items-center gap-1 text-start text-xs font-semibold",
+                  isMine ? "text-primary-foreground" : "text-primary",
+                  visual && "px-2 pt-1",
+                )}
+              >
+                <Forward className="size-3.5 shrink-0" />
+                <span dir="auto" className="truncate">
+                  Forwarded from {message.forward.name}
+                </span>
+              </button>
+            )}
+
             {message.replyTo && (
               <div className={cn(visual && "px-1 pt-0.5")}>
                 <Quote replyTo={message.replyTo} isMine={isMine && !emojiOnly} onClick={actions.onQuoteClick} />
@@ -312,7 +344,7 @@ export const MessageBubble = memo(function MessageBubble({
                   </span>
                 )}
                 <Stamp message={message} />
-                {(isChannel ? message.status !== "sent" : isMine) && (
+                {(isChannel || savedChat ? message.status !== "sent" : isMine) && (
                   <StatusIcon status={message.status} read={read} />
                 )}
               </div>
@@ -375,7 +407,7 @@ function MessageTime({ value }: { value: string }) {
 function Stamp({ message }: { message: ChatMessage }) {
   const timeZone = useTimeZone();
   const [open, setOpen] = useState(false);
-  if (!message.editedAt) return <MessageTime value={message.createdAt} />;
+  if (!message.editedAt && !message.forward) return <MessageTime value={message.createdAt} />;
   const when = (value: string) => `${formatDaySeparator(value, timeZone)} ${formatTime(value, timeZone)}`;
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -386,14 +418,15 @@ function Stamp({ message }: { message: ChatMessage }) {
           onPointerLeave={(event) => event.pointerType === "mouse" && setOpen(false)}
           className="inline-flex items-center gap-1 whitespace-nowrap rounded-sm"
         >
-          {message.views !== undefined && <span aria-hidden>·</span>}
-          <span>edited</span>
-          <MessageTime value={message.editedAt} />
+          {message.editedAt && message.views !== undefined && <span aria-hidden>·</span>}
+          {message.editedAt && <span>edited</span>}
+          <MessageTime value={message.editedAt ?? message.createdAt} />
         </button>
       </PopoverTrigger>
       <PopoverContent side="top" className="w-auto space-y-1 px-3 py-2 text-xs" onOpenAutoFocus={(e) => e.preventDefault()}>
         <p suppressHydrationWarning>Sent: {when(message.createdAt)}</p>
-        <p suppressHydrationWarning>Edited: {when(message.editedAt)}</p>
+        {message.editedAt && <p suppressHydrationWarning>Edited: {when(message.editedAt)}</p>}
+        {message.forward && <p suppressHydrationWarning>Original date: {when(message.forward.originalDate)}</p>}
       </PopoverContent>
     </Popover>
   );
