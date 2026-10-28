@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { Bell, Info, Monitor, Moon, Palette, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
+import { AppBadgeSetting } from "@/components/pwa/app-badge-setting";
 import { InstallSettingsRow } from "@/components/pwa/install";
 import { Switch } from "@/components/ui/switch";
 import { playNotificationSound, unlockAudio } from "@/lib/pwa/notification-sound";
@@ -77,6 +78,7 @@ export function SettingsSection({ version }: { version: string }) {
             aria-label="Notification sound"
           />
         </label>
+        <AppBadgeSetting />
       </div>
 
       <div className="space-y-1">

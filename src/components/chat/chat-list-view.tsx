@@ -28,10 +28,10 @@ import { Sheet, SheetTitle } from "@/components/ui/sheet";
 import { useIsDesktop } from "@/hooks/use-media-query";
 import { vibrate } from "@/lib/client-utils";
 import { firstName, systemMessageText } from "@/lib/chat/system-text";
-import { formatCount, formatNumber } from "@/lib/numbers";
 import { formatListTime } from "@/lib/format-date";
 import { useTimeZone } from "@/hooks/use-time-zone";
-import { hydrateConversations, useRealtimeStore } from "@/lib/realtime/client/store";
+import { UnreadPill } from "@/components/unread-pill";
+import { hydrateConversations, selectUnreadCount, useRealtimeStore } from "@/lib/realtime/client/store";
 import type { ConversationListItem } from "@/lib/types/chat";
 import type { PublicUser } from "@/lib/users";
 import { cn } from "@/lib/utils";
@@ -171,7 +171,9 @@ export const ConversationRow = memo(function ConversationRow({
   const typing = useRealtimeStore((state) => state.typing[conversation.id]);
   const timeZone = useTimeZone();
   const typingNames = typing ? Object.values(typing) : null;
-  const { lastMessage, unreadCount } = conversation;
+  const { lastMessage } = conversation;
+  // The count comes from the unread store, like every other badge.
+  const unreadCount = useRealtimeStore(selectUnreadCount(conversation.id));
   const isGroup = conversation.type !== "DIRECT";
   // "You: …" for mine; "Jane: …" for others in groups; system events as text.
   // Channel posts have no sender prefix.
@@ -203,6 +205,7 @@ export const ConversationRow = memo(function ConversationRow({
     title: conversation.title,
     myRole: conversation.myRole,
     muted: conversation.muted,
+    unread: unreadCount,
   };
   const { open: openAction, dialog } = useConversationActions(target);
   const items = conversationActionItems(target);
@@ -262,7 +265,7 @@ export const ConversationRow = memo(function ConversationRow({
               {conversation.type === "CHANNEL" && (
                 <Megaphone aria-label="Channel" className="size-4 shrink-0 text-muted-foreground" />
               )}
-              <span className="truncate font-semibold">{conversation.title}</span>
+              <span className={cn("truncate", unreadCount > 0 ? "font-bold" : "font-semibold")}>{conversation.title}</span>
               {conversation.muted && <BellOff aria-label="Muted" className="size-3.5 shrink-0 text-muted-foreground" />}
             </span>
             {conversation.lastMessageAt && (
@@ -276,7 +279,7 @@ export const ConversationRow = memo(function ConversationRow({
             )}
           </div>
           <div className="flex items-center gap-2">
-            <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+            <p className={cn("min-w-0 flex-1 truncate text-sm", unreadCount > 0 ? "font-semibold text-foreground" : "text-muted-foreground")}>
               {typingNames ? (
                 <TypingIndicator label={typingLabel(typingNames, isGroup)} className="max-w-full font-medium" />
               ) : (
@@ -286,17 +289,7 @@ export const ConversationRow = memo(function ConversationRow({
                 </>
               )}
             </p>
-            {unreadCount > 0 && (
-              <span
-                aria-label={`${formatCount(unreadCount, "unread message")}`}
-                className={cn(
-                  "flex h-5.5 min-w-5.5 shrink-0 items-center justify-center rounded-full px-1.5 text-xs font-bold",
-                  conversation.muted ? "bg-muted-foreground/40 text-background" : "bg-primary text-primary-foreground",
-                )}
-              >
-                {unreadCount > 99 ? "99+" : formatNumber(unreadCount)}
-              </span>
-            )}
+            <UnreadPill count={unreadCount} muted={conversation.muted} />
           </div>
         </div>
       </Link>

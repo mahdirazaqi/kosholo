@@ -3,6 +3,7 @@
 import { useFormStatus } from "react-dom";
 import { LogOut } from "lucide-react";
 import { logout } from "@/app/(auth)/actions";
+import { clearBadges } from "@/lib/pwa/badges";
 import { clearAppCaches } from "@/lib/pwa/caches";
 import { SubmitButton } from "@/components/submit-button";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ export function LogoutButton() {
         <form
           action={async () => {
             // Nothing from this account may stay on the device.
+            clearBadges();
             await clearAppCaches();
             await logout();
           }}

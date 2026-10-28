@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, Eraser, LogOut, Trash2 } from "lucide-react";
+import { Bell, BellOff, CheckCheck, Eraser, LogOut, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { setMuted } from "@/app/(app)/chats/actions";
+import { markAsRead, setMuted } from "@/app/(app)/chats/actions";
 import { deleteChannel, leaveChannel } from "@/app/(app)/chats/channel-actions";
 import { clearHistory, deleteConversation } from "@/app/(app)/chats/delete-actions";
 import { deleteGroup, leaveAndDeleteGroup } from "@/app/(app)/chats/group-actions";
@@ -14,6 +14,7 @@ import { canClearForEveryone } from "@/lib/chat/permissions";
 import {
   markLocalDelete,
   refreshConversationRow,
+  markConversationRead,
   patchConversation,
   removeConversation,
 } from "@/lib/realtime/client/store";
@@ -29,10 +30,11 @@ export type ConversationActionTarget = {
   title: string; // the other person's name for DIRECT
   myRole: MemberRole;
   muted: boolean;
+  unread?: number; // from the unread store: "Mark as read" is offered above 0
   isOwner?: boolean; // CHANNEL: the owner can delete it for everyone
 };
 
-export type ConversationAction = "mute" | "clear" | "delete" | "leave" | "deleteGroup";
+export type ConversationAction = "markRead" | "mute" | "clear" | "delete" | "leave" | "deleteGroup";
 
 export type ConversationActionItem = {
   kind: ConversationAction;
@@ -48,6 +50,9 @@ export function conversationActionItems(
   { withDeleteGroup = false } = {},
 ): ConversationActionItem[] {
   const items: ConversationActionItem[] = [
+    ...((target.unread ?? 0) > 0
+      ? [{ kind: "markRead" as const, label: "Mark as read", icon: <CheckCheck />, destructive: false }]
+      : []),
     target.muted
       ? { kind: "mute", label: "Unmute", icon: <Bell />, destructive: false }
       : { kind: "mute", label: "Mute", icon: <BellOff />, destructive: false },
@@ -85,6 +90,12 @@ export function useConversationActions(
   function leaveChat() {
     removeConversation(target.id);
     if (inChat(target.id)) router.replace("/");
+  }
+
+  // Without opening the chat: clear the badge now, tell the server.
+  function markRead() {
+    markConversationRead(target.id);
+    void markAsRead(target.id).catch(() => refreshConversationRow(target.id));
   }
 
   // Mute needs no confirmation: optimistic, undone if the server says no.
@@ -148,7 +159,8 @@ export function useConversationActions(
   );
 
   // "mute" runs at once; the rest open their confirm dialog.
-  const open = (kind: ConversationAction) => (kind === "mute" ? toggleMute() : setAction(kind));
+  const open = (kind: ConversationAction) =>
+    kind === "mute" ? toggleMute() : kind === "markRead" ? markRead() : setAction(kind);
   return { open, dialog };
 }
 
@@ -156,7 +168,8 @@ function copyFor(action: ConversationAction, target: ConversationActionTarget) {
   const direct = target.type === "DIRECT";
   switch (action) {
     case "mute":
-      throw new Error("mute has no dialog");
+    case "markRead":
+      throw new Error(`${action} has no dialog`);
     case "clear":
       return {
         title: "Clear history?",
@@ -214,7 +227,7 @@ export function ConversationDangerZone({ target }: { target: ConversationActionT
   return (
     <section className="grid gap-2">
       {conversationActionItems(target, { withDeleteGroup: true })
-        .filter((item) => item.kind !== "mute") // the info pages have their own switch
+        .filter((item) => item.kind !== "mute" && item.kind !== "markRead") // the info pages have their own switch
         .map((item) => (
         <Button
           key={item.kind}

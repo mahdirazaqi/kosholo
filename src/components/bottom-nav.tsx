@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MessageCircle, UserRound, Users } from "lucide-react";
-import { formatCount, formatNumber } from "@/lib/numbers";
+import { UnreadPill } from "@/components/unread-pill";
 import { selectTotalUnread, useRealtimeStore } from "@/lib/realtime/client/store";
 import { cn } from "@/lib/utils";
 
@@ -20,18 +20,7 @@ export function isTabActive(href: string, pathname: string) {
 
 export function UnreadBadge({ className }: { className?: string }) {
   const total = useRealtimeStore(selectTotalUnread);
-  if (total === 0) return null;
-  return (
-    <span
-      aria-label={formatCount(total, "unread message")}
-      className={cn(
-        "flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground ring-2 ring-background",
-        className,
-      )}
-    >
-      {total > 99 ? "99+" : formatNumber(total)}
-    </span>
-  );
+  return <UnreadPill count={total} className={cn("h-4.5 min-w-4.5 px-1 text-[10px] ring-2 ring-background", className)} />;
 }
 
 // Mobile/tablet only; on desktop the sidebar has the tabs.

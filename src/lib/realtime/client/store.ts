@@ -1,11 +1,11 @@
 "use client";
 
 import { create } from "zustand";
-import { getConversation } from "@/app/(app)/chats/actions";
+import { getConversation, getUnread } from "@/app/(app)/chats/actions";
 import { PREVIEW_LENGTH } from "@/lib/chat/limits";
 import { getSocket } from "@/lib/realtime/client/socket";
 import { TYPING_EXPIRE_MS, type PresenceState } from "@/lib/realtime/events";
-import type { ChatMessage, ConversationListItem } from "@/lib/types/chat";
+import type { ChatMessage, ConversationListItem, UnreadSummary } from "@/lib/types/chat";
 
 // Client realtime state. Only mutated from effects/event handlers, never during
 // render, so the module-level store stays empty on the server.
@@ -14,6 +14,10 @@ type RealtimeState = {
   connected: boolean;
   // Chat list; null until the list page has loaded it once.
   conversations: ConversationListItem[] | null;
+  // Unread counts: THE single source for every badge (chat rows, nav tabs,
+  // back button, tab title, favicon, app icon). Null until the first server
+  // summary arrives. Server wins: setUnreadSummary replaces everything.
+  unread: Record<string, { count: number; muted: boolean }> | null;
   // The conversation open on screen (unread counts don't grow for it).
   activeConversationId: string | null;
   // conversationId → userId → display name
@@ -27,6 +31,7 @@ export const useRealtimeStore = create<RealtimeState>(() => ({
   me: null,
   connected: false,
   conversations: null,
+  unread: null,
   activeConversationId: null,
   typing: {},
   presence: {},
@@ -39,10 +44,77 @@ const get = useRealtimeStore.getState;
 const sortByRecent = (items: ConversationListItem[]) =>
   items.sort((a, b) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
 
-// Sum of unread counts (tab badge, document title, installed-app badge).
-// Muted conversations keep their own badge in the list but don't count here.
+// ---- Unread (the one store every badge reads) ----
+
+// Muted conversations keep their own count but don't add to the total.
 export const selectTotalUnread = (state: RealtimeState) =>
-  state.conversations?.reduce((total, item) => total + (item.muted ? 0 : item.unreadCount), 0) ?? 0;
+  Object.values(state.unread ?? {}).reduce((total, entry) => total + (entry.muted ? 0 : entry.count), 0);
+
+export const selectUnreadCount = (conversationId: string) => (state: RealtimeState) =>
+  state.unread?.[conversationId]?.count ?? 0;
+
+// Total of the other conversations (the chat page's back button).
+export const selectOtherUnread = (exceptId: string | null) => (state: RealtimeState) =>
+  Object.entries(state.unread ?? {}).reduce(
+    (total, [id, entry]) => total + (entry.muted || id === exceptId ? 0 : entry.count),
+    0,
+  );
+
+// Replace everything with the server's summary (app start, reconnect, tab
+// visible again).
+export function setUnreadSummary(summary: UnreadSummary) {
+  set({ unread: summary.perConversation });
+}
+
+export function refreshUnreadSummary() {
+  getUnread()
+    .then(setUnreadSummary)
+    .catch(() => {});
+}
+
+const countedMessageIds = new Set<string>();
+
+// message:new from someone else → +1, unless that conversation is open and
+// visible (the open chat marks it read instead). Idempotent per message id.
+export function countIncomingUnread(message: ChatMessage) {
+  const { unread, me, activeConversationId } = get();
+  if (!unread || countedMessageIds.has(message.id)) return;
+  countedMessageIds.add(message.id);
+  if (countedMessageIds.size > 1000) countedMessageIds.clear();
+  if (message.sender.id === me || message.type === "SYSTEM") return;
+  if (activeConversationId === message.conversationId && document.visibilityState === "visible") return;
+  const entry = unread[message.conversationId] ?? { count: 0, muted: false };
+  set({ unread: { ...unread, [message.conversationId]: { ...entry, count: entry.count + 1 } } });
+}
+
+// A deletion/clear changed what's unread: ask the server for this one entry.
+const unreadTimers = new Map<string, ReturnType<typeof setTimeout>>();
+export function refreshUnread(conversationId: string) {
+  clearTimeout(unreadTimers.get(conversationId));
+  unreadTimers.set(
+    conversationId,
+    setTimeout(() => {
+      unreadTimers.delete(conversationId);
+      getUnread(conversationId)
+        .then((summary) => {
+          const unread = { ...get().unread };
+          const entry = summary.perConversation[conversationId];
+          if (entry) unread[conversationId] = entry;
+          else delete unread[conversationId];
+          set({ unread });
+        })
+        .catch(() => {});
+    }, 150),
+  );
+}
+
+function dropUnread(conversationId: string) {
+  const unread = get().unread;
+  if (!unread || !(conversationId in unread)) return;
+  const next = { ...unread };
+  delete next[conversationId];
+  set({ unread: next });
+}
 
 // ---- Chat list ----
 
@@ -68,7 +140,7 @@ const appliedMessageIds = new Set<string>();
 
 // Returns false when the conversation is not in the list yet (caller fetches it).
 export function applyMessageToList(message: ChatMessage): boolean {
-  const { conversations, me, activeConversationId } = get();
+  const { conversations, me } = get();
   if (!conversations) return true;
   if (appliedMessageIds.has(message.id)) return true;
 
@@ -79,10 +151,6 @@ export function applyMessageToList(message: ChatMessage): boolean {
   if (appliedMessageIds.size > 1000) appliedMessageIds.clear();
 
   const isMine = message.sender.id === me;
-  const isOpen =
-    activeConversationId === message.conversationId && document.visibilityState === "visible";
-  // System messages (group events) never count as unread.
-  const counts = !isMine && !isOpen && message.type !== "SYSTEM";
   const item = conversations[index];
   const updated: ConversationListItem = {
     ...item,
@@ -97,7 +165,6 @@ export function applyMessageToList(message: ChatMessage): boolean {
       locationLabel: message.location?.label ?? null,
     },
     lastMessageAt: message.createdAt,
-    unreadCount: counts ? item.unreadCount + 1 : item.unreadCount,
   };
   set({ conversations: [updated, ...conversations.filter((_, i) => i !== index)] });
   return true;
@@ -109,14 +176,11 @@ export function insertConversation(item: ConversationListItem) {
   set({ conversations: sortByRecent([item, ...conversations]) });
 }
 
+// I read it (this tab, or another tab/device via conversation:read): 0.
 export function markConversationRead(conversationId: string) {
-  const conversations = get().conversations;
-  if (!conversations) return;
-  set({
-    conversations: conversations.map((item) =>
-      item.id === conversationId && item.unreadCount ? { ...item, unreadCount: 0 } : item,
-    ),
-  });
+  const unread = get().unread;
+  if (!unread?.[conversationId]?.count) return;
+  set({ unread: { ...unread, [conversationId]: { ...unread[conversationId], count: 0 } } });
 }
 
 export function renameConversation(conversationId: string, title: string) {
@@ -134,7 +198,11 @@ export function patchConversation(
   conversationId: string,
   patch: Partial<Pick<ConversationListItem, "muted" | "myRole">>,
 ) {
-  const conversations = get().conversations;
+  const { conversations, unread } = get();
+  // Muting moves the conversation in or out of the total.
+  if (patch.muted !== undefined && unread?.[conversationId]) {
+    set({ unread: { ...unread, [conversationId]: { ...unread[conversationId], muted: patch.muted } } });
+  }
   if (!conversations) return;
   set({
     conversations: conversations.map((item) => (item.id === conversationId ? { ...item, ...patch } : item)),
@@ -163,6 +231,7 @@ export function refreshConversationRow(conversationId: string) {
       getConversation(conversationId)
         .then((item) => (item ? upsertConversation(item) : removeConversation(conversationId)))
         .catch(() => {});
+      refreshUnread(conversationId);
     }, 150),
   );
 }
@@ -177,6 +246,7 @@ export function markLocalDelete(conversationId: string) {
 export const isLocalDelete = (conversationId: string) => localDeletes.has(conversationId);
 
 export function removeConversation(conversationId: string) {
+  dropUnread(conversationId);
   const conversations = get().conversations;
   if (conversations) set({ conversations: conversations.filter((item) => item.id !== conversationId) });
   setTypingFor(conversationId, null);

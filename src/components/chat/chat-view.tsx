@@ -60,6 +60,17 @@ export function ChatView({
   useVisualViewportHeight();
 
   const [messages, setMessages] = useState(initialPage.messages);
+  // The first message I hadn't read when opening the chat. The divider above
+  // it stays until I leave; later messages don't move it.
+  const [firstUnreadId] = useState(
+    () =>
+      initialPage.messages.find(
+        (m) =>
+          m.type !== "SYSTEM" &&
+          m.sender.id !== currentUser.id &&
+          (conversation.lastReadAt === null || m.createdAt > conversation.lastReadAt),
+      )?.id ?? null,
+  );
   const [cursor, setCursor] = useState(initialPage.nextCursor);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
@@ -527,7 +538,7 @@ export function ChatView({
         />
       ) : (
         <PageHeader
-          start={<BackButton />}
+          start={<BackButton unreadExcept={chat.id} />}
           end={
             !removed && (
               <DropdownMenu>
@@ -579,6 +590,7 @@ export function ChatView({
 
       <MessageList
         messages={messages}
+        firstUnreadId={firstUnreadId}
         currentUserId={currentUser.id}
         conversationType={chat.type}
         channelTitle={isChannel ? chat.title : undefined}

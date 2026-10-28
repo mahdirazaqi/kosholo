@@ -122,8 +122,14 @@ export type ConversationListItem = {
   otherUser: PublicUser | null; // DIRECT only
   lastMessage: LastMessagePreview | null;
   lastMessageAt: string | null;
-  unreadCount: number;
   muted: boolean; // no sound, not counted in the unread totals
+};
+
+// Unread counts live in their own store entry (never on list rows): see
+// lib/chat/unread.ts for the rule and lib/realtime/client/store.ts.
+export type UnreadSummary = {
+  total: number; // excludes muted conversations
+  perConversation: Record<string, { count: number; muted: boolean }>;
 };
 
 // A member as seen by other members (public user shape + membership).
@@ -152,6 +158,7 @@ export type ChatConversation = {
   memberCount: number;
   readStates: MemberReadState[]; // every member except the viewer (empty in channels)
   myRole: MemberRole;
+  lastReadAt: string | null; // mine when the chat was opened: where "unread" starts
   isOwner: boolean; // CHANNEL only
   muted: boolean;
   description: string | null; // GROUP/CHANNEL

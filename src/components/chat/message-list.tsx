@@ -23,9 +23,11 @@ const LOAD_MORE_THRESHOLD = 400; // px from the top
 const NEAR_BOTTOM = 120; // px from the bottom
 const SHOW_JUMP_BUTTON = 400;
 const MAX_JUMP_PAGES = 10;
+const UNREAD_SCROLL_OFFSET = 56; // keeps the divider clear of the sticky day label
 
 type Props = {
   messages: ChatMessage[];
+  firstUnreadId: string | null; // "Unread messages" divider goes above this message
   currentUserId: string;
   conversationType: ConversationType;
   channelTitle?: string; // CHANNEL: posts render as cards under this name
@@ -52,6 +54,7 @@ const keyOf = (message: ChatMessage) => message.tempId ?? message.id;
 
 export function MessageList({
   messages,
+  firstUnreadId,
   currentUserId,
   conversationType,
   channelTitle,
@@ -121,7 +124,18 @@ export function MessageList({
     const previous = lastCommit.current;
 
     if (!previous) {
-      scroller.scrollTop = scroller.scrollHeight;
+      // Open at the first unread message (its divider), else at the bottom.
+      const divider = scroller.querySelector<HTMLElement>("[data-unread-divider]");
+      if (divider) {
+        scroller.scrollTop +=
+          divider.getBoundingClientRect().top - scroller.getBoundingClientRect().top - UNREAD_SCROLL_OFFSET;
+        const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+        nearBottom.current = distance < NEAR_BOTTOM;
+        setAtBottom(nearBottom.current);
+        setShowJump(distance > SHOW_JUMP_BUTTON);
+      } else {
+        scroller.scrollTop = scroller.scrollHeight;
+      }
     } else if (first !== previous.first && messages.some((m) => keyOf(m) === previous.first)) {
       scroller.scrollTop += scroller.scrollHeight - previous.height;
     } else if (last !== previous.last) {
@@ -294,6 +308,7 @@ export function MessageList({
           return (
             <Fragment key={keyOf(message)}>
               {newDay && <DaySeparator date={message.createdAt} />}
+              {message.id === firstUnreadId && <UnreadDivider />}
               <MessageBubble
                 message={message}
                 isMine={!isChannel && message.sender.id === currentUserId}
@@ -429,6 +444,16 @@ function continues(a: ChatMessage, b: ChatMessage, channel: boolean) {
     b.type !== "SYSTEM" &&
     (channel || a.sender.id === b.sender.id) &&
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() <= GROUP_WINDOW_MS
+  );
+}
+
+function UnreadDivider() {
+  return (
+    <div data-unread-divider role="separator" className="flex items-center gap-3 px-3 py-2">
+      <span className="h-px flex-1 bg-primary/30" />
+      <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Unread messages</span>
+      <span className="h-px flex-1 bg-primary/30" />
+    </div>
   );
 }
 

@@ -57,6 +57,7 @@ export async function getConversationForMember(
     memberCount: conversation._count.members,
     readStates: isChannel ? [] : conversation.members.filter((member) => member.userId !== userId).map(toReadState),
     myRole: me?.role ?? "MEMBER",
+    lastReadAt: me?.lastReadAt?.toISOString() ?? null,
     isOwner: isChannel && conversation.ownerId === userId,
     muted: me?.muted ?? false,
     description: conversation.description,
@@ -75,20 +76,14 @@ export async function getConversations(
 ): Promise<ConversationListItem[]> {
   if (onlyId !== undefined && !userIdSchema.safeParse(onlyId).success) return [];
 
-  // Per membership: the newest visible message and the visible unread count.
+  // Per membership: the newest visible message (unread counts: lib/chat/unread.ts).
   const summaries = await db.$queryRaw<
-    { conversation_id: string; last_id: string | null; unread: number; muted: boolean }[]
+    { conversation_id: string; last_id: string | null; muted: boolean }[]
   >(Prisma.sql`
     SELECT cm.conversation_id, cm.muted,
       (SELECT m.id FROM messages m
         WHERE m.conversation_id = cm.conversation_id AND ${visibleSql("m", "cm")}
-        ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_id,
-      (SELECT COUNT(*)::int FROM messages m
-        WHERE m.conversation_id = cm.conversation_id
-          AND m.sender_id <> cm.user_id
-          AND m.type <> 'SYSTEM'
-          AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
-          AND ${visibleSql("m", "cm")}) AS unread
+        ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_id
     FROM conversation_members cm
     WHERE cm.user_id = ${userId}::uuid
       ${onlyId ? Prisma.sql`AND cm.conversation_id = ${onlyId}::uuid` : Prisma.empty}
@@ -147,7 +142,6 @@ export async function getConversations(
         locationLabel: last.locationLabel,
       },
       lastMessageAt: last.createdAt.toISOString(),
-      unreadCount: summary.unread,
       muted: summary.muted,
     });
   }

@@ -7,6 +7,7 @@ import { getConversations, isMember } from "@/lib/chat/conversations";
 import { getGoneIds, getMessages, getMessagesSince as queryMessagesSince } from "@/lib/chat/messages";
 import { messageSelect, quoteHiddenFor, toChatMessage, type MessageRow } from "@/lib/chat/queries";
 import { canPost } from "@/lib/chat/permissions";
+import { getUnreadSummary } from "@/lib/chat/unread";
 import { getViewCounts } from "@/lib/chat/views";
 import { getViewer, visibleMessageWhere } from "@/lib/chat/visibility";
 import { db } from "@/lib/db";
@@ -17,6 +18,7 @@ import type {
   ConversationListItem,
   MemberReadState,
   MessagesPage,
+  UnreadSummary,
 } from "@/lib/types/chat";
 import { sendMessageSchema, type SendMessageInput } from "@/lib/validations/chat";
 
@@ -151,6 +153,30 @@ export async function markAsRead(conversationId: string): Promise<void> {
   });
   await emitRead(conversationId, me.id, lastReadAt.toISOString());
   revalidatePath("/");
+}
+
+// Server wins: the whole unread summary (app start, reconnect, tab visible), or
+// one conversation's entry. A conversation I'm not in simply isn't there (0).
+export async function getUnread(conversationId?: string): Promise<UnreadSummary> {
+  const me = await requireUser();
+  if (conversationId !== undefined && !UUID.test(conversationId)) return { total: 0, perConversation: {} };
+  return getUnreadSummary(me.id, conversationId);
+}
+
+// "Read all": every non-muted conversation in one updateMany. Each one with
+// unread messages also emits conversation:read, so read receipts and my other
+// devices' badges follow.
+export async function markAllAsRead(): Promise<{ ok: true; count: number }> {
+  const me = await requireUser();
+  const before = await getUnreadSummary(me.id);
+  const lastReadAt = new Date();
+  await db.conversationMember.updateMany({ where: { userId: me.id, muted: false }, data: { lastReadAt } });
+  const unreadIds = Object.entries(before.perConversation)
+    .filter(([, entry]) => entry.count > 0 && !entry.muted)
+    .map(([id]) => id);
+  await Promise.all(unreadIds.map((id) => emitRead(id, me.id, lastReadAt.toISOString())));
+  revalidatePath("/");
+  return { ok: true, count: unreadIds.length };
 }
 
 // Mute / unmute for me (every conversation type). Only my own tabs and

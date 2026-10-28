@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { formatNumber } from "@/lib/numbers";
+import { clearBadges, updateAppBadge, updateFavicon } from "@/lib/pwa/badges";
 import { playNotificationSound, unlockAudio } from "@/lib/pwa/notification-sound";
 import { getSettings } from "@/lib/pwa/settings";
 import { getConversation, listConversations } from "@/app/(app)/chats/actions";
@@ -20,6 +21,8 @@ import type {
 } from "@/lib/realtime/events";
 import {
   applyMessageToList,
+  countIncomingUnread,
+  refreshUnreadSummary,
   hydrateConversations,
   insertConversation,
   isConversationMuted,
@@ -50,8 +53,9 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         .then((items) => hydrateConversations(items, true))
         .catch(() => {});
     };
-    // The list drives the unread badge on every page, not only the chat list.
     if (useRealtimeStore.getState().conversations === null) refreshList();
+    // App start: the unread store (every badge) is loaded here, on every page.
+    refreshUnreadSummary();
 
     const onConnect = () => {
       useRealtimeStore.setState({ connected: true });
@@ -59,6 +63,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       // Anything sent while we were away is only in the DB.
       if (connectedOnce) refreshList();
       connectedOnce = true;
+      // Reconnect: messages may have arrived (or been read) while away.
+      refreshUnreadSummary();
     };
     const onDisconnect = () => useRealtimeStore.setState({ connected: false });
     const onSession = ({ userId }: { userId: string }) => useRealtimeStore.setState({ me: userId });
@@ -79,6 +85,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       ) {
         playNotificationSound();
       }
+      countIncomingUnread(message);
       if (!applyMessageToList(message)) {
         getConversation(message.conversationId)
           .then((item) => item && insertConversation(item))
@@ -122,6 +129,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         hiddenAt = Date.now();
         return;
       }
+      refreshUnreadSummary(); // visible again: the server wins
       if (hiddenAt === null) return;
       hiddenAt = null;
       if (!socket.connected) socket.connect();
@@ -169,7 +177,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("pointerdown", unlockAudio);
       window.removeEventListener("keydown", unlockAudio);
       socket.disconnect();
-      useRealtimeStore.setState({ connected: false, conversations: null, typing: {}, presence: {}, avatars: {}, me: null });
+      clearBadges();
+      useRealtimeStore.setState({ connected: false, conversations: null, unread: null, typing: {}, presence: {}, avatars: {}, me: null });
     };
   }, []);
 
@@ -179,26 +188,23 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
 const TITLE_PREFIX = /^\([^)]*\) /;
 
-// Total unread → "(3) …" in the title while the tab is hidden, and the
-// installed app's icon badge where supported.
+// The unread total (from the one store) → "(3) …" in the tab title, the
+// favicon and the installed app's icon, whatever the tab's visibility.
 function useUnreadIndicators() {
   const total = useRealtimeStore(selectTotalUnread);
   useEffect(() => {
     const apply = () => {
       const base = document.title.replace(TITLE_PREFIX, "");
-      document.title =
-        document.visibilityState === "hidden" && total > 0 ? `(${formatNumber(total)}) ${base}` : base;
+      const next = total > 0 ? `(${formatNumber(total)}) ${base}` : base;
+      if (document.title !== next) document.title = next;
     };
     apply();
-    document.addEventListener("visibilitychange", apply);
+    // Page navigations set a new title: put the prefix back.
+    const observer = new MutationObserver(apply);
+    observer.observe(document.head, { childList: true, characterData: true, subtree: true });
 
-    const nav = navigator as Navigator & {
-      setAppBadge?: (count?: number) => Promise<void>;
-      clearAppBadge?: () => Promise<void>;
-    };
-    if (total > 0) void nav.setAppBadge?.(total).catch(() => {});
-    else void nav.clearAppBadge?.().catch(() => {});
-
-    return () => document.removeEventListener("visibilitychange", apply);
+    updateAppBadge(total);
+    updateFavicon(total);
+    return () => observer.disconnect();
   }, [total]);
 }

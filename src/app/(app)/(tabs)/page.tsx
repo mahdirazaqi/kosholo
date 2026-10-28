@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { ChatListView, NewConversationLauncher } from "@/components/chat/chat-list-view";
+import { ChatListMenu } from "@/components/chat/chat-list-menu";
 import { PageHeader } from "@/components/page-header";
 import { InstallBanner } from "@/components/pwa/install";
 import { SelectChatPane } from "@/components/select-chat-pane";
@@ -14,7 +15,7 @@ export default function ChatsPage() {
     <>
       {/* Desktop shows the list in the sidebar and an empty main pane here. */}
       <div className="contents lg:hidden">
-        <PageHeader title="Chats" />
+        <PageHeader title="Chats" end={<ChatListMenu />} />
         <InstallBanner />
         <Suspense fallback={<ChatListRowsSkeleton />}>
           <ChatList />
