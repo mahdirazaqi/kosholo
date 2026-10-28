@@ -29,6 +29,11 @@ RUN npm run build \
  && rm -rf .next/cache \
  && npm prune --omit=dev --no-audit --no-fund
 
+# ---- migrator: one-shot `prisma migrate deploy` (docker-compose.server.yml) ----
+# Kept before runner so runner stays the default (last) build target.
+FROM build AS migrator
+CMD ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
+
 # ---- runner ----
 FROM ${NODE_IMAGE} AS runner
 ARG APT_MIRROR=

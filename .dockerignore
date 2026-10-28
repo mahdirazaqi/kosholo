@@ -9,6 +9,7 @@ dist
 !.env.production.example
 uploads
 backups
+data
 public/sw.js
 public/fonts
 src/generated

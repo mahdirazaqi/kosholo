@@ -58,3 +58,6 @@ next-env.d.ts
 
 # production backups (scripts/backup.sh)
 /backups/
+
+# docker-compose.server.yml data (postgres bind mount)
+/data/

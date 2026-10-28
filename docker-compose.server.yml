@@ -1,0 +1,94 @@
+# Kosholo stack on shared external networks (web_net / app_net), next to other
+# projects. Every name, port and path is kosholo-specific so nothing collides:
+#   docker compose -f docker-compose.server.yml up -d                       # db only
+#   docker compose -f docker-compose.server.yml --profile app up -d --build # db + migrate + app
+
+# Own project name: never shares containers/volumes with the dev stack
+# (project "kosholo") or docker-compose.prod.yml (project "kosholo-prod").
+name: kosholo-server
+
+services:
+  # Service names are DNS names on the shared networks, so they must be unique
+  # there (another project's "postgres"/"app" would otherwise resolve too).
+  kosholo-postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kosholo_user
+      POSTGRES_PASSWORD: d45d1e347ac00811ea48cbaa
+      POSTGRES_DB: kosholo
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./data/postgresql:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kosholo_user -d kosholo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app_net
+
+  kosholo-migrate:
+    profiles: [app]
+    image: kosholo-migrator:latest
+    build:
+      context: .
+      target: migrator
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:24.11-trixie-slim}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+    environment:
+      DATABASE_URL: postgresql://kosholo_user:d45d1e347ac00811ea48cbaa@kosholo-postgres:5432/kosholo
+    depends_on:
+      kosholo-postgres:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - app_net
+
+  kosholo-app:
+    profiles: [app]
+    image: kosholo:latest
+    build:
+      context: .
+      target: runner
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:24.11-trixie-slim}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
+        APT_MIRROR: ${APT_MIRROR:-}
+    # JWT_SECRET (and optional FFMPEG_TIMEOUT_SECONDS) come from here.
+    env_file:
+      - path: ./.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://kosholo_user:d45d1e347ac00811ea48cbaa@kosholo-postgres:5432/kosholo
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      UPLOAD_DIR: /app/uploads
+      FFMPEG_PATH: ffmpeg
+      FFPROBE_PATH: ffprobe
+    ports:
+      - "3001:3000"
+    volumes:
+      # Named volume (not a bind mount) so it inherits node:node ownership from the image.
+      - uploads:/app/uploads
+    depends_on:
+      kosholo-migrate:
+        condition: service_completed_successfully
+    # Give the graceful shutdown (10s) time before Docker kills the process.
+    stop_grace_period: 15s
+    restart: unless-stopped
+    networks:
+      - web_net
+      - app_net
+
+volumes:
+  uploads:
+
+networks:
+  web_net:
+    external: true
+  app_net:
+    external: true
