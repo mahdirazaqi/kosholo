@@ -25,6 +25,8 @@ type UploadRow = {
   duration: number | null;
   placeholder: string | null;
   waveform: unknown;
+  originalName: string | null;
+  size: bigint | number;
 };
 
 export function toChatMedia(upload: UploadRow): ChatMedia {
@@ -39,6 +41,8 @@ export function toChatMedia(upload: UploadRow): ChatMedia {
     duration: upload.duration,
     placeholder: upload.placeholder,
     waveform: Array.isArray(upload.waveform) ? (upload.waveform as number[]) : null,
+    originalName: upload.originalName,
+    size: Number(upload.size), // BigInt in the DB; < 2^53 in practice
   };
 }
 
@@ -53,4 +57,6 @@ export const chatMediaSelect = {
   duration: true,
   placeholder: true,
   waveform: true,
+  originalName: true,
+  size: true,
 } as const;

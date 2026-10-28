@@ -55,18 +55,21 @@ src/components/contacts/ contacts list, contact sheet, add-contact sheet
 src/components/chat/  chat list, new-conversation/new-chat sheets, chat view, message list/bubble, system message, composer, emoji button,
                       delete-dialog, conversation-actions (clear/delete/leave menus + dialogs)
 src/components/groups/ new-group flow, member picker, group info view, direct info view
-src/components/chat/media/ image/video/voice bubbles, upload progress, viewer, attach + preview
+src/components/chat/media/ image/video/voice/file bubbles, upload progress, viewer, attach + preview (media and files)
+src/components/chat/location/ location bubble + thumb (static tiles), picker and viewer (Leaflet, lazy)
 src/components/avatar-editor.tsx  change/remove a profile or group photo
-src/app/api/upload/   POST: upload + process (Route Handler, auth inside)
+src/app/api/upload/   POST: upload + process (Route Handler, auth inside); files/: the resumable FILE protocol
 src/app/api/media/    GET/HEAD [uploadId] and [uploadId]/thumb: access-checked, Range-aware streaming
 src/app/(app)/photo-actions.ts  setProfilePhoto, setGroupPhoto
 src/components/auth/  login/register forms, auth card
 src/components/profile/ profile forms + logout dialog
 src/components/ui/    shadcn components (logical-direction audited)
 src/generated/prisma/ generated Prisma client (do not edit)
-src/hooks/            client hooks (use-conversation-realtime, use-presence, use-now, use-time-zone, use-form-feedback, use-media-query, use-visual-viewport-height)
+src/hooks/            client hooks (use-conversation-realtime, use-media-sender, use-file-sender, use-presence, use-now, use-time-zone, use-form-feedback, use-media-query, use-visual-viewport-height)
 src/lib/              db.ts, session.ts, session-token.ts, auth.ts, users.ts, contacts.ts, rate-limit.ts, form.ts, validations/, format-date.ts, numbers.ts, emoji.ts, client-utils.ts, utils.ts
 src/lib/pwa/          settings.ts (per-device), install.ts, notification-sound.ts, caches.ts
+src/lib/upload/       protocol.ts (shared contract), server.ts (sessions), filename.ts (sanitize + Content-Disposition), resumable.ts (client manager), file-kind.ts
+src/lib/map/          config.ts (tile env), tiles.ts (tile math, distance); src/lib/map-links.ts (Google Maps, Neshan, Balad, geo:)
 src/lib/realtime/     events.ts (typed event contract + rooms), membership.ts (cached), emit.ts (from Server Actions)
 src/lib/realtime/client/ socket.ts (typed client), store.ts (zustand), merge.ts (dedupe rule)
 src/lib/media/        limits.ts (shared), storage.ts, ffmpeg.ts, serialize.ts (no server-only: also used by the custom server);
@@ -144,10 +147,12 @@ Custom email/password auth. Do not add NextAuth or other auth libraries.
 
   | Request | Strategy |
   |---|---|
-  | `/socket.io`, `/api/upload`, full-size `/api/media/{id}` (video/voice ranges) | **network only, never cached** |
+  | `/socket.io` | network only |
+  | `/api/upload/*`, full-size `/api/media/{id}` (big files, video/voice ranges, resumable downloads) | **not intercepted at all** (no rule matches) |
+  | map tiles (`NEXT_PUBLIC_MAP_TILE_URL` pattern, cross-origin, opaque allowed) | cache-first, 500 entries, 7 days; nothing else from the tile host |
   | `/api/media/{id}/thumb` (image/video thumbs, avatars) | cache-first, 300 entries, 30 days |
   | `/_next/static/*`, `/icons/*`, `/emojibase/*`, fonts, svg, ico | cache-first |
-  | page navigations | network-first (3s timeout) → cached page → `/~offline` |
+  | page navigations (never `/api/*`: a download is a navigation) | network-first (3s timeout) → cached page → `/~offline` |
   | Server Action POSTs, any non-GET | not routed (always network) |
 
   - The precache is deliberately small (CSS, `/~offline`, logo, icons, manifest). JS chunks are runtime-cached as they're used.
@@ -179,7 +184,7 @@ Custom email/password auth. Do not add NextAuth or other auth libraries.
 ## Chat
 
 - **Shapes:** `src/lib/types/chat.ts`.
-  - `ChatMessage` has `id, conversationId, type, content, mediaUrl, createdAt` (ISO string), `sender` (a `PublicUser`), `replyTo` (`ReplyPreview | null | "deleted"`), and client-only `status` (`sending | sent | failed`) plus `tempId`.
+  - `ChatMessage` has `id, conversationId, type, content, media, location` (`{ latitude, longitude, label } | null`), `meta, createdAt` (ISO string), `sender` (a `PublicUser`), `replyTo` (`ReplyPreview | null | "deleted"`), and client-only `status` (`sending | sent | failed`) plus `tempId`.
   - `ConversationListItem` has `id, type, title, avatarUrl, otherUser, lastMessage {type, content, isMine}, lastMessageAt, unreadCount`.
   - `ChatConversation` is the chat screen header data. `MessagesPage` is `{ messages (oldest → newest), nextCursor }`.
 - **Queries** (server-only, `src/lib/chat/`):
@@ -280,7 +285,7 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
 - Deleting is optimistic: messages fade out at once (`removing`), reply bar, quotes, selection, a playing voice (`audioManager.release`) and an open viewer follow; on failure they're restored with an error toast.
 - Conversation actions (`components/chat/conversation-actions.tsx`): the header ⋮ menu, chat-list rows (long-press sheet on touch, right-click / hover menu on desktop) and the bottom of both info pages. "Clear history", "Delete chat" (DIRECT) or "Leave and delete group" (GROUP), plus the admin's "Delete group for everyone" in the header and group info. `markLocalDelete()` keeps the acting tab from toasting its own deletion; other open chats navigate to `/` with "This chat was deleted".
 
-## Media (images, videos, voice, avatars)
+## Media (images, videos, voice, avatars, files)
 
 **Requirement: system `ffmpeg` and `ffprobe`.** They're used for video and voice, through `child_process`. Paths come from `FFMPEG_PATH` / `FFPROBE_PATH` (default `ffmpeg` / `ffprobe`). The custom server checks them at startup and logs a clear error if they're missing. Never use `ffmpeg-static` or other download-at-install packages. The Docker image needs `apt install ffmpeg` and a persistent volume for `UPLOAD_DIR`.
 
@@ -292,20 +297,21 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
 | Video | 50MB | MP4/MOV/WebM |
 | Voice | 10MB, max 5 min | MediaRecorder output (webm/opus, mp4/aac) and common audio |
 | Avatar | 5MB | image |
+| File | `MAX_FILE_SIZE_MB` (default 2048) | anything (see Files) |
 
 - Up to 10 files per selection, each its own message (no albums).
 - Uploads are rate limited to 60 per user per 10 minutes. Every rejection has a user-facing message (`MEDIA_ERRORS`).
 
 **Data:**
-- `Upload` stores `{ path, thumbPath, mime, size, width, height, duration, placeholder, waveform }`.
+- `Upload` stores `{ path, thumbPath, originalName (FILE), mime, size (BigInt), width, height, duration, placeholder, waveform }`.
   - `path` is relative to `UPLOAD_DIR`: `yyyy/mm/{uuid}.{ext}`, plus `{uuid}.thumb.webp`.
 - `Message.uploadId` (unique) links a message to its file.
-- `ChatMessage.media` is a `ChatMedia`: `{ id, kind, url, thumbUrl, mime, width, height, duration, placeholder, waveform }`. URLs are always `/api/media/{id}` and `/api/media/{id}/thumb`; never select or send `path`.
+- `ChatMessage.media` is a `ChatMedia`: `{ id, kind, url, thumbUrl, mime, width, height, duration, placeholder, waveform, originalName, size }` (`size` is a number; BigInt in the DB). URLs are always `/api/media/{id}` and `/api/media/{id}/thumb`; never select or send `path`.
 - `User.avatarUrl` and `Conversation.avatarUrl` store `/api/media/{uploadId}`, and `avatarThumbUrl()` maps it to the 128px thumb.
 
 **Pipeline:**
 1. **Client:** `prepareFile` downscales photos to 2048px JPEG 0.85 (GIFs are kept), then `uploadFile` posts with XHR (progress, abort) to `POST /api/upload?kind=…`. The kind is in the query, so oversized bodies are rejected from `Content-Length` before they're read.
-2. **Server:** the Route Handler (`src/app/api/upload/route.ts`) authenticates with the session cookie, then streams the body to `UPLOAD_DIR/tmp` and detects the real type.
+2. **Server:** the Route Handler (`src/app/api/upload/route.ts`) authenticates with the session cookie, then streams the multipart body with **busboy** to `UPLOAD_DIR/tmp` (the size limit is enforced while streaming; nothing is buffered) and detects the real type.
    - **Image (sharp):** EXIF-rotated, metadata stripped, ≤2048px WebP q80. GIFs stay as-is. Each gets a 480px WebP thumb and a 16px placeholder.
    - **Video (ffprobe/ffmpeg):** H.264/AAC MP4 is remuxed with `+faststart`. Anything else (HEVC .mov, WebM) is transcoded to H.264/AAC (`veryfast`, `crf 26`, ≤1280px). A poster frame from ~1s becomes the thumb and placeholder. Rotation is applied to width/height.
    - **Voice:** converted to M4A (AAC mono 64kbps), so Chrome and Safari recordings play everywhere. The duration comes from ffprobe, and the client's peaks are validated and resampled to 48 bars.
@@ -325,7 +331,7 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
 - Everything else, unknown ids included, gets 404; no session gets 401.
 - Files stream from disk with HTTP Range (206/416), HEAD, `ETag` (304) and `Cache-Control: private, max-age=31536000, immutable`. They're never served statically.
 
-**Cleanup:** `src/server/media-cleanup.ts` runs hourly in the custom server. It deletes uploads (rows and files) older than 24h that no message uses and that aren't a user or group avatar. This covers abandoned sends and replaced avatars; files of deleted messages and conversations are unlinked right away by the deletion code (see Deleting). It also clears stale temp files.
+**Cleanup:** `src/server/media-cleanup.ts` runs hourly in the custom server. It deletes uploads (rows and files) older than 24h that no message uses and that aren't a user or group avatar, and `UploadSession`s not updated for 24h with their temp files. This covers abandoned sends and replaced avatars; files of deleted messages and conversations are unlinked right away by the deletion code (see Deleting). It also clears stale temp files.
 
 **UI:**
 - **Images:** a fixed aspect-ratio frame with the blur placeholder, then the thumb (the original for GIFs). The caption goes underneath, or the time overlays the image when there's no caption. Tapping opens `yet-another-react-lightbox` (zoom, download, pull down to close).
@@ -333,7 +339,7 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
 - **Voice:** the mic replaces send when the composer is empty.
   - Recording (`useVoiceRecorder`): hold to record, slide toward the inline start to cancel, slide up to lock. A tap shows a hint. Recordings under 1s are discarded, and recording stops automatically at 5 minutes.
   - Playback: the waveform doubles as the seek bar, there's a 1x / 1.5x / 2x toggle, and `audioManager` makes sure only one voice plays at a time.
-- **Previews:** "📷 Photo", "🎬 Video", "🎤 Voice message (m:ss)", with the caption when there is one. Quotes and the reply bar show a thumbnail.
+- **Previews:** "📷 Photo", "🎬 Video", "🎤 Voice message (m:ss)", "📎 {originalName}" (middle-truncated, `shortFileName`), "📍 Location" (+ label), with the caption when there is one. Quotes and the reply bar show a thumbnail (a tiny map for locations).
 - **Media direction:** playback controls and timelines stay LTR (play icon, waveform direction).
 
 **Avatars:**
@@ -341,6 +347,43 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
 - `setGroupPhoto` is admin-only, records `photo_changed` and emits `conversation:updated { avatarUrl }`.
 - `setProfilePhoto` emits `user:updated` to everyone who shares a conversation with the user or has them as a contact.
 - `UserAvatar` (client) reads live overrides from `store.avatars` (keyed by user id or group id), uses the 128px thumb for small sizes, and falls back to initials while loading or on error.
+
+### Files (documents, "send without compression")
+
+**Rule: no processing.** A FILE is stored and served byte-for-byte as uploaded: no resizing, re-encoding, metadata stripping or conversion. Any type is allowed, up to `MAX_FILE_SIZE_MB` (env, default 2048; read at runtime by `maxFileSize()` in `lib/upload/server.ts`, the authority, and copied at build time into `NEXT_PUBLIC_MAX_FILE_SIZE_MB` by `next.config.ts` for the early client check).
+- **Sources:** Attach → "File" (no `accept`, multiple, up to 10), or the photo/video preview's "Send without compression (as files)" switch, which sends `PreparedFile.original` instead of the compressed pipeline.
+- **Storage:** `yyyy/mm/{uuid}` with **no extension and no user-controlled name**. The original name lives only in `Upload.originalName`, sanitized by `sanitizeFileName()` (`lib/upload/filename.ts`): basename only, no path separators, control characters or bidi controls (U+202A–U+202E, U+2066–U+2069, U+200E/F), ≤255 chars keeping the extension, fallback "File".
+- **Thumbnail:** only for images sharp can read and ≤50MB (`FILE_THUMB_MAX_SOURCE`), never SVG; the original is untouched.
+- **Limits** (on session creation): at most 3 active sessions per user, 10GB uploaded per user per hour (also checked per chunk), the existing upload count limiter, and free disk (`fs.statfs` on `UPLOAD_DIR`) minus every active session's remaining bytes must leave 2GB (else 507 "Not enough space on the server").
+
+**Resumable chunk protocol** (contract in `src/lib/upload/protocol.ts`; routes in `src/app/api/upload/files/`, auth inside, excluded from `proxy.ts` through the `api/upload` prefix):
+
+| Request | Does |
+|---|---|
+| `POST /api/upload/files` `{ name, size, mime }` | validates limits and disk, creates an `UploadSession` with an empty temp file → `{ sessionId, chunkSize: 8MB, receivedSize: 0 }` |
+| `PUT /api/upload/files/{id}?offset=n` (raw bytes, ≤8MB) | owner only; `offset` must equal `receivedSize` (else **409** with the current one); streamed to the temp file at the offset; rejects bodies past `totalSize`; an interrupted chunk commits nothing → `{ receivedSize }` |
+| `GET /api/upload/files/{id}` | `{ receivedSize, totalSize }` for resuming |
+| `POST /api/upload/files/{id}/complete` | needs all bytes; MIME from `file-type` (fallback: the client's, then `application/octet-stream`); moves the file to its final path, creates the `Upload` (kind FILE), deletes the session → `{ media }` |
+| `DELETE /api/upload/files/{id}` | cancel: temp file and session removed |
+
+- Session temp files live in `UPLOAD_DIR/upload-sessions/{id}.part` (not `tmp/`, whose 1-hour sweep would kill paused uploads). The hourly cleanup removes sessions not updated for 24h with their files. Per-session locks (`globalThis.__uploadLocks`) reject concurrent PUT/complete with 409.
+- The message is created only after `complete`: `sendMessage({ uploadId, tempId })` as for other media; until then it's only the sender's optimistic bubble.
+
+**Client** (`lib/upload/resumable.ts`, `hooks/use-file-sender.ts`): `File.slice` chunks over XHR (progress within a chunk), one chunk at a time, at most 2 files in parallel (the rest queue); retries with backoff 1s, 2s, 5s, 10s, then every 15s; 409 resumes from the server's `receivedSize`; `offline` pauses ("Waiting for connection…") and `online` resumes; active sessions are kept in localStorage, so after a reload the bubble shows "Upload paused" and "Resume" re-picks the file (matched by name, size, lastModified) and continues; a Wake Lock is held while uploading. Messages are sent in selection order.
+
+**Serving** (`/api/media/{id}` for FILE): the same access rule as other media (membership + visibility), Range/HEAD/ETag, streamed from disk, plus `Content-Disposition: attachment; filename="<ascii>"; filename*=UTF-8''<encoded>`, `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none'; sandbox`. Script-capable types (HTML, SVG, XML, JavaScript, …) are served as `application/octet-stream`. FILE is never rendered inline on our origin.
+
+**Bubble** (`FileMedia`): a colored type icon (`file-kind.ts`) or the thumbnail, the name (`dir="auto"`, middle-truncated keeping the extension), the size (`formatBytes`: "850 KB", "2.4 MB", "1.4 GB"), caption, and a download link (`<a href download>`; a new tab in the iOS standalone PWA). Playable audio (mp3, m4a, ogg, wav) gets a play button on the shared `audioManager`. FILE videos are download-only. While uploading: a progress ring with cancel and "Uploading … {sent} of {total}" / "Waiting for connection…" / "Upload paused".
+
+## Location
+
+- `MessageType.LOCATION` with `Message.latitude`, `longitude` (6 decimals) and optional `locationLabel` (≤200). `sendMessage({ location: { latitude, longitude, label? } })`, validated by `locationSchema` (lat −90..90, lng −180..180); content may be empty. Same optimistic/tempId/`message:new` path as text.
+- **Map config** (`src/lib/map/config.ts`, **build-time** `NEXT_PUBLIC_*`, passed as Docker build args): `NEXT_PUBLIC_MAP_TILE_URL` (template with `{z}/{x}/{y}`, optional `{s}`), `NEXT_PUBLIC_MAP_SUBDOMAINS`, `NEXT_PUBLIC_MAP_ATTRIBUTION`, `NEXT_PUBLIC_MAP_MAX_ZOOM`. Empty strings count as unset. The OpenStreetMap default is for development only (its tile policy forbids heavy use); production uses a provider with its own key (DEPLOY.md, "Map tiles"). Tiles load without `crossOrigin`.
+- **Leaflet** (react-leaflet) only in the lazily loaded picker and viewer (`next/dynamic`, no SSR), which import the Leaflet CSS themselves. Map containers are `dir="ltr"`. Markers are `divIcon`/SVG (no default image icons).
+- **Bubble** (`LocationMedia`): no Leaflet instance; a 2×2 block of zoom-15 tiles positioned with CSS so the point is centered, a pin overlay and tiny attribution, fixed 4:3 frame, lazy images; then the label and coordinates. `LocationThumb` is the small version for quotes and the reply bar.
+- **Picker:** current position (high accuracy, 10s timeout) with a blue dot and accuracy circle, a fixed center pin (drag the map), "My location", "Send my current location" (with accuracy) or "Send this point", optional "Place name". Denied/unavailable geolocation (e.g. not HTTPS) shows an explanation and manual picking still works.
+- **Viewer:** interactive map with the marker, "My location" (distance via haversine, "1.2 km"), "Open in…" (Google Maps, Neshan, Balad, `geo:` from `src/lib/map-links.ts`) and "Copy coordinates".
+- LOCATION and FILE messages follow the hard-delete and visibility rules like every other message (deleting a FILE message removes its file and thumbnail).
 
 ## Realtime (Socket.IO)
 
@@ -435,7 +478,8 @@ Full step-by-step guide (for the server admin): `DEPLOY.md`.
   - Proxies to `app:3000`, with WebSockets and 10-minute timeouts.
   - 60MB body limit.
   - zstd/gzip, except `/api/media/*`.
-  - Security headers; Permissions-Policy allows camera and microphone for self.
+  - Security headers; Permissions-Policy allows camera, microphone and geolocation for self.
+  - `/api/upload/*` is not compressed; request bodies stream to the app (8MB FILE chunks fit the 60MB limit); 10-minute timeouts for slow mobile chunks (the Node server's `requestTimeout` matches).
   - HTML responses get `Cache-Control: no-cache`, because Next marks prerendered pages `s-maxage=1y` and a CDN would serve stale chunk references after a deploy. No proxy caching otherwise.
 - **`scripts/`:**
   - `backup.sh`: pg_dump plus an uploads tar into `backups/YYYY-MM-DD_HHMM/`; keeps 7.
@@ -451,6 +495,7 @@ Full step-by-step guide (for the server admin): `DEPLOY.md`.
   - ffmpeg runs at most 2 jobs at a time, each with a `FFMPEG_TIMEOUT_SECONDS` limit.
 - **Logging:** server code logs through `src/lib/logger.ts` (`logger.info/warn/error(scope, msg, err?)`, timestamped and levelled). Never log secrets, tokens, passwords or message contents.
 - **Rule: every new env var** must be added to `.env.example`, `.env.production.example` (commented) **and** the table in `DEPLOY.md` §5. If the container needs a fixed value, set it in `docker-compose.prod.yml`.
+  - Build-time variables (`NEXT_PUBLIC_*`, and `MAX_FILE_SIZE_MB` for the client check) must also be passed as `build.args` in `docker-compose.prod.yml` and declared as `ARG`/`ENV` in the Dockerfile build stage; changing them needs a rebuild.
 - **Lockfile:** the image uses npm 11 (`npm ci`), which is stricter than local npm 10 about optional platform packages. If `npm ci` fails in the image, regenerate `package-lock.json` with npm 11, e.g. a full `npm install` inside `node:24.11-trixie-slim`, and check it with `npm ci --dry-run` both there and locally.
 
 ## Commands

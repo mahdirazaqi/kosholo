@@ -27,6 +27,25 @@ export async function newFilePath(ext: string, id: string = randomUUID(), suffix
   return { relative, absolute: absolutePath(relative) };
 }
 
+// FILE uploads: stored as yyyy/mm/{uuid} with no extension (the original
+// name only lives in the DB, so nothing user-controlled reaches the disk).
+export async function newBareFilePath(id: string = randomUUID()) {
+  const now = new Date();
+  const dir = `${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  const relative = `${dir}/${id}`;
+  await mkdir(path.join(uploadRoot(), dir), { recursive: true });
+  return { relative, absolute: absolutePath(relative) };
+}
+
+// Resumable upload sessions append to upload-sessions/{id}.part (relative to
+// UPLOAD_DIR). Not under tmp/: the hourly temp sweep must not touch a paused
+// upload; stale sessions are removed by the cleanup job after 24h instead.
+export async function sessionTempPath(sessionId: string) {
+  await mkdir(path.join(uploadRoot(), "upload-sessions"), { recursive: true });
+  const relative = `upload-sessions/${sessionId}.part`;
+  return { relative, absolute: absolutePath(relative) };
+}
+
 export async function tempFilePath(ext = "bin") {
   const dir = path.join(uploadRoot(), "tmp");
   await mkdir(dir, { recursive: true });

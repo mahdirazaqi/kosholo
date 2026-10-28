@@ -11,7 +11,7 @@ The app is made of three Docker services:
 | `db` | PostgreSQL database | no |
 
 Data lives in Docker volumes and survives updates:
-`pgdata` (database), `uploads` (photos, videos and voice messages), `caddy_data` (certificates).
+`pgdata` (database), `uploads` (photos, videos, voice messages and sent files; by far the largest), `caddy_data` (certificates).
 
 > **Note:** every `docker compose` command in this guide must be run inside the project folder and always with
 > `--env-file .env.production -f docker-compose.prod.yml`. To keep things short, section 6 creates an alias.
@@ -22,7 +22,7 @@ Data lives in Docker volumes and survives updates:
 
 - **OS:** Ubuntu 24.04 LTS
 - **CPU and memory:** at least 2 cores and 2 GB RAM (4 GB is more comfortable). Building the image needs memory, so section 3 also adds swap.
-- **Disk:** at least 20 GB. Uploaded files and backups grow over time; more is better.
+- **Disk:** at least 20 GB, and plan for growth: users can send files of up to 2 GB each (`MAX_FILE_SIZE_MB`), stored as they are. See section 11, "Managing disk space".
 - **A domain** (e.g. `chat.example.com`) whose DNS records you can edit.
 - Root access over SSH (your hosting provider usually gives you a password or key).
 
@@ -210,6 +210,11 @@ and fill in the following (each variable is also explained inside the file):
 | `UPLOAD_DIR` | Leave as is (`/app/uploads`) |
 | `FFMPEG_PATH` / `FFPROBE_PATH` | Leave as is |
 | `FFMPEG_TIMEOUT_SECONDS` | Maximum processing time per video/audio file (default 120 seconds) |
+| `MAX_FILE_SIZE_MB` | Largest file users can send, in MB (default `2048` = 2 GB). Files are stored byte-for-byte, so this is also the most disk one upload can take. Also baked into the image for the in-app check: rebuild after changing it (`scripts/deploy.sh` does) |
+| `NEXT_PUBLIC_MAP_TILE_URL` | Map tile URL template for location messages, with `{z}/{x}/{y}` and optionally `{s}`. **Set this to your own provider in production** (see "Map tiles" below). Baked into the image: rebuild after changing |
+| `NEXT_PUBLIC_MAP_SUBDOMAINS` | Letters/values that replace `{s}` (default `abc`) |
+| `NEXT_PUBLIC_MAP_ATTRIBUTION` | The provider's required attribution text, shown on every map |
+| `NEXT_PUBLIC_MAP_MAX_ZOOM` | The provider's maximum zoom (default `19`) |
 | `NODE_IMAGE` / `POSTGRES_IMAGE` / `CADDY_IMAGE` | Images; change only for a mirror (section 4) |
 | `NPM_REGISTRY` / `APT_MIRROR` | npm and Debian mirrors (section 4) |
 | `HTTP_PORT` / `HTTPS_PORT` | Keep 80 and 443 on a real server |
@@ -218,6 +223,22 @@ and fill in the following (each variable is also explained inside the file):
 
 > `.env.production` contains secrets; never commit it or send it to anyone.
 
+### Map tiles
+
+Location messages show maps drawn from a tile server. The default (`tile.openstreetmap.org`) is for development only: OpenStreetMap's public tile servers [don't allow heavy use](https://operations.osmfoundation.org/policies/tiles/) and may block your users.
+
+For production, pick a tile provider, create an API key, and put its URL template and attribution in `.env.production`. Choose one that is fast and reachable for your users (for an audience in Iran, Neshan or Map.ir; elsewhere, providers like MapTiler, Stadia Maps or Thunderforest). For example:
+
+```dotenv
+NEXT_PUBLIC_MAP_TILE_URL=https://tiles.example-provider.com/{z}/{x}/{y}.png?key=YOUR_KEY
+NEXT_PUBLIC_MAP_SUBDOMAINS=
+NEXT_PUBLIC_MAP_ATTRIBUTION=© Example Provider © OpenStreetMap contributors
+NEXT_PUBLIC_MAP_MAX_ZOOM=19
+```
+
+The key is visible to browsers (every tile request carries it), so restrict it to your domain in the provider's dashboard. The browser loads tiles directly from the provider; the app's service worker caches up to 500 tiles for 7 days on each device.
+
+Then rebuild: `scripts/deploy.sh` (these values are compiled into the app).
 ## 6. First launch
 
 Create an alias to keep commands short:
@@ -278,10 +299,18 @@ scripts/backup.sh
 This creates a folder like `backups/2026-01-31_0400/` containing:
 
 - `db.dump` — a full copy of the database
-- `uploads.tar.gz` — all uploaded files
+- `uploads.tar.gz` — all uploaded files (unfinished uploads in `tmp/` and `upload-sessions/` are skipped)
 - `SHA256SUMS` — to verify the files are intact
 
 Only the last 7 backups are kept (for more: `KEEP_BACKUPS=14 scripts/backup.sh`).
+
+Sent files (documents, up to `MAX_FILE_SIZE_MB` each) can make `uploads.tar.gz` very large, and 7 copies of it may not fit on the server. To leave them out:
+
+```bash
+scripts/backup.sh --skip-files
+```
+
+This keeps photos, videos, voice messages, avatars and all thumbnails. A good routine: nightly backups with `--skip-files`, plus a full backup (without the flag) once a week, copied off the server and then deleted locally. See section 11.
 
 ### Automatic nightly backup at 4 AM
 
@@ -292,7 +321,13 @@ crontab -e
 Add this line at the end of the file:
 
 ```cron
-0 4 * * * cd /home/deploy/kosholo && scripts/backup.sh >> backups/cron.log 2>&1
+0 4 * * * cd /home/deploy/kosholo && scripts/backup.sh --skip-files >> backups/cron.log 2>&1
+```
+
+and, for a weekly full backup on Sunday nights (copy it off the server, see below):
+
+```cron
+0 5 * * 0 cd /home/deploy/kosholo && KEEP_BACKUPS=14 scripts/backup.sh >> backups/cron.log 2>&1
 ```
 
 > The time follows the server's time zone. Check it with `timedatectl` and change it if you like, e.g. `sudo timedatectl set-timezone Europe/Berlin`. (This only affects cron and logs; the app shows dates in each viewer's own time zone.)
@@ -377,3 +412,39 @@ docker system prune           # remove unused images and cache
 dc exec db psql -U kosholo -d kosholo
 # \dt lists tables, \q quits
 ```
+
+---
+
+## 11. Managing disk space
+
+The `uploads` volume is by far the biggest consumer of disk: every photo, video, voice message and sent file lives there. Files are stored exactly as uploaded (up to `MAX_FILE_SIZE_MB`, 2 GB by default), so **a handful of large files can fill a small VPS disk quickly**. When the disk is full, uploads fail, and the database can stop working too.
+
+### Checking usage
+
+```bash
+df -h /                      # free space on the server's disk
+docker system df             # space used by images, containers and volumes
+docker system df -v | grep -E 'VOLUME|kosholo-prod'    # per volume (uploads, pgdata, …)
+du -sh backups/              # local backups
+```
+
+Check this regularly, e.g. weekly, or set up an alert with your hosting provider.
+
+### How the app protects the disk
+
+- Before a file upload starts, the app checks the free space on the uploads disk and refuses with "Not enough space on the server" unless at least 2 GB would remain afterwards.
+- Each user can have at most 3 uploads in progress and upload at most 10 GB per hour.
+- Unfinished uploads (closed tab, lost connection) are deleted automatically after 24 hours, and unused uploads after a day.
+- Deleted messages and chats remove their files from disk immediately.
+
+### Freeing space
+
+- `docker image prune -f` removes old app images (`scripts/deploy.sh` already does this after each update).
+- Move old backups off the server (section 8) and delete them locally.
+- Lower `MAX_FILE_SIZE_MB` and rebuild if large files are filling the disk too fast.
+- If the server needs more room, the simplest fix is a bigger disk (or an extra volume) from your hosting provider.
+
+### Backups of large uploads
+
+A full `uploads.tar.gz` is about as large as the `uploads` volume itself. Use `scripts/backup.sh --skip-files` for daily backups and run a full backup less often (section 8), copying it off the server.
+

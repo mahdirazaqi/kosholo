@@ -18,6 +18,10 @@ const SHUTDOWN_TIMEOUT_MS = 10_000;
 
 async function main() {
   const httpServer = createServer();
+  // Resumable file uploads send 8 MB chunks, which can take minutes on a slow
+  // mobile link; match Caddy's 10-minute body timeout (Node's default is 5).
+  httpServer.requestTimeout = 10 * 60_000;
+  httpServer.headersTimeout = 60_000;
   const app = next({ dev, hostname: host, port, httpServer });
   const handle = app.getRequestHandler();
   await app.prepare();

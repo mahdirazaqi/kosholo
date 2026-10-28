@@ -7,7 +7,7 @@ import "yet-another-react-lightbox/styles.css";
 import type { ViewerTarget } from "@/components/chat/media/media-viewer";
 
 // Lightbox: pinch/double-tap zoom, pull down to close, download. Lazy-loaded.
-export default function ImageViewer({ target, onClose }: { target: NonNullable<ViewerTarget>; onClose: () => void }) {
+export default function ImageViewer({ target, onClose }: { target: Extract<ViewerTarget, { kind: "image" | "video" }>; onClose: () => void }) {
   return (
     <Lightbox
       open

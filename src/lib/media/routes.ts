@@ -3,9 +3,10 @@ import "server-only";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { canReadUpload } from "@/lib/media/access";
-import { serveFile } from "@/lib/media/serve";
+import { safeDownloadMime, serveFile } from "@/lib/media/serve";
 import { absolutePath } from "@/lib/media/storage";
 import { isUuid } from "@/lib/realtime/membership";
+import { contentDisposition } from "@/lib/upload/filename";
 
 // Shared by GET/HEAD /api/media/[uploadId] and /thumb. Auth happens here (these
 // routes are excluded from the proxy). Unknown and forbidden both answer 404
@@ -17,7 +18,7 @@ export async function serveUpload(request: Request, uploadId: string, variant: "
 
   const upload = await db.upload.findUnique({
     where: { id: uploadId },
-    select: { id: true, kind: true, ownerId: true, path: true, thumbPath: true, mime: true },
+    select: { id: true, kind: true, ownerId: true, path: true, thumbPath: true, mime: true, originalName: true },
   });
   if (!upload || !(await canReadUpload(upload, user.id))) {
     return new Response("Not found", { status: 404 });
@@ -26,6 +27,17 @@ export async function serveUpload(request: Request, uploadId: string, variant: "
   if (variant === "thumb") {
     if (!upload.thumbPath) return new Response("Not found", { status: 404 });
     return serveFile(request, absolutePath(upload.thumbPath), "image/webp", `"${upload.id}-thumb"`);
+  }
+  if (upload.kind === "FILE") {
+    // Original bytes, always as a download (never rendered on our origin),
+    // with the original name; script-capable types as opaque bytes.
+    return serveFile(
+      request,
+      absolutePath(upload.path),
+      safeDownloadMime(upload.mime),
+      `"${upload.id}"`,
+      contentDisposition(upload.originalName ?? "File"),
+    );
   }
   return serveFile(request, absolutePath(upload.path), upload.mime, `"${upload.id}"`);
 }

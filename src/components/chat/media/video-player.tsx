@@ -5,7 +5,7 @@ import type { ViewerTarget } from "@/components/chat/media/media-viewer";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 // Full-screen native player (playsInline, autoplay). Lazy-loaded.
-export default function VideoPlayer({ target, onClose }: { target: NonNullable<ViewerTarget>; onClose: () => void }) {
+export default function VideoPlayer({ target, onClose }: { target: Extract<ViewerTarget, { kind: "image" | "video" }>; onClose: () => void }) {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent

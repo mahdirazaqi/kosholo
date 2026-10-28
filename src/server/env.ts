@@ -15,6 +15,8 @@ if (!process.env.DATABASE_URL) problems.push("DATABASE_URL is not set");
 if (!process.env.JWT_SECRET) problems.push("JWT_SECRET is not set (generate one with: openssl rand -base64 48)");
 else if (process.env.JWT_SECRET.length < 32) problems.push("JWT_SECRET must be at least 32 characters (openssl rand -base64 48)");
 if (!process.env.UPLOAD_DIR) problems.push("UPLOAD_DIR is not set");
+const maxFileSize = process.env.MAX_FILE_SIZE_MB;
+if (maxFileSize && !(Number(maxFileSize) > 0)) problems.push("MAX_FILE_SIZE_MB must be a positive number of megabytes");
 
 if (problems.length) {
   for (const problem of problems) console.error(`${new Date().toISOString()} ERROR [env] ${problem}`);

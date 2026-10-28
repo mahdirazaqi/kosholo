@@ -19,7 +19,11 @@ await build({
   target: "es2020",
   minify: true,
   outfile: tmp,
-  define: { "process.env.NODE_ENV": '"production"' },
+  define: {
+    "process.env.NODE_ENV": '"production"',
+    // Which cross-origin requests are map tiles (cached by the worker).
+    "process.env.NEXT_PUBLIC_MAP_TILE_URL": JSON.stringify(process.env.NEXT_PUBLIC_MAP_TILE_URL || ""),
+  },
   logLevel: "warning",
 });
 

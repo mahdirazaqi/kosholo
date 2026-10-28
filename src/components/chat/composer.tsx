@@ -5,6 +5,8 @@ import dynamic from "next/dynamic";
 import { Mic, Reply, SendHorizontal, X } from "lucide-react";
 import { EmojiButton } from "@/components/chat/emoji-button";
 import { AttachButton } from "@/components/chat/media/attach-button";
+import { LocationThumb } from "@/components/chat/location/location-media";
+import type { ChatLocation } from "@/lib/types/chat";
 import type { VoiceRecording } from "@/hooks/use-media-sender";
 import type { PreparedFile } from "@/lib/media/client/prepare";
 import { previewText } from "@/components/chat/message-preview";
@@ -32,13 +34,15 @@ type Props = {
   onCancelReply: () => void;
   onSend: (content: string) => void;
   onSendFiles: (files: PreparedFile[], caption: string | null) => void;
+  onSendDocuments: (files: File[], caption: string | null) => void; // FILE messages, original bytes
+  onSendLocation: (location: ChatLocation) => void;
   onSendVoice: (recording: VoiceRecording) => void;
   onInput?: (value: string) => void; // typing indicator
   onBlur?: () => void;
 };
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
-  { replyTo, onCancelReply, onSend, onSendFiles, onSendVoice, onInput, onBlur },
+  { replyTo, onCancelReply, onSend, onSendFiles, onSendDocuments, onSendLocation, onSendVoice, onInput, onBlur },
   ref,
 ) {
   const isDesktop = useIsDesktop();
@@ -99,6 +103,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       {replyTo && (
         <div className="flex animate-in items-center gap-3 px-3 pt-2 fade-in-0 slide-in-from-bottom-1 duration-150">
           <Reply className="size-5 shrink-0 text-primary" />
+          {replyTo.location && <LocationThumb location={replyTo.location} className="size-10 shrink-0 rounded-md" />}
           {replyTo.media?.thumbUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={replyTo.media.thumbUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" />
@@ -106,7 +111,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           <div className="min-w-0 flex-1 border-s-2 border-primary ps-2">
             <p className="truncate text-xs font-semibold text-primary">Reply to {replyTo.sender.name}</p>
             <p dir="auto" className="truncate text-sm text-muted-foreground">
-              {previewText({ ...replyTo, duration: replyTo.media?.duration })}
+              {previewText({
+                ...replyTo,
+                duration: replyTo.media?.duration,
+                fileName: replyTo.media?.originalName,
+                locationLabel: replyTo.location?.label,
+              })}
             </p>
           </div>
           <Button
@@ -133,7 +143,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         className="relative flex items-end gap-1 px-2 pt-2"
       >
         <EmojiButton onPick={insertEmoji} onClose={focus} />
-        <AttachButton onSend={onSendFiles} />
+        <AttachButton onSend={onSendFiles} onSendDocuments={onSendDocuments} onSendLocation={onSendLocation} />
 
         <textarea
           ref={textareaRef}

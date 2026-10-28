@@ -11,9 +11,10 @@ export function formatCount(count: number, singular: string, plural = `${singula
   return `${formatNumber(count)} ${count === 1 ? singular : plural}`;
 }
 
-// "2.4 MB"
+// "850 KB", "2.4 MB", "1.4 GB"
 export function formatBytes(bytes: number) {
   if (bytes < 1024) return `${formatNumber(bytes)} B`;
   if (bytes < 1024 * 1024) return `${formatNumber(Math.round(bytes / 1024))} KB`;
-  return `${formatNumber(Math.round((bytes / (1024 * 1024)) * 10) / 10)} MB`;
+  if (bytes < 1024 ** 3) return `${formatNumber(Math.round((bytes / 1024 ** 2) * 10) / 10)} MB`;
+  return `${formatNumber(Math.round((bytes / 1024 ** 3) * 10) / 10)} GB`;
 }

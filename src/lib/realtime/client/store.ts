@@ -92,6 +92,8 @@ export function applyMessageToList(message: ChatMessage): boolean {
       isMine,
       senderName: message.sender.name,
       meta: message.meta,
+      fileName: message.media?.originalName ?? null,
+      locationLabel: message.location?.label ?? null,
     },
     lastMessageAt: message.createdAt,
     unreadCount: counts ? item.unreadCount + 1 : item.unreadCount,

@@ -4,9 +4,25 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
 
+// Types a browser could execute or render as a document (HTML, SVG, XML,
+// scripts). User FILE uploads of these are served as opaque bytes.
+const ACTIVE_CONTENT = /html|xml|svg|javascript|ecmascript|x-sh\b|wasm|shockwave|x-msdownload/i;
+
+export function safeDownloadMime(mime: string) {
+  return ACTIVE_CONTENT.test(mime) ? "application/octet-stream" : mime;
+}
+
 // Streams a file from disk with HTTP Range support (206 / 416), which video
-// and audio seeking need (iOS Safari refuses media without it).
-export async function serveFile(request: Request, absolute: string, mime: string, etag: string) {
+// and audio seeking (iOS Safari refuses media without it) and resumable
+// downloads of big files need. `disposition` (FILE uploads) forces a download
+// and sandboxes the response in case a browser renders it anyway.
+export async function serveFile(
+  request: Request,
+  absolute: string,
+  mime: string,
+  etag: string,
+  disposition?: string,
+) {
   let size: number;
   try {
     size = (await stat(absolute)).size;
@@ -21,6 +37,10 @@ export async function serveFile(request: Request, absolute: string, mime: string
     ETag: etag,
     "X-Content-Type-Options": "nosniff",
   });
+  if (disposition) {
+    headers.set("Content-Disposition", disposition);
+    headers.set("Content-Security-Policy", "default-src 'none'; sandbox");
+  }
 
   if (request.headers.get("if-none-match") === etag) {
     return new Response(null, { status: 304, headers });

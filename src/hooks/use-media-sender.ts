@@ -116,7 +116,7 @@ export function useMediaSender({
   const enqueue = useCallback(
     (
       entry: Omit<Pending, "controller" | "media" | "previous" | "finish">,
-      media: Omit<ChatMedia, "id" | "url" | "kind">,
+      media: Omit<ChatMedia, "id" | "url" | "kind" | "originalName" | "size">,
       replyTo: ReplyPreview | null,
     ) => {
       const id = newTempId();
@@ -130,7 +130,8 @@ export function useMediaSender({
         conversationId,
         type: entry.kind,
         content: entry.caption,
-        media: { ...media, id, kind: entry.kind, url: entry.objectUrl },
+        media: { ...media, id, kind: entry.kind, url: entry.objectUrl, originalName: null, size: entry.file.size },
+        location: null,
         meta: null,
         createdAt: new Date().toISOString(),
         sender: currentUser,

@@ -4,7 +4,7 @@ import { copyFile, rm, stat } from "node:fs/promises";
 import { fileTypeFromFile } from "file-type";
 import sharp from "sharp";
 import { ffmpeg, FfmpegTimeoutError, ffprobe } from "@/lib/media/ffmpeg";
-import { ACCEPTED_MIME, MAX_VOICE_SECONDS, MEDIA_ERRORS, WAVEFORM_BARS } from "@/lib/media/limits";
+import { ACCEPTED_MIME, FILE_THUMB_MAX_SOURCE, MAX_VOICE_SECONDS, MEDIA_ERRORS, WAVEFORM_BARS } from "@/lib/media/limits";
 import { newFilePath, removeFiles, tempFilePath } from "@/lib/media/storage";
 import type { UploadKind } from "@/lib/types/chat";
 import { logger } from "@/lib/logger";
@@ -217,4 +217,25 @@ function normalizeWaveform(input: unknown): number[] {
     bars.push(Math.round(Math.min(1, Math.max(0.05, peak)) * 100) / 100);
   }
   return bars;
+}
+
+// FILE uploads are never processed: the original bytes are served as they
+// arrived. If the file is an image sharp can read (and not huge), a WebP
+// thumbnail for the bubble is made from it; the original is left untouched.
+// Returns null when there's nothing to show (not an image, too big, unreadable).
+export async function fileThumbnail(absolute: string, size: number, mime: string, id: string) {
+  if (!mime.startsWith("image/") || mime === "image/svg+xml" || size > FILE_THUMB_MAX_SOURCE) return null;
+  try {
+    const meta = await sharp(absolute).metadata();
+    const rotated = (meta.orientation ?? 1) >= 5;
+    return {
+      thumbPath: await thumbnail(absolute, id),
+      width: (rotated ? meta.height : meta.width) ?? null,
+      height: (rotated ? meta.width : (meta.pageHeight ?? meta.height)) ?? null,
+      placeholder: await placeholderFrom(absolute),
+    };
+  } catch (error) {
+    logger.warn("media", "file thumbnail skipped", error);
+    return null;
+  }
 }

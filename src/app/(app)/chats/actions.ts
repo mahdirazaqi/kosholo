@@ -27,7 +27,7 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
   const me = await requireUser();
   const parsed = sendMessageSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
-  const { conversationId, content, uploadId, replyToId, tempId } = parsed.data;
+  const { conversationId, content, uploadId, location, replyToId, tempId } = parsed.data;
 
   const viewer = await getViewer(conversationId, me.id);
   if (!viewer) return { ok: false, error: NOT_FOUND };
@@ -44,7 +44,7 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
   }
 
   // Media: the upload must be mine, unused, and a message kind (not an avatar).
-  let type: "TEXT" | "IMAGE" | "VIDEO" | "VOICE" = "TEXT";
+  let type: "TEXT" | "IMAGE" | "VIDEO" | "VOICE" | "FILE" | "LOCATION" = location ? "LOCATION" : "TEXT";
   if (uploadId) {
     const upload = await db.upload.findFirst({
       where: { id: uploadId, ownerId: me.id, message: null },
@@ -59,7 +59,18 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
   try {
     [row] = await db.$transaction([
       db.message.create({
-        data: { conversationId, senderId: me.id, type, content, uploadId, replyToId, createdAt: now },
+        data: {
+          conversationId,
+          senderId: me.id,
+          type,
+          content,
+          uploadId,
+          replyToId,
+          createdAt: now,
+          ...(location
+            ? { latitude: location.latitude, longitude: location.longitude, locationLabel: location.label }
+            : {}),
+        },
         select: messageSelect,
       }),
       db.conversation.update({ where: { id: conversationId }, data: { updatedAt: now } }),

@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useConversationRealtime } from "@/hooks/use-conversation-realtime";
+import { useFileSender } from "@/hooks/use-file-sender";
 import { useMediaSender } from "@/hooks/use-media-sender";
 import { useVisualViewportHeight } from "@/hooks/use-visual-viewport-height";
 import { PREVIEW_LENGTH } from "@/lib/chat/limits";
@@ -36,6 +37,7 @@ import { TYPING_CLIENT_THROTTLE_MS } from "@/lib/realtime/events";
 import { isLocalDelete, removeConversation, renameConversation } from "@/lib/realtime/client/store";
 import type {
   ChatConversation,
+  ChatLocation,
   ChatMessage,
   ConversationRemovedReason,
   MemberReadState,
@@ -273,6 +275,7 @@ export function ChatView({
         const result = await sendMessage({
           conversationId: conversation.id,
           content: optimistic.content ?? "",
+          location: optimistic.location,
           replyToId,
           tempId: optimistic.tempId,
         });
@@ -308,17 +311,19 @@ export function ChatView({
     [conversation.id, stopTyping],
   );
 
+  // Text and location messages: an optimistic bubble, then sendMessage.
   const send = useCallback(
-    (content: string) => {
+    (content: string, location: ChatLocation | null = null) => {
       stopTyping();
       const id = tempId();
       const optimistic: ChatMessage = {
         id,
         tempId: id,
         conversationId: conversation.id,
-        type: "TEXT",
-        content,
+        type: location ? "LOCATION" : "TEXT",
+        content: location ? null : content,
         media: null,
+        location,
         meta: null,
         createdAt: new Date().toISOString(),
         sender: currentUser,
@@ -333,19 +338,38 @@ export function ChatView({
     [conversation.id, currentUser, replyTo, deliver, stopTyping, requestRead],
   );
 
+  const sendLocation = useCallback((location: ChatLocation) => send("", location), [send]);
+
   const media = useMediaSender({ conversationId: conversation.id, currentUser, setMessages });
   const { isMediaPending, retry: retryMedia } = media;
+  const documents = useFileSender({ conversationId: conversation.id, currentUser, setMessages });
 
   const retry = useCallback(
     (message: ChatMessage) => {
-      // Media messages re-run their own pipeline (re-upload only if needed).
+      // Media and files re-run their own pipeline (re-upload only if needed).
+      if (documents.isPending(message.tempId)) return documents.retry(message);
       if (isMediaPending(message.tempId)) return void retryMedia(message.tempId!);
       setMessages((current) =>
         current.map((m) => (m.tempId === message.tempId ? { ...m, status: "sending" } : m)),
       );
       void deliver(message);
     },
-    [deliver, isMediaPending, retryMedia],
+    [deliver, isMediaPending, retryMedia, documents],
+  );
+
+  const cancelUpload = useCallback(
+    (message: ChatMessage) =>
+      documents.isPending(message.tempId) ? documents.cancel(message) : media.cancel(message),
+    [documents, media],
+  );
+
+  const sendDocuments = useCallback(
+    (files: File[], caption: string | null) => {
+      documents.sendDocuments(files, caption, replyTo ? toReplyPreview(replyTo) : null);
+      setReplyTo(null);
+      requestRead.current();
+    },
+    [documents, replyTo, requestRead],
   );
 
   const sendFiles = useCallback(
@@ -499,7 +523,8 @@ export function ChatView({
         onLoadOlder={loadOlder}
         onReply={startReply}
         onRetry={retry}
-        onCancelUpload={media.cancel}
+        onCancelUpload={cancelUpload}
+        onResumeUpload={documents.resume}
         selection={selection}
         removing={removing}
         onSelect={startSelection}
@@ -525,6 +550,8 @@ export function ChatView({
             onCancelReply={() => setReplyTo(null)}
             onSend={send}
             onSendFiles={sendFiles}
+            onSendDocuments={sendDocuments}
+            onSendLocation={sendLocation}
             onSendVoice={sendVoice}
             onInput={onInput}
             onBlur={stopTyping}
@@ -560,5 +587,7 @@ function toReplyPreview(message: ChatMessage): ReplyPreview {
     senderName: message.sender.name,
     thumbUrl: message.media?.thumbUrl ?? null,
     duration: message.media?.duration ?? null,
+    fileName: message.media?.originalName ?? null,
+    location: message.location,
   };
 }

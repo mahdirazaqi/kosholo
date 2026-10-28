@@ -1,11 +1,12 @@
 "use client";
 
-import { guessKind, MEDIA_ERRORS, UPLOAD_LIMITS } from "@/lib/media/limits";
+import { guessKind, MAX_FILE_SIZE, MEDIA_ERRORS, UPLOAD_LIMITS } from "@/lib/media/limits";
 
 const MAX_SIDE = 2048;
 
 export type PreparedFile = {
-  file: File;
+  file: File; // what the compressed pipeline uploads (a photo may be downscaled)
+  original: File; // the file as picked ("send without compression" sends this as a FILE)
   kind: "IMAGE" | "VIDEO";
   previewUrl: string; // object URL; revoke when done
   width: number | null;
@@ -61,7 +62,9 @@ function videoMetadata(url: string): Promise<{ width: number | null; height: num
   });
 }
 
-// Validates and prepares one selected file; throws a Persian message on rejection.
+// Validates and prepares one selected file; throws a user-facing message on rejection.
+// The compressed-pipeline limits (UPLOAD_LIMITS) are checked when sending, since
+// the same selection may go "without compression" instead.
 export async function prepareFile(file: File): Promise<PreparedFile> {
   const kind = guessKind(file.type) ?? (/\.(mov|mp4|m4v|webm)$/i.test(file.name) ? "VIDEO" : null);
   if (!kind) throw new Error(MEDIA_ERRORS.unsupported);
@@ -69,10 +72,11 @@ export async function prepareFile(file: File): Promise<PreparedFile> {
   if (kind === "IMAGE") {
     const prepared = await downscaleImage(file);
     if (prepared.file.size > UPLOAD_LIMITS.IMAGE) throw new Error(MEDIA_ERRORS.tooLarge("IMAGE"));
-    return { ...prepared, kind, previewUrl: URL.createObjectURL(prepared.file), duration: null };
+    return { ...prepared, original: file, kind, previewUrl: URL.createObjectURL(prepared.file), duration: null };
   }
 
-  if (file.size > UPLOAD_LIMITS.VIDEO) throw new Error(MEDIA_ERRORS.tooLarge("VIDEO"));
+  // Larger videos can still go "without compression" (as a FILE, up to MAX_FILE_SIZE).
+  if (file.size > MAX_FILE_SIZE) throw new Error(MEDIA_ERRORS.fileTooLarge());
   const previewUrl = URL.createObjectURL(file);
-  return { file, kind, previewUrl, ...(await videoMetadata(previewUrl)) };
+  return { file, original: file, kind, previewUrl, ...(await videoMetadata(previewUrl)) };
 }

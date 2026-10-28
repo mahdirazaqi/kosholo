@@ -29,6 +29,12 @@ export type SystemMeta = {
   removed?: boolean; // "photo_changed" when the photo was removed
 };
 
+export type ChatLocation = {
+  latitude: number;
+  longitude: number;
+  label: string | null; // optional place name / address
+};
+
 // Quoted message shown inside a reply. "deleted" means the message was a
 // reply but the original is no longer available.
 export type ReplyPreview = {
@@ -36,8 +42,10 @@ export type ReplyPreview = {
   type: MessageType;
   content: string | null; // first 100 chars
   senderName: string;
-  thumbUrl: string | null; // image/video
+  thumbUrl: string | null; // image/video (and FILE images)
   duration: number | null; // voice/video, seconds
+  fileName: string | null; // FILE
+  location: ChatLocation | null; // LOCATION (tiny map thumbnail)
 };
 
 // A processed upload as the client sees it. URLs go through /api/media, which
@@ -53,6 +61,8 @@ export type ChatMedia = {
   duration: number | null; // seconds
   placeholder: string | null; // tiny blurred data URL
   waveform: number[] | null; // voice: ~48 values 0–1
+  originalName: string | null; // FILE: sanitized original name
+  size: number; // bytes
 };
 
 export type ChatMessage = {
@@ -60,7 +70,8 @@ export type ChatMessage = {
   conversationId: string;
   type: MessageType;
   content: string | null;
-  media: ChatMedia | null; // IMAGE / VIDEO / VOICE (content is then an optional caption)
+  media: ChatMedia | null; // IMAGE / VIDEO / VOICE / FILE (content is then an optional caption)
+  location: ChatLocation | null; // LOCATION
   meta: SystemMeta | null; // SYSTEM only
   createdAt: string; // ISO string, safe to send over RSC, actions and sockets
   sender: PublicUser;
@@ -72,8 +83,12 @@ export type ChatMessage = {
 };
 
 export type LocalUpload = {
-  phase: "uploading" | "processing";
-  progress: number; // 0–1 of the request body
+  // waiting: offline / retrying a chunk; paused: a resumable FILE upload that
+  // stopped (e.g. the page reloaded) and needs the file picked again.
+  phase: "uploading" | "processing" | "waiting" | "paused";
+  progress: number; // 0–1 of the file
+  sent?: number; // bytes (FILE)
+  total?: number; // bytes (FILE)
 };
 
 export type MessagesPage = {
@@ -88,6 +103,8 @@ export type LastMessagePreview = {
   isMine: boolean;
   senderName: string; // shown as "Jane: …" in group rows
   meta: SystemMeta | null;
+  fileName: string | null; // FILE
+  locationLabel: string | null; // LOCATION
 };
 
 export type ConversationListItem = {

@@ -24,6 +24,18 @@ RUN npm ci --no-audit --no-fund
 
 # ---- build: Next.js, the custom server and the service worker ----
 FROM deps AS build
+# Public settings inlined into the client bundle and the service worker
+# (docker-compose.prod.yml passes them from .env.production). Empty = defaults.
+ARG MAX_FILE_SIZE_MB=2048
+ARG NEXT_PUBLIC_MAP_TILE_URL=
+ARG NEXT_PUBLIC_MAP_SUBDOMAINS=
+ARG NEXT_PUBLIC_MAP_ATTRIBUTION=
+ARG NEXT_PUBLIC_MAP_MAX_ZOOM=
+ENV MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB} \
+    NEXT_PUBLIC_MAP_TILE_URL=${NEXT_PUBLIC_MAP_TILE_URL} \
+    NEXT_PUBLIC_MAP_SUBDOMAINS=${NEXT_PUBLIC_MAP_SUBDOMAINS} \
+    NEXT_PUBLIC_MAP_ATTRIBUTION=${NEXT_PUBLIC_MAP_ATTRIBUTION} \
+    NEXT_PUBLIC_MAP_MAX_ZOOM=${NEXT_PUBLIC_MAP_MAX_ZOOM}
 COPY . .
 RUN npm run build \
  && rm -rf .next/cache \

@@ -37,6 +37,12 @@ services:
         NODE_IMAGE: ${NODE_IMAGE:-node:24.11-trixie-slim}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org/}
         APT_MIRROR: ${APT_MIRROR:-}
+        # Inlined into the client bundle at build time (NEXT_PUBLIC_).
+        MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-2048}
+        NEXT_PUBLIC_MAP_TILE_URL: ${NEXT_PUBLIC_MAP_TILE_URL:-}
+        NEXT_PUBLIC_MAP_SUBDOMAINS: ${NEXT_PUBLIC_MAP_SUBDOMAINS:-}
+        NEXT_PUBLIC_MAP_ATTRIBUTION: ${NEXT_PUBLIC_MAP_ATTRIBUTION:-}
+        NEXT_PUBLIC_MAP_MAX_ZOOM: ${NEXT_PUBLIC_MAP_MAX_ZOOM:-}
     image: kosholo-app:latest
     restart: unless-stopped
     env_file: .env.production
@@ -46,6 +52,8 @@ services:
       HOST: 0.0.0.0
       UPLOAD_DIR: /app/uploads
     volumes:
+      # The main disk consumer: every photo, video, voice message and file
+      # (files up to MAX_FILE_SIZE_MB each). See DEPLOY.md, "Managing disk space".
       - uploads:/app/uploads
     expose:
       - "3000"

@@ -1,9 +1,21 @@
 #!/usr/bin/env bash
 # Backs up the database (pg_dump, custom format, compressed) and the uploads
 # volume into ./backups/YYYY-MM-DD_HHMM/, keeping the newest 7 backups.
-# Usage: scripts/backup.sh          (KEEP_BACKUPS=14 scripts/backup.sh to keep more)
+# Usage: scripts/backup.sh               (KEEP_BACKUPS=14 scripts/backup.sh to keep more)
+#        scripts/backup.sh --skip-files  photos, videos, voice and avatars only:
+#                                        leaves out sent files (documents, up to
+#                                        MAX_FILE_SIZE_MB each), which can make the
+#                                        archive huge. Back those up less often.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+SKIP_FILES=0
+for arg in "$@"; do
+  case "$arg" in
+    --skip-files) SKIP_FILES=1 ;;
+    *) echo "✗ Unknown option: $arg (see the top of $0)" >&2; exit 1 ;;
+  esac
+done
 
 ENV_FILE="${ENV_FILE:-.env.production}"
 COMPOSE=(docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml)
@@ -19,9 +31,19 @@ echo "→ Dumping the database…"
 # A dump that pg_restore can't read is not a backup.
 "${COMPOSE[@]}" exec -T db pg_restore --list < "$DEST/db.dump" > /dev/null
 
-echo "→ Archiving uploads…"
-# A one-off container from the app image with the uploads volume (works whether or not the app is running).
-"${COMPOSE[@]}" run --rm --no-deps -T --entrypoint tar app -czf - -C /app/uploads . > "$DEST/uploads.tar.gz"
+# A one-off container from the app image with the uploads volume (works whether
+# or not the app is running). Unfinished uploads (tmp/, upload-sessions/) are
+# never backed up.
+# Sent files are stored as yyyy/mm/{uuid} with no extension, while media,
+# avatars and every thumbnail have one, so --skip-files keeps names with a dot.
+if [[ $SKIP_FILES == 1 ]]; then
+  echo "→ Archiving uploads (without sent files)…"
+  "${COMPOSE[@]}" run --rm --no-deps -T --entrypoint sh app -c \
+    'cd /app/uploads && find . \( -path ./tmp -o -path ./upload-sessions \) -prune -o -type f -name "*.*" -print | tar -czf - -T -' > "$DEST/uploads.tar.gz"
+else
+  echo "→ Archiving uploads…"
+  "${COMPOSE[@]}" run --rm --no-deps -T --entrypoint tar app -czf - -C /app/uploads --exclude=./tmp --exclude=./upload-sessions . > "$DEST/uploads.tar.gz"
+fi
 gzip -t "$DEST/uploads.tar.gz"
 
 (cd "$DEST" && sha256sum db.dump uploads.tar.gz > SHA256SUMS)

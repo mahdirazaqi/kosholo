@@ -3,7 +3,7 @@ import path from "node:path";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { uploadIdFromUrl } from "@/lib/media/serialize";
-import { removeFiles, uploadRoot } from "@/lib/media/storage";
+import { absolutePath, removeFiles, uploadRoot } from "@/lib/media/storage";
 
 const HOUR = 60 * 60 * 1000;
 const ORPHAN_AFTER = 24 * HOUR;
@@ -11,7 +11,8 @@ const ORPHAN_AFTER = 24 * HOUR;
 // Deletes uploads (rows + files) older than 24h that no message uses and that
 // aren't a user/group avatar: abandoned optimistic sends, replaced avatars,
 // and files of messages that were deleted (e.g. a deleted group). Also clears
-// stale temp files from interrupted uploads.
+// stale temp files from interrupted uploads and resumable FILE upload sessions
+// not touched for 24h.
 export async function cleanupUploads() {
   const cutoff = new Date(Date.now() - ORPHAN_AFTER);
   const [users, conversations] = await Promise.all([
@@ -45,6 +46,28 @@ export async function cleanupUploads() {
   }
 
   if (deleted) logger.info("media", `cleanup removed ${deleted} unused upload(s)`);
+
+  const sessions = await removeStaleSessions(cutoff);
+  if (sessions) logger.info("media", `cleanup removed ${sessions} abandoned upload session(s)`);
+}
+
+// Sessions with a request in progress are locked by lib/upload/server.ts
+// (same globalThis, same process) and skipped.
+const uploadLocks = () => (globalThis as unknown as { __uploadLocks?: Set<string> }).__uploadLocks;
+
+async function removeStaleSessions(cutoff: Date) {
+  const stale = await db.uploadSession.findMany({
+    where: { updatedAt: { lt: cutoff } },
+    select: { id: true, tempPath: true },
+  });
+  let removed = 0;
+  for (const session of stale) {
+    if (uploadLocks()?.has(session.id)) continue;
+    await rm(absolutePath(session.tempPath), { force: true }).catch(() => {});
+    await db.uploadSession.delete({ where: { id: session.id } }).catch(() => {});
+    removed++;
+  }
+  return removed;
 }
 
 // Returns a function that stops the job (graceful shutdown).

@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { SendHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import type { PreparedFile } from "@/lib/media/client/prepare";
 import { MAX_CAPTION_LENGTH } from "@/lib/media/limits";
 import { formatCount, formatNumber } from "@/lib/numbers";
 
 // Full-screen preview of the selection: swipe through, remove items, add one
-// caption (applied to the first file), send all.
+// caption (applied to the first file), send all. "Send without compression"
+// sends the original files as FILE messages instead of the media pipeline.
 export function MediaPreviewDialog({
   files,
   onChange,
@@ -17,15 +19,18 @@ export function MediaPreviewDialog({
 }: {
   files: PreparedFile[];
   onChange: (files: PreparedFile[]) => void;
-  onSend: (caption: string | null) => void;
+  onSend: (caption: string | null, asFiles: boolean) => void;
 }) {
   const [caption, setCaption] = useState("");
+  const [asFiles, setAsFiles] = useState(false);
+  const switchId = useId();
   const open = files.length > 0;
 
   function close() {
     for (const file of files) URL.revokeObjectURL(file.previewUrl);
     onChange([]);
     setCaption("");
+    setAsFiles(false);
   }
 
   function remove(index: number) {
@@ -80,11 +85,25 @@ export function MediaPreviewDialog({
           ))}
         </div>
 
+        <label
+          htmlFor={switchId}
+          className="flex min-h-11 shrink-0 cursor-pointer items-center gap-3 px-4 text-sm text-white/90"
+        >
+          <Switch
+            id={switchId}
+            checked={asFiles}
+            onCheckedChange={setAsFiles}
+            className="data-unchecked:bg-white/25"
+          />
+          Send without compression (as files)
+        </label>
+
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            onSend(caption.trim() || null);
+            onSend(caption.trim() || null, asFiles);
             setCaption("");
+            setAsFiles(false);
           }}
           className="flex shrink-0 items-end gap-2 px-3 pt-2 pb-[max(env(safe-area-inset-bottom),0.75rem)]"
         >

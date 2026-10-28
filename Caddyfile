@@ -14,14 +14,16 @@
 }
 
 {$DOMAIN} {
-	# Uploads: up to 50MB of media plus multipart overhead.
+	# Uploads: up to 50MB of media plus multipart overhead. Files (up to
+	# MAX_FILE_SIZE_MB) arrive as resumable 8MB chunks, so this limit holds.
+	# Request bodies are streamed to the app, not buffered.
 	request_body {
 		max_size 60MB
 	}
 
 	# Compress text, but not media (already compressed, and Range requests
-	# must reach the app untouched).
-	@compressible not path /api/media/*
+	# must reach the app untouched) and not the upload endpoints.
+	@compressible not path /api/media/* /api/upload/*
 	encode @compressible zstd gzip
 
 	header {
@@ -29,8 +31,9 @@
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		X-Frame-Options "DENY"
-		# Microphone (voice) and camera (photos/videos) for our own origin only.
-		Permissions-Policy "camera=(self), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()"
+		# Microphone (voice), camera (photos/videos) and geolocation (location
+		# messages) for our own origin only.
+		Permissions-Policy "camera=(self), microphone=(self), geolocation=(self), payment=(), usb=(), interest-cohort=()"
 		-Server
 	}
 

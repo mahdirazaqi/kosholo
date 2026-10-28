@@ -4,7 +4,9 @@ import { memo, useRef, useState } from "react";
 import { AlertCircle, Check, CheckCheck, CheckCircle2, Clock3, Copy, MoreHorizontal, Reply, RotateCw, Trash2 } from "lucide-react";
 import { ImageMedia } from "@/components/chat/media/image-media";
 import { VideoMedia } from "@/components/chat/media/video-media";
+import { FileMedia } from "@/components/chat/media/file-media";
 import { VoiceMedia } from "@/components/chat/media/voice-media";
+import { LocationMedia, LocationThumb } from "@/components/chat/location/location-media";
 import { previewText } from "@/components/chat/message-preview";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
@@ -33,8 +35,9 @@ export type BubbleActions = {
   onOpenActions: (message: ChatMessage) => void; // mobile long-press menu
   onQuoteClick: (messageId: string) => void;
   onRetry: (message: ChatMessage) => void;
-  onOpenMedia: (message: ChatMessage) => void; // full-screen image/video
+  onOpenMedia: (message: ChatMessage) => void; // full-screen image/video/map
   onCancelUpload: (message: ChatMessage) => void;
+  onResumeUpload: (message: ChatMessage) => void; // paused FILE upload: pick the file again
   onSelect: (message: ChatMessage) => void; // enter selection mode with this message
   onToggleSelect: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
@@ -71,8 +74,10 @@ export const MessageBubble = memo(function MessageBubble({
   const canInteract = message.status === "sent" && !selecting;
   const emojiOnly = message.type === "TEXT" && isEmojiOnly(message.content);
   // Images/videos sit edge-to-edge in the bubble; the time overlays them when there's no caption.
-  const visual = (message.type === "IMAGE" || message.type === "VIDEO") && message.media !== null;
-  const timeOverlay = visual && !message.content;
+  const visual =
+    ((message.type === "IMAGE" || message.type === "VIDEO") && message.media !== null) ||
+    (message.type === "LOCATION" && message.location !== null);
+  const timeOverlay = visual && !message.content && message.type !== "LOCATION";
   const isNew = message.tempId !== undefined;
   // "Reply" from the dropdown is applied after it closes: the menu's focus trap
   // would otherwise pull focus back from the composer.
@@ -196,6 +201,19 @@ export const MessageBubble = memo(function MessageBubble({
 
             {message.type === "VOICE" && message.media && (
               <VoiceMedia message={message} isMine={isMine} onCancel={() => actions.onCancelUpload(message)} />
+            )}
+
+            {message.type === "FILE" && message.media && (
+              <FileMedia
+                message={message}
+                isMine={isMine}
+                onCancel={() => actions.onCancelUpload(message)}
+                onResume={() => actions.onResumeUpload(message)}
+              />
+            )}
+
+            {message.type === "LOCATION" && message.location && (
+              <LocationMedia message={message} isMine={isMine} onOpen={() => actions.onOpenMedia(message)} />
             )}
 
             {message.content && (
@@ -330,16 +348,20 @@ function Quote({
         tone,
       )}
     >
-      {replyTo.thumbUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={replyTo.thumbUrl} alt="" className="size-8 shrink-0 rounded object-cover" />
+      {replyTo.location ? (
+        <LocationThumb location={replyTo.location} className="size-8 shrink-0 rounded" />
+      ) : (
+        replyTo.thumbUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={replyTo.thumbUrl} alt="" className="size-8 shrink-0 rounded object-cover" />
+        )
       )}
       <span className="flex min-w-0 flex-1 flex-col items-start">
         <span className={cn("max-w-full truncate font-semibold", !isMine && "text-primary")}>
           {replyTo.senderName}
         </span>
         <span dir="auto" className="w-full truncate opacity-80">
-          {previewText(replyTo)}
+          {previewText({ ...replyTo, locationLabel: replyTo.location?.label })}
         </span>
       </span>
     </button>

@@ -37,6 +37,7 @@ type Props = {
   onReply: (message: ChatMessage) => void;
   onRetry: (message: ChatMessage) => void;
   onCancelUpload: (message: ChatMessage) => void;
+  onResumeUpload: (message: ChatMessage) => void; // paused FILE upload
   // Deletion: null when not in selection mode; ids of selected messages.
   selection: Set<string> | null;
   removing: Set<string>; // fading out before removal
@@ -59,6 +60,7 @@ export function MessageList({
   onReply,
   onRetry,
   onCancelUpload,
+  onResumeUpload,
   selection,
   removing,
   onSelect,
@@ -186,6 +188,10 @@ export function MessageList({
   }, []);
 
   const onOpenMedia = useCallback((message: ChatMessage) => {
+    if (message.location) {
+      setViewer({ kind: "location", location: message.location, messageId: message.id });
+      return;
+    }
     const media = message.media;
     if (!media) return;
     setViewer({
@@ -207,11 +213,12 @@ export function MessageList({
       onRetry,
       onOpenMedia,
       onCancelUpload,
+      onResumeUpload,
       onSelect,
       onToggleSelect,
       onDelete,
     }),
-    [onReply, onCopy, onOpenActions, jumpTo, onRetry, onOpenMedia, onCancelUpload, onSelect, onToggleSelect, onDelete],
+    [onReply, onCopy, onOpenActions, jumpTo, onRetry, onOpenMedia, onCancelUpload, onResumeUpload, onSelect, onToggleSelect, onDelete],
   );
 
   const seenIndex = seenKey === null ? -1 : messages.findIndex((m) => keyOf(m) === seenKey);
@@ -332,7 +339,12 @@ export function MessageList({
           {actionsFor && (
             <>
               <SheetDescription dir="auto" className="mx-4 line-clamp-2 rounded-xl bg-muted px-3 py-2 text-sm">
-                {previewText({ ...actionsFor, duration: actionsFor.media?.duration })}
+                {previewText({
+                  ...actionsFor,
+                  duration: actionsFor.media?.duration,
+                  fileName: actionsFor.media?.originalName,
+                  locationLabel: actionsFor.location?.label,
+                })}
               </SheetDescription>
               <div className="grid gap-1 px-2 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
                 <ActionButton

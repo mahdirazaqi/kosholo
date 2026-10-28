@@ -22,6 +22,7 @@ enum UploadKind {
   VIDEO
   VOICE
   AVATAR
+  FILE // any document, stored and served byte-for-byte (no processing)
 }
 
 enum MessageType {
@@ -30,6 +31,8 @@ enum MessageType {
   VIDEO
   VOICE
   SYSTEM // group events; `meta` holds the structured event (see SystemMeta)
+  LOCATION // latitude/longitude (+ optional label)
+  FILE // a document (Upload kind FILE)
 }
 
 model User {
@@ -49,6 +52,7 @@ model User {
   memberships          ConversationMember[]
   messages             Message[]
   uploads              Upload[]
+  uploadSessions       UploadSession[]
   messageHides         MessageHide[]
 
   @@map("users")
@@ -117,13 +121,17 @@ model Message {
   // IMAGE / VIDEO / VOICE messages point at their processed file.
   uploadId       String?     @unique @map("upload_id") @db.Uuid
   meta           Json?
+  // LOCATION only (6 decimals, validated in sendMessageSchema).
+  latitude       Float?
+  longitude      Float?
+  locationLabel  String?     @map("location_label") @db.VarChar(200)
   createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz
 
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender       User         @relation(fields: [senderId], references: [id])
-  replyTo      Message?     @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
-  upload       Upload?      @relation(fields: [uploadId], references: [id], onDelete: SetNull)
-  replies      Message[]    @relation("MessageReplies")
+  conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User          @relation(fields: [senderId], references: [id])
+  replyTo      Message?      @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  upload       Upload?       @relation(fields: [uploadId], references: [id], onDelete: SetNull)
+  replies      Message[]     @relation("MessageReplies")
   hides        MessageHide[]
 
   @@index([conversationId, createdAt])
@@ -148,23 +156,47 @@ model MessageHide {
 // A processed file on disk under UPLOAD_DIR (never served statically; see
 // /api/media/[uploadId]). Unattached uploads are cleaned up after 24h.
 model Upload {
-  id          String     @id @default(uuid()) @db.Uuid
-  ownerId     String     @map("owner_id") @db.Uuid
-  kind        UploadKind
-  path        String // relative to UPLOAD_DIR: yyyy/mm/{uuid}.{ext}
-  thumbPath   String?    @map("thumb_path")
-  mime        String
-  size        Int
-  width       Int?
-  height      Int?
-  duration    Float? // seconds (video/voice)
-  placeholder String?    @db.Text // tiny blurred image as a data URL
-  waveform    Json? // voice: ~48 numbers 0–1
-  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  id           String     @id @default(uuid()) @db.Uuid
+  ownerId      String     @map("owner_id") @db.Uuid
+  kind         UploadKind
+  path         String // relative to UPLOAD_DIR: yyyy/mm/{uuid}.{ext} (FILE: yyyy/mm/{uuid}, no extension)
+  thumbPath    String?    @map("thumb_path")
+  // FILE only: the sanitized original name (never used on disk).
+  originalName String?    @map("original_name")
+  mime         String
+  size         BigInt
+  width        Int?
+  height       Int?
+  duration     Float? // seconds (video/voice)
+  placeholder  String?    @db.Text // tiny blurred image as a data URL
+  waveform     Json? // voice: ~48 numbers 0–1
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
 
   owner   User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   message Message?
 
   @@index([createdAt])
   @@map("uploads")
+}
+
+// A resumable FILE upload in progress (POST /api/upload/files). Chunks are
+// appended to `tempPath` (relative to UPLOAD_DIR) until receivedSize equals
+// totalSize; `complete` turns it into an Upload. Abandoned sessions (not
+// updated for 24h) are removed by the hourly cleanup with their temp file.
+model UploadSession {
+  id           String   @id @default(uuid()) @db.Uuid
+  ownerId      String   @map("owner_id") @db.Uuid
+  originalName String   @map("original_name")
+  mime         String
+  totalSize    BigInt   @map("total_size")
+  receivedSize BigInt   @default(0) @map("received_size")
+  tempPath     String   @map("temp_path")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([updatedAt])
+  @@map("upload_sessions")
 }

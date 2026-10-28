@@ -16,6 +16,9 @@ export const messageSelect = {
   content: true,
   meta: true,
   upload: { select: chatMediaSelect },
+  latitude: true,
+  longitude: true,
+  locationLabel: true,
   createdAt: true,
   replyToId: true,
   replyToDeleted: true,
@@ -26,8 +29,11 @@ export const messageSelect = {
       type: true,
       content: true,
       createdAt: true,
+      latitude: true,
+      longitude: true,
+      locationLabel: true,
       sender: { select: { name: true } },
-      upload: { select: { id: true, thumbPath: true, duration: true } },
+      upload: { select: { id: true, thumbPath: true, duration: true, originalName: true } },
       // Who deleted the original for themselves (server-side only, never sent).
       hides: { select: { userId: true } },
     },
@@ -51,6 +57,7 @@ export function toChatMessage(row: MessageRow, viewer?: Viewer): ChatMessage {
     type: row.type,
     content: row.content,
     media: row.upload ? toChatMedia(row.upload) : null,
+    location: toLocation(row),
     meta: row.type === "SYSTEM" ? (row.meta as SystemMeta | null) : null,
     createdAt: row.createdAt.toISOString(),
     sender: row.sender,
@@ -62,12 +69,19 @@ export function toChatMessage(row: MessageRow, viewer?: Viewer): ChatMessage {
           senderName: row.replyTo.sender.name,
           thumbUrl: row.replyTo.upload?.thumbPath ? mediaThumbUrl(row.replyTo.upload.id) : null,
           duration: row.replyTo.upload?.duration ?? null,
+          fileName: row.replyTo.upload?.originalName ?? null,
+          location: toLocation(row.replyTo),
         }
       : row.replyToId || row.replyToDeleted
         ? "deleted"
         : null,
     status: "sent",
   };
+}
+
+function toLocation(row: { latitude: number | null; longitude: number | null; locationLabel: string | null }) {
+  if (row.latitude === null || row.longitude === null) return null;
+  return { latitude: row.latitude, longitude: row.longitude, label: row.locationLabel };
 }
 
 export function quoteHiddenFor(row: MessageRow, viewer: Viewer) {

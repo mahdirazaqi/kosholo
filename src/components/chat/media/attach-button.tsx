@@ -1,32 +1,54 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Camera, Images, Loader2, Paperclip } from "lucide-react";
+import dynamic from "next/dynamic";
+import { Camera, FileText, Images, Loader2, MapPin, Paperclip } from "lucide-react";
 import { toast } from "sonner";
 import { BottomSheetContent } from "@/components/bottom-sheet";
+import { FilePreviewDialog } from "@/components/chat/media/file-preview-dialog";
 import { MediaPreviewDialog } from "@/components/chat/media/media-preview-dialog";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { prepareFile, type PreparedFile } from "@/lib/media/client/prepare";
-import { MAX_FILES_PER_SELECTION, MEDIA_ERRORS } from "@/lib/media/limits";
+import { MAX_FILE_SIZE, MAX_FILES_PER_SELECTION, MEDIA_ERRORS, UPLOAD_LIMITS } from "@/lib/media/limits";
+import type { ChatLocation } from "@/lib/types/chat";
 
-// Paperclip → "Photo or video" (gallery, multiple) or "Camera" (capture), then a
-// full-screen preview with a caption before sending.
-export function AttachButton({ onSend }: { onSend: (files: PreparedFile[], caption: string | null) => void }) {
+// The map (Leaflet) is only downloaded when the picker is first opened.
+const LocationPicker = dynamic(() => import("@/components/chat/location/location-picker"), { ssr: false });
+
+// Paperclip → "Photo or video" (gallery, multiple), "Camera" (capture),
+// "File" (any document, original bytes) or "Location". Photos/videos and
+// files get a full-screen preview with a caption before sending.
+export function AttachButton({
+  onSend,
+  onSendDocuments,
+  onSendLocation,
+}: {
+  onSend: (files: PreparedFile[], caption: string | null) => void;
+  onSendDocuments: (files: File[], caption: string | null) => void;
+  onSendLocation: (location: ChatLocation) => void;
+}) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [selection, setSelection] = useState<PreparedFile[]>([]);
+  const [documents, setDocuments] = useState<File[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  async function onFiles(list: FileList | null) {
+  function limit(list: FileList | null) {
     setSheetOpen(false);
-    if (!list || list.length === 0) return;
-    let files = Array.from(list);
-    if (files.length > MAX_FILES_PER_SELECTION) {
-      toast.error(MEDIA_ERRORS.tooMany);
-      files = files.slice(0, MAX_FILES_PER_SELECTION);
-    }
+    if (!list || list.length === 0) return [];
+    const files = Array.from(list);
+    if (files.length <= MAX_FILES_PER_SELECTION) return files;
+    toast.error(MEDIA_ERRORS.tooMany);
+    return files.slice(0, MAX_FILES_PER_SELECTION);
+  }
+
+  async function onMedia(list: FileList | null) {
+    const files = limit(list);
+    if (files.length === 0) return;
     setPreparing(true);
     const prepared: PreparedFile[] = [];
     for (const file of files) {
@@ -38,6 +60,37 @@ export function AttachButton({ onSend }: { onSend: (files: PreparedFile[], capti
     }
     setPreparing(false);
     if (prepared.length) setSelection(prepared);
+  }
+
+  // Refused before any upload starts (the server checks again).
+  function onDocuments(list: FileList | null) {
+    const files = limit(list).filter((file) => {
+      if (file.size <= MAX_FILE_SIZE) return true;
+      toast.error(`${file.name}: ${MEDIA_ERRORS.fileTooLarge()}`);
+      return false;
+    });
+    if (files.length) setDocuments(files);
+  }
+
+  function sendSelection(caption: string | null, asFiles: boolean) {
+    const files = selection;
+    setSelection([]);
+    if (asFiles) {
+      for (const file of files) URL.revokeObjectURL(file.previewUrl);
+      onSendDocuments(
+        files.map((file) => file.original),
+        caption,
+      );
+      return;
+    }
+    // The compressed pipeline has its own limits (e.g. videos up to 50 MB).
+    const fits = files.filter((file) => file.file.size <= UPLOAD_LIMITS[file.kind]);
+    for (const file of files) {
+      if (fits.includes(file)) continue;
+      URL.revokeObjectURL(file.previewUrl);
+      toast.error(`${file.original.name}: ${MEDIA_ERRORS.tooLarge(file.kind)}. Send it without compression instead.`);
+    }
+    if (fits.length) onSend(fits, caption);
   }
 
   return (
@@ -57,12 +110,21 @@ export function AttachButton({ onSend }: { onSend: (files: PreparedFile[], capti
         </SheetTrigger>
         <BottomSheetContent>
           <SheetHeader className="pt-3">
-            <SheetTitle className="text-lg font-bold">Send file</SheetTitle>
-            <SheetDescription className="sr-only">Choose a photo or video</SheetDescription>
+            <SheetTitle className="text-lg font-bold">Attach</SheetTitle>
+            <SheetDescription className="sr-only">Choose a photo, video, file or location</SheetDescription>
           </SheetHeader>
           <div className="grid gap-1 px-2 pb-[max(env(safe-area-inset-bottom),1rem)]">
             <Option icon={<Images />} label="Photo or video" onClick={() => galleryRef.current?.click()} />
             <Option icon={<Camera />} label="Camera" onClick={() => cameraRef.current?.click()} />
+            <Option icon={<FileText />} label="File" onClick={() => fileRef.current?.click()} />
+            <Option
+              icon={<MapPin />}
+              label="Location"
+              onClick={() => {
+                setSheetOpen(false);
+                setPickerOpen(true);
+              }}
+            />
           </div>
         </BottomSheetContent>
       </Sheet>
@@ -74,7 +136,7 @@ export function AttachButton({ onSend }: { onSend: (files: PreparedFile[], capti
         multiple
         hidden
         onChange={(event) => {
-          void onFiles(event.target.files);
+          void onMedia(event.target.files);
           event.target.value = "";
         }}
       />
@@ -85,19 +147,40 @@ export function AttachButton({ onSend }: { onSend: (files: PreparedFile[], capti
         capture="environment"
         hidden
         onChange={(event) => {
-          void onFiles(event.target.files);
+          void onMedia(event.target.files);
+          event.target.value = "";
+        }}
+      />
+      <input
+        ref={fileRef}
+        type="file"
+        multiple
+        hidden
+        onChange={(event) => {
+          onDocuments(event.target.files);
           event.target.value = "";
         }}
       />
 
-      <MediaPreviewDialog
-        files={selection}
-        onChange={setSelection}
+      <MediaPreviewDialog files={selection} onChange={setSelection} onSend={sendSelection} />
+      <FilePreviewDialog
+        files={documents}
+        onChange={setDocuments}
         onSend={(caption) => {
-          onSend(selection, caption);
-          setSelection([]);
+          onSendDocuments(documents, caption);
+          setDocuments([]);
         }}
       />
+      {pickerOpen && (
+        <LocationPicker
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          onSend={(location) => {
+            setPickerOpen(false);
+            onSendLocation(location);
+          }}
+        />
+      )}
     </>
   );
 }
