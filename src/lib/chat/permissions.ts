@@ -33,6 +33,32 @@ export function canClearForEveryone(actor: Pick<Actor, "role" | "conversationTyp
   return actor.conversationType === "DIRECT" || actor.role === "ADMIN";
 }
 
+// ---- Editing ----
+// Only TEXT messages and the captions of IMAGE/VIDEO/FILE can be edited (not
+// VOICE, LOCATION, SYSTEM, nor the media itself). DIRECT/GROUP: only the sender,
+// within the edit window. CHANNEL: any admin, any time. Subscribers never.
+export const EDITABLE_TYPES: readonly MessageType[] = ["TEXT", "IMAGE", "VIDEO", "FILE"];
+
+export type EditBlock = "type" | "forbidden" | "expired";
+
+export function editBlock(
+  actor: { id: string; role: MemberRole; conversationType: ConversationType },
+  message: { senderId: string; type: MessageType; createdAt: string | Date },
+  windowHours: number,
+  now = Date.now(),
+): EditBlock | null {
+  if (!EDITABLE_TYPES.includes(message.type)) return "type";
+  if (actor.conversationType === "CHANNEL") return actor.role === "ADMIN" ? null : "forbidden";
+  if (message.senderId !== actor.id) return "forbidden";
+  return now - new Date(message.createdAt).getTime() > windowHours * 3_600_000 ? "expired" : null;
+}
+
+export const EDIT_ERRORS: Record<EditBlock, string> = {
+  type: "This kind of message can't be edited",
+  forbidden: "You can only edit your own messages",
+  expired: "The time to edit this message has passed",
+};
+
 // Channels: only admins post, reply and send typing events.
 export const canPost = (conversationType: ConversationType, role: MemberRole) =>
   conversationType !== "CHANNEL" || role === "ADMIN";

@@ -7,6 +7,7 @@ import { Bell, BellOff, EllipsisVertical, Megaphone, Trash2, UserX, X } from "lu
 import { toast } from "sonner";
 import { getChannelStats, loadOlderMessages, sendMessage, setMuted } from "@/app/(app)/chats/actions";
 import { deleteMessages } from "@/app/(app)/chats/delete-actions";
+import { editMessage } from "@/app/(app)/chats/edit-actions";
 import { BackButton } from "@/components/back-button";
 import { ChatStatus } from "@/components/chat/chat-status";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
@@ -27,11 +28,11 @@ import { useFileSender } from "@/hooks/use-file-sender";
 import { useMediaSender } from "@/hooks/use-media-sender";
 import { useVisualViewportHeight } from "@/hooks/use-visual-viewport-height";
 import { PREVIEW_LENGTH } from "@/lib/chat/limits";
-import { canDeleteForEveryone, canPost } from "@/lib/chat/permissions";
+import { canDeleteForEveryone, canPost, editBlock } from "@/lib/chat/permissions";
 import { tempId } from "@/lib/client-utils";
 import { audioManager } from "@/lib/media/client/audio-manager";
 import { formatCount } from "@/lib/numbers";
-import { lastConfirmedAt, mergeMessage } from "@/lib/realtime/client/merge";
+import { applyEdit, lastConfirmedAt, mergeMessage } from "@/lib/realtime/client/merge";
 import { getSocket } from "@/lib/realtime/client/socket";
 import { TYPING_CLIENT_THROTTLE_MS } from "@/lib/realtime/events";
 import { isLocalDelete, patchConversation, removeConversation, renameConversation } from "@/lib/realtime/client/store";
@@ -74,6 +75,10 @@ export function ChatView({
   const [cursor, setCursor] = useState(initialPage.nextCursor);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  // Edit mode and reply mode are mutually exclusive.
+  const [editing, setEditing] = useState<ChatMessage | null>(null);
+  // The delete dialog was opened because an edit emptied a text message.
+  const [emptyEditPrompt, setEmptyEditPrompt] = useState(false);
   const [readStates, setReadStates] = useState<MemberReadState[]>(conversation.readStates);
   // Title and members change live in groups (conversation:updated).
   const [chat, setChat] = useState(conversation);
@@ -157,6 +162,14 @@ export function ChatView({
       setSelection(null);
       removeConversation(conversation.id);
     },
+    onEdited: (edit) => {
+      setMessages((current) => applyEdit(current, edit));
+      setReplyTo((current) =>
+        current && current.id === edit.messageId ? { ...current, content: edit.content, editedAt: edit.editedAt } : current,
+      );
+    },
+    initialSyncAt: conversation.loadedAt,
+    getOldestLoadedAt: () => messagesRef.current.find((m) => m.status === "sent")?.createdAt ?? null,
     onDeleted: (messageIds) => removeLocally(messageIds),
     onCleared: (before) =>
       removeLocally(
@@ -185,6 +198,7 @@ export function ChatView({
 
     audioManager.release(removed.flatMap((m) => (m.media ? [m.media.url] : [])));
     setReplyTo((current) => (current && gone.has(current.id) ? null : current));
+    setEditing((current) => (current && gone.has(current.id) ? null : current));
     setSelection((current) => (current ? new Set([...current].filter((id) => !gone.has(id))) : current));
     setMessages((current) =>
       current.map((m) => (quotes.has(m.id) ? { ...m, replyTo: "deleted" as const } : m)),
@@ -207,12 +221,18 @@ export function ChatView({
     );
   }
 
+  const editingRef = useRef(editing);
+  useEffect(() => {
+    editingRef.current = editing;
+  }, [editing]);
+
   const selectionRef = useRef(selection);
   useEffect(() => {
     selectionRef.current = selection;
   }, [selection]);
 
   const startSelection = useCallback((message: ChatMessage) => {
+    if (editingRef.current) return; // no multi-select while editing
     setReplyTo(null);
     setSelection(new Set([message.id]));
   }, []);
@@ -266,7 +286,10 @@ export function ChatView({
       });
   }, [chat.id, chat.muted]);
 
-  const askDelete = useCallback((message: ChatMessage) => setDeleteTargets([message]), []);
+  const askDelete = useCallback((message: ChatMessage) => {
+    setEmptyEditPrompt(false);
+    setDeleteTargets([message]);
+  }, []);
   const askDeleteSelection = useCallback(() => {
     const ids = selectionRef.current;
     if (!ids?.size) return;
@@ -277,6 +300,7 @@ export function ChatView({
   function confirmDelete(forEveryone: boolean) {
     const targets = deleteTargets;
     setDeleteTargets(null);
+    setEmptyEditPrompt(false);
     setSelection(null);
     if (!targets?.length) return;
     const snapshot = removeLocally(targets.map((m) => m.id));
@@ -487,6 +511,12 @@ export function ChatView({
         setSelection(null);
         return;
       }
+      if (editingRef.current && !layerOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        setEditing(null);
+        return;
+      }
       if (replyRef.current) {
         event.preventDefault();
         event.stopPropagation();
@@ -499,7 +529,76 @@ export function ChatView({
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [router, askDeleteSelection]);
 
+  // May I edit this message right now? (The server checks again.)
+  const canEditMessage = useCallback(
+    (message: ChatMessage) =>
+      message.status === "sent" &&
+      editBlock(
+        { id: currentUser.id, role: myRole, conversationType: chat.type },
+        { senderId: message.sender.id, type: message.type, createdAt: message.createdAt },
+        chat.editWindowHours,
+      ) === null,
+    [currentUser.id, myRole, chat.type, chat.editWindowHours],
+  );
+
+  const startEdit = useCallback((message: ChatMessage) => {
+    setReplyTo(null);
+    setSelection(null);
+    setEditing(message);
+  }, []);
+
+  // ArrowUp in an empty composer: my newest editable message.
+  const editLast = useCallback(() => {
+    const last = [...messagesRef.current].reverse().find((m) => canEditMessage(m) && !removing.has(m.id));
+    if (last) startEdit(last);
+  }, [canEditMessage, startEdit, removing]);
+
+  // Optimistic: the bubble shows the new text at once (with the clock icon),
+  // back to the old one with an error if the server refuses.
+  const saveEdit = useCallback(
+    (raw: string) => {
+      const target = editingRef.current;
+      if (!target) return;
+      const content = raw.trim();
+      if (content === (target.content ?? "")) return setEditing(null); // unchanged: nothing to save
+      if (target.type === "TEXT" && content === "") {
+        // A text message can't be empty: offer to delete it instead.
+        setEditing(null);
+        setEmptyEditPrompt(true);
+        setDeleteTargets([target]);
+        return;
+      }
+      const before = { content: target.content, editedAt: target.editedAt ?? null };
+      const setSaving = (saving: boolean) =>
+        setMessages((current) =>
+          current.map((m) => (m.id === target.id ? { ...m, status: saving ? "sending" : "sent" } : m)),
+        );
+      setEditing(null);
+      setMessages((current) => applyEdit(current, { messageId: target.id, content: content || null, editedAt: new Date().toISOString() }));
+      setSaving(true);
+      editMessage({ conversationId: conversation.id, messageId: target.id, content })
+        .then((result) => {
+          if (result.ok) {
+            const saved = result.message;
+            setMessages((current) => applyEdit(current, { messageId: target.id, content: saved.content, editedAt: saved.editedAt ?? null }));
+            return setSaving(false);
+          }
+          setMessages((current) => applyEdit(current, { messageId: target.id, ...before }));
+          setSaving(false);
+          if (result.gone) removeLocally([target.id]);
+          toast.error(result.error);
+        })
+        .catch(() => {
+          setMessages((current) => applyEdit(current, { messageId: target.id, ...before }));
+          setSaving(false);
+          toast.error("Couldn't save the edit");
+        });
+    },
+    [conversation.id],
+  );
+
   const startReply = useCallback((message: ChatMessage) => {
+    setEditing(null);
     setReplyTo(message);
     composerRef.current?.focus();
   }, []);
@@ -609,6 +708,9 @@ export function ChatView({
         onSelect={startSelection}
         onToggleSelect={toggleSelection}
         onDelete={askDelete}
+        canEditMessage={canEditMessage}
+        onEdit={startEdit}
+        editing={editing !== null}
       />
 
       {removed ? (
@@ -642,6 +744,10 @@ export function ChatView({
             ref={composerRef}
             replyTo={replyTo}
             onCancelReply={() => setReplyTo(null)}
+            editing={editing}
+            onCancelEdit={() => setEditing(null)}
+            onSaveEdit={saveEdit}
+            onEditLast={editLast}
             onSend={send}
             onSendFiles={sendFiles}
             onSendDocuments={sendDocuments}
@@ -655,9 +761,15 @@ export function ChatView({
 
       <DeleteDialog
         open={deleteTargets !== null}
-        onOpenChange={(open) => !open && setDeleteTargets(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          setDeleteTargets(null);
+          setEmptyEditPrompt(false);
+        }}
         title={
-          deleteTargets && deleteTargets.length > 1
+          emptyEditPrompt
+            ? "Message is empty. Delete it?"
+            : deleteTargets && deleteTargets.length > 1
             ? `Delete ${formatCount(deleteTargets.length, "message")}?`
             : "Delete message?"
         }

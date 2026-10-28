@@ -212,6 +212,7 @@ and fill in the following (each variable is also explained inside the file):
 | `FFMPEG_TIMEOUT_SECONDS` | Maximum processing time per video/audio file (default 120 seconds) |
 | `MAX_FILE_SIZE_MB` | Largest file users can send, in MB (default `2048` = 2 GB). Files are stored byte-for-byte, so this is also the most disk one upload can take. Also baked into the image for the in-app check: rebuild after changing it (`scripts/deploy.sh` does) |
 | `MAX_CHANNEL_MEMBERS` | Most subscribers one channel can have (default `10000`). Optional, read at runtime (restart the app after changing it, no rebuild) |
+| `EDIT_WINDOW_HOURS` | Hours after sending during which a message in a chat or group can be edited (default `48`). Channel posts can always be edited by admins. Optional, read at runtime |
 | `NEXT_PUBLIC_MAP_TILE_URL` | Map tile URL template for location messages, with `{z}/{x}/{y}` and optionally `{s}`. **Set this to your own provider in production** (see "Map tiles" below). Baked into the image: rebuild after changing |
 | `NEXT_PUBLIC_MAP_SUBDOMAINS` | Letters/values that replace `{s}` (default `abc`) |
 | `NEXT_PUBLIC_MAP_ATTRIBUTION` | The provider's required attribution text, shown on every map |

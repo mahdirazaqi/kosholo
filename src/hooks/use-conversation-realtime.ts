@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { getMessagesSince, markAsRead } from "@/app/(app)/chats/actions";
+import { getEditsSince } from "@/app/(app)/chats/edit-actions";
 import { getSocket } from "@/lib/realtime/client/socket";
 import {
   markConversationRead,
@@ -15,6 +16,7 @@ import type {
   ConversationRemovedPayload,
   ConversationUpdatedPayload,
   MessageDeletedPayload,
+  MessageEditedPayload,
   MessageNewPayload,
 } from "@/lib/realtime/events";
 import type { ChatMessage, ConversationRemovedReason } from "@/lib/types/chat";
@@ -34,6 +36,12 @@ type Options = {
   onCleared: (before: string) => void;
   // The conversation was hard-deleted.
   onConversationDeleted: () => void;
+  // A message was edited (also: edits found while catching up).
+  onEdited: (edit: { messageId: string; content: string | null; editedAt: string }) => void;
+  // Server time the shown messages are known to be current as of (page load,
+  // then each catch-up) and the oldest loaded createdAt: the edit-sync range.
+  initialSyncAt: string;
+  getOldestLoadedAt: () => string | null;
   // Newest server-confirmed createdAt currently shown, for catch-up.
   getLastConfirmedAt: () => string | null;
   // Ids of the server-confirmed messages shown, to learn which were deleted
@@ -56,16 +64,20 @@ export function useConversationRealtime({
   onDeleted,
   onCleared,
   onConversationDeleted,
+  onEdited,
+  initialSyncAt,
+  getOldestLoadedAt,
   getLastConfirmedAt,
   getKnownIds,
 }: Options) {
   // Latest callbacks without re-subscribing on every render.
-  const all = { onMessage, onRead, onUpdated, onRemoved, onDeleted, onCleared, onConversationDeleted, getLastConfirmedAt, getKnownIds };
+  const all = { onMessage, onRead, onUpdated, onRemoved, onDeleted, onCleared, onConversationDeleted, onEdited, getOldestLoadedAt, getLastConfirmedAt, getKnownIds };
   const callbacks = useRef(all);
   useEffect(() => {
     callbacks.current = all;
   });
   const removed = useRef(false);
+  const syncedAt = useRef(initialSyncAt);
 
   const readState = useRef({ last: 0, timer: null as ReturnType<typeof setTimeout> | null });
   const requestRead = useRef(() => {});
@@ -91,7 +103,22 @@ export function useConversationRealtime({
 
     const join = () => socket.emit("conversation:join", conversationId, () => {});
 
+    // Edits made while we were away (offline, hidden tab) in the loaded range.
+    const syncEdits = async () => {
+      const from = callbacks.current.getOldestLoadedAt();
+      if (!from) return;
+      try {
+        const result = await getEditsSince(conversationId, syncedAt.current, from);
+        if (!result) return;
+        for (const edit of result.edits) callbacks.current.onEdited(edit);
+        syncedAt.current = result.serverNow;
+      } catch {
+        // Next reconnect/visibility change retries from the same point.
+      }
+    };
+
     const catchUp = async () => {
+      void syncEdits();
       const since = callbacks.current.getLastConfirmedAt();
       if (!since) return;
       try {
@@ -146,6 +173,10 @@ export function useConversationRealtime({
       removed.current = true;
       callbacks.current.onConversationDeleted();
     };
+    const onEdited = (payload: MessageEditedPayload) => {
+      if (payload.conversationId !== conversationId) return;
+      callbacks.current.onEdited(payload);
+    };
     const onVisibility = () => {
       if (document.visibilityState !== "visible" || removed.current) return;
       setActiveConversation(conversationId);
@@ -162,6 +193,7 @@ export function useConversationRealtime({
     socket.on("message:deleted", onDeleted);
     socket.on("conversation:cleared", onCleared);
     socket.on("conversation:deleted", onConversationDeleted);
+    socket.on("message:edited", onEdited);
     document.addEventListener("visibilitychange", onVisibility);
     if (socket.connected) join();
     requestRead.current();
@@ -175,6 +207,7 @@ export function useConversationRealtime({
       socket.off("message:deleted", onDeleted);
       socket.off("conversation:cleared", onCleared);
       socket.off("conversation:deleted", onConversationDeleted);
+      socket.off("message:edited", onEdited);
       document.removeEventListener("visibilitychange", onVisibility);
       if (read.timer) clearTimeout(read.timer);
       if (socket.connected) socket.emit("conversation:leave", conversationId);

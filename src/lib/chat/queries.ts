@@ -21,6 +21,7 @@ export const messageSelect = {
   longitude: true,
   locationLabel: true,
   createdAt: true,
+  editedAt: true,
   replyToId: true,
   replyToDeleted: true,
   sender: { select: publicUserSelect },
@@ -74,6 +75,7 @@ function toAdminMessage(row: MessageRow, viewer?: Pick<Viewer, "userId" | "clear
     location: toLocation(row),
     meta: row.type === "SYSTEM" ? (row.meta as SystemMeta | null) : null,
     createdAt: row.createdAt.toISOString(),
+    editedAt: row.editedAt?.toISOString() ?? null,
     sender: row.sender,
     replyTo: row.replyTo && quoteVisible
       ? {

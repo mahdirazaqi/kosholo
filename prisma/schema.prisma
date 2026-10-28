@@ -139,6 +139,9 @@ model Message {
   longitude      Float?
   locationLabel  String?     @map("location_label") @db.VarChar(200)
   createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  // Time of the last edit (null = never edited). Edits overwrite `content` in
+  // place; no history is kept.
+  editedAt       DateTime?   @map("edited_at") @db.Timestamptz
 
   conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User          @relation(fields: [senderId], references: [id])

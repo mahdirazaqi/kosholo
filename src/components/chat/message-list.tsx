@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronDown, Copy, Download, Loader2, Reply, Trash2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, Copy, Download, Loader2, Pencil, Reply, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { previewText } from "@/components/chat/message-preview";
 import { MessageBubble, type BubbleActions } from "@/components/chat/message-bubble";
@@ -48,6 +48,10 @@ type Props = {
   onSelect: (message: ChatMessage) => void;
   onToggleSelect: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
+  // Editing: whether I may edit a message (permission + window), and start it.
+  canEditMessage: (message: ChatMessage) => boolean;
+  onEdit: (message: ChatMessage) => void;
+  editing: boolean; // the composer is in edit mode
 };
 
 const keyOf = (message: ChatMessage) => message.tempId ?? message.id;
@@ -73,6 +77,9 @@ export function MessageList({
   onSelect,
   onToggleSelect,
   onDelete,
+  canEditMessage,
+  onEdit,
+  editing,
 }: Props) {
   const timeZone = useTimeZone();
   const isDesktop = useIsDesktop();
@@ -239,8 +246,9 @@ export function MessageList({
       onSelect,
       onToggleSelect,
       onDelete,
+      onEdit,
     }),
-    [onReply, onCopy, onOpenActions, jumpTo, onRetry, onOpenMedia, onCancelUpload, onResumeUpload, onSelect, onToggleSelect, onDelete],
+    [onReply, onCopy, onOpenActions, jumpTo, onRetry, onOpenMedia, onCancelUpload, onResumeUpload, onSelect, onToggleSelect, onDelete, onEdit],
   );
 
   const seenIndex = seenKey === null ? -1 : messages.findIndex((m) => keyOf(m) === seenKey);
@@ -325,6 +333,8 @@ export function MessageList({
                 showAuthor={isChannel && isAdmin}
                 canReply={canReply}
                 canDelete={canDelete}
+                canEdit={canEditMessage(message)}
+                editing={editing}
                 {...actions}
               />
             </Fragment>
@@ -385,6 +395,16 @@ export function MessageList({
                     }}
                   />
                 )}
+                {canEditMessage(actionsFor) && (
+                  <ActionButton
+                    icon={<Pencil />}
+                    label="Edit"
+                    onClick={() => {
+                      setActionsOpen(false);
+                      onEdit(actionsFor);
+                    }}
+                  />
+                )}
                 {actionsFor.content && (
                   <ActionButton
                     icon={<Copy />}
@@ -408,14 +428,16 @@ export function MessageList({
                 )}
                 {canDelete && (
                   <>
-                    <ActionButton
-                      icon={<CheckCircle2 />}
-                      label="Select"
-                      onClick={() => {
-                        setActionsOpen(false);
-                        onSelect(actionsFor);
-                      }}
-                    />
+                    {!editing && (
+                      <ActionButton
+                        icon={<CheckCircle2 />}
+                        label="Select"
+                        onClick={() => {
+                          setActionsOpen(false);
+                          onSelect(actionsFor);
+                        }}
+                      />
+                    )}
                     <ActionButton
                       icon={<Trash2 />}
                       label="Delete"

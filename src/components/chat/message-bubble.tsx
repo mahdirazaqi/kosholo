@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useRef, useState } from "react";
-import { AlertCircle, Check, CheckCheck, CheckCircle2, Clock3, Copy, Download, Eye, MoreHorizontal, Reply, RotateCw, Trash2 } from "lucide-react";
+import { AlertCircle, Check, CheckCheck, CheckCircle2, Clock3, Copy, Download, Eye, MoreHorizontal, Pencil, Reply, RotateCw, Trash2 } from "lucide-react";
 import { ImageMedia } from "@/components/chat/media/image-media";
 import { VideoMedia } from "@/components/chat/media/video-media";
 import { FileMedia } from "@/components/chat/media/file-media";
@@ -10,6 +10,7 @@ import { LocationMedia, LocationThumb } from "@/components/chat/location/locatio
 import { previewText } from "@/components/chat/message-preview";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +21,7 @@ import {
 import { vibrate } from "@/lib/client-utils";
 import { formatCompactNumber } from "@/lib/numbers";
 import { isEmojiOnly } from "@/lib/emoji";
-import { formatTime } from "@/lib/format-date";
+import { formatDaySeparator, formatTime } from "@/lib/format-date";
 import { useTimeZone } from "@/hooks/use-time-zone";
 import type { ChatMessage } from "@/lib/types/chat";
 import { nameColor } from "@/lib/colors";
@@ -42,6 +43,7 @@ export type BubbleActions = {
   onSelect: (message: ChatMessage) => void; // enter selection mode with this message
   onToggleSelect: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
+  onEdit: (message: ChatMessage) => void;
 };
 
 type Props = BubbleActions & {
@@ -62,6 +64,8 @@ type Props = BubbleActions & {
   showAuthor?: boolean; // admins see which admin posted
   canReply: boolean;
   canDelete: boolean;
+  canEdit: boolean; // own message / channel admin, editable type, inside the window
+  editing: boolean; // the composer is in edit mode: no swipe-to-reply, no selecting
 };
 
 export const MessageBubble = memo(function MessageBubble({
@@ -80,6 +84,8 @@ export const MessageBubble = memo(function MessageBubble({
   showAuthor = false,
   canReply,
   canDelete,
+  canEdit,
+  editing,
   ...actions
 }: Props) {
   const isChannel = channelTitle !== undefined;
@@ -96,7 +102,7 @@ export const MessageBubble = memo(function MessageBubble({
   const replyAfterClose = useRef(false);
 
   const downloadable = isChannel && message.media !== null && message.status === "sent";
-  const hasMenuItems = canReply || canDelete || Boolean(message.content) || downloadable;
+  const hasMenuItems = canReply || canDelete || canEdit || Boolean(message.content) || downloadable;
   const menu = isDesktop && canInteract && hasMenuItems && (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -125,6 +131,12 @@ export const MessageBubble = memo(function MessageBubble({
             Reply
           </DropdownMenuItem>
         )}
+        {canEdit && (
+          <DropdownMenuItem onSelect={() => actions.onEdit(message)}>
+            <Pencil />
+            Edit
+          </DropdownMenuItem>
+        )}
         {message.content && (
           <DropdownMenuItem onSelect={() => actions.onCopy(message)}>
             <Copy />
@@ -141,10 +153,12 @@ export const MessageBubble = memo(function MessageBubble({
         )}
         {canDelete && (
           <>
-            <DropdownMenuItem onSelect={() => actions.onSelect(message)}>
-              <CheckCircle2 />
-              Select
-            </DropdownMenuItem>
+            {!editing && (
+              <DropdownMenuItem onSelect={() => actions.onSelect(message)}>
+                <CheckCircle2 />
+                Select
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => actions.onDelete(message)}>
               <Trash2 />
@@ -188,7 +202,7 @@ export const MessageBubble = memo(function MessageBubble({
         )}
         <Swipeable
           enabled={canInteract && !isDesktop && hasMenuItems}
-          onSwipe={canReply ? () => actions.onReply(message) : undefined}
+          onSwipe={canReply && !editing ? () => actions.onReply(message) : undefined}
           onLongPress={() => actions.onOpenActions(message)}
           className={isChannel ? "w-full" : undefined}
         >
@@ -297,7 +311,7 @@ export const MessageBubble = memo(function MessageBubble({
                     {formatCompactNumber(message.views)}
                   </span>
                 )}
-                <MessageTime value={message.createdAt} />
+                <Stamp message={message} />
                 {(isChannel ? message.status !== "sent" : isMine) && (
                   <StatusIcon status={message.status} read={read} />
                 )}
@@ -356,10 +370,39 @@ function MessageTime({ value }: { value: string }) {
   );
 }
 
+// The send time, or "edited" + the edit time. Hover (mouse) or tap opens the
+// exact times. Nothing else changes in the bubble when the label appears.
+function Stamp({ message }: { message: ChatMessage }) {
+  const timeZone = useTimeZone();
+  const [open, setOpen] = useState(false);
+  if (!message.editedAt) return <MessageTime value={message.createdAt} />;
+  const when = (value: string) => `${formatDaySeparator(value, timeZone)} ${formatTime(value, timeZone)}`;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onPointerEnter={(event) => event.pointerType === "mouse" && setOpen(true)}
+          onPointerLeave={(event) => event.pointerType === "mouse" && setOpen(false)}
+          className="inline-flex items-center gap-1 whitespace-nowrap rounded-sm"
+        >
+          {message.views !== undefined && <span aria-hidden>·</span>}
+          <span>edited</span>
+          <MessageTime value={message.editedAt} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" className="w-auto space-y-1 px-3 py-2 text-xs" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <p suppressHydrationWarning>Sent: {when(message.createdAt)}</p>
+        <p suppressHydrationWarning>Edited: {when(message.editedAt)}</p>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function TimeOverlay({ message, isMine, read }: { message: ChatMessage; isMine: boolean; read: boolean }) {
   return (
     <span className="pointer-events-none absolute end-1.5 bottom-1.5 flex items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-[11px] leading-4 text-white">
-      <MessageTime value={message.createdAt} />
+      <Stamp message={message} />
       {isMine && <StatusIcon status={message.status} read={read} />}
     </span>
   );

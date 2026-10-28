@@ -18,6 +18,7 @@ export const LIMITS = {
   registrations: { max: 5, windowMs: 60 * 60 * 1000 },
   userLookups: { max: 30, windowMs: 10 * 60 * 1000 },
   messages: { max: 60, windowMs: 60 * 1000 },
+  edits: { max: 60, windowMs: 10 * 60 * 1000 },
   // Channel invite links: every join attempt, and every unknown token seen.
   channelJoins: { max: 20, windowMs: 10 * 60 * 1000 },
   badInviteLinks: { max: 10, windowMs: 10 * 60 * 1000 },

@@ -91,6 +91,15 @@ export type PresenceState = {
   lastSeenAt: string | null; // ISO; null if never seen
 };
 
+// A message's text/caption was edited in place. Carries no author identity, so
+// the same payload is safe for channel subscribers.
+export type MessageEditedPayload = {
+  conversationId: string;
+  messageId: string;
+  content: string | null;
+  editedAt: string; // ISO
+};
+
 export type JoinResult = { ok: true } | { ok: false; error: "forbidden" | "invalid" };
 
 // ---- Events ----
@@ -109,6 +118,8 @@ export interface ServerToClientEvents {
   "conversation:joined": (payload: ConversationJoinedPayload) => void;
   // To user:{id} of a former member only.
   "conversation:removed": (payload: ConversationRemovedPayload) => void;
+  // To user:{id} of every member who can still see the message (incl. the editor's other tabs).
+  "message:edited": (payload: MessageEditedPayload) => void;
   // For everyone: to user:{memberId} of every member. For me: to my user room.
   "message:deleted": (payload: MessageDeletedPayload) => void;
   // To the user rooms of the affected users (me, or every member).

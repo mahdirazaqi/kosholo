@@ -1,3 +1,4 @@
+import { PREVIEW_LENGTH } from "@/lib/chat/limits";
 import type { ChatMessage } from "@/lib/types/chat";
 
 // The dedupe rule: a message is identified by its server id. An incoming
@@ -38,4 +39,21 @@ export function lastConfirmedAt(messages: ChatMessage[]) {
     if (messages[index].status === "sent") return messages[index].createdAt;
   }
   return null;
+}
+
+// An edit changes the message in place and every quote of it (they show the
+// latest content). Order, status and everything else stay as they are.
+export function applyEdit(
+  messages: ChatMessage[],
+  edit: { messageId: string; content: string | null; editedAt: string | null },
+): ChatMessage[] {
+  return messages.map((message) => {
+    if (message.id === edit.messageId) {
+      return { ...message, content: edit.content, editedAt: edit.editedAt };
+    }
+    if (message.replyTo && message.replyTo !== "deleted" && message.replyTo.id === edit.messageId) {
+      return { ...message, replyTo: { ...message.replyTo, content: edit.content?.slice(0, PREVIEW_LENGTH) ?? null } };
+    }
+    return message;
+  });
 }

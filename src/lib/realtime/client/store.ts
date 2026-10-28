@@ -155,6 +155,7 @@ export function applyMessageToList(message: ChatMessage): boolean {
   const updated: ConversationListItem = {
     ...item,
     lastMessage: {
+      id: message.id,
       type: message.type,
       duration: message.media?.duration ?? null,
       content: message.content?.slice(0, PREVIEW_LENGTH) ?? null,
@@ -168,6 +169,20 @@ export function applyMessageToList(message: ChatMessage): boolean {
   };
   set({ conversations: [updated, ...conversations.filter((_, i) => i !== index)] });
   return true;
+}
+
+// An edited message that is the row's last message updates the preview text
+// only (no reordering, no unread change).
+export function applyEditToList(conversationId: string, messageId: string, content: string | null) {
+  const conversations = get().conversations;
+  if (!conversations) return;
+  set({
+    conversations: conversations.map((item) =>
+      item.id === conversationId && item.lastMessage?.id === messageId
+        ? { ...item, lastMessage: { ...item.lastMessage, content: content?.slice(0, PREVIEW_LENGTH) ?? null } }
+        : item,
+    ),
+  });
 }
 
 export function insertConversation(item: ConversationListItem) {

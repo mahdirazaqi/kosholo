@@ -15,7 +15,7 @@ import { tryGetIO } from "@/server/io";
 // batches, yielding to the event loop in between so it never blocks.
 const FAN_OUT_CHUNK = 500;
 
-async function emitChunked<E extends keyof ServerToClientEvents>(
+export async function emitChunked<E extends keyof ServerToClientEvents>(
   userIds: string[],
   event: E,
   ...args: Parameters<ServerToClientEvents[E]>

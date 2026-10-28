@@ -86,6 +86,8 @@ export type ChatMessage = {
   // (members never get an id or username), and the view count.
   signature?: string;
   views?: number;
+  // ISO time of the last edit; null/absent = never edited.
+  editedAt?: string | null;
 };
 
 export type LocalUpload = {
@@ -103,6 +105,7 @@ export type MessagesPage = {
 };
 
 export type LastMessagePreview = {
+  id: string; // so an edit of the last message can update the preview
   type: MessageType;
   duration: number | null; // voice
   content: string | null; // first 100 chars
@@ -159,6 +162,8 @@ export type ChatConversation = {
   readStates: MemberReadState[]; // every member except the viewer (empty in channels)
   myRole: MemberRole;
   lastReadAt: string | null; // mine when the chat was opened: where "unread" starts
+  editWindowHours: number; // DIRECT/GROUP messages can be edited this long after sending
+  loadedAt: string; // server time of this load: where edit sync starts
   isOwner: boolean; // CHANNEL only
   muted: boolean;
   description: string | null; // GROUP/CHANNEL

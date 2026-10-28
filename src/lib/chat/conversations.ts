@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Prisma } from "@/generated/prisma/client";
+import { editWindowHours } from "@/lib/chat/edit-config";
 import { conversationSelectFor, preview, toChatMember, toReadState } from "@/lib/chat/queries";
 import { visibleSql } from "@/lib/chat/visibility";
 import { db } from "@/lib/db";
@@ -58,6 +59,8 @@ export async function getConversationForMember(
     readStates: isChannel ? [] : conversation.members.filter((member) => member.userId !== userId).map(toReadState),
     myRole: me?.role ?? "MEMBER",
     lastReadAt: me?.lastReadAt?.toISOString() ?? null,
+    editWindowHours: editWindowHours(),
+    loadedAt: new Date().toISOString(),
     isOwner: isChannel && conversation.ownerId === userId,
     muted: me?.muted ?? false,
     description: conversation.description,
@@ -129,6 +132,7 @@ export async function getConversations(
       myRole,
       ...describe(conversation, userId),
       lastMessage: {
+        id: last.id,
         type: last.type,
         duration: last.upload?.duration ?? null,
         content: preview(last.content),

@@ -61,3 +61,11 @@ export const conversationDeleteSchema = z.object({
   conversationId: z.uuid({ error: "Chat not found" }),
   forEveryone: z.boolean(),
 });
+
+// Edit: the type-specific rules (text 1–4000, caption 0–1000) are applied in
+// lib/chat/edit.ts once the message type is known.
+export const editMessageSchema = z.object({
+  conversationId: z.uuid({ error: "Chat not found" }),
+  messageId: z.uuid({ error: "Message not found" }),
+  content: z.string().trim().max(MAX_MESSAGE_LENGTH, "Message is too long"),
+});

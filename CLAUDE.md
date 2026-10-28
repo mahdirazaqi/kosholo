@@ -76,7 +76,7 @@ src/lib/realtime/     events.ts (typed event contract + rooms), membership.ts (c
 src/lib/realtime/client/ socket.ts (typed client), store.ts (zustand), merge.ts (dedupe rule)
 src/lib/media/        limits.ts (shared), storage.ts, ffmpeg.ts, serialize.ts (no server-only: also used by the custom server);
                       process.ts (sharp/ffmpeg), access.ts, serve.ts, routes.ts (server-only); client/ (prepare, upload, audio-manager)
-src/lib/chat/         queries.ts (selects + mappers), conversations.ts, messages.ts, groups.ts (group rules), channels.ts (channel rules), channel-view.ts (subscriber copy of a post, client-safe), views.ts (post view counts), limits.ts, system-text.ts (client-safe),
+src/lib/chat/         edit.ts + edit-config.ts (message editing), queries.ts (selects + mappers), conversations.ts, messages.ts, groups.ts (group rules), channels.ts (channel rules), channel-view.ts (subscriber copy of a post, client-safe), views.ts (post view counts), limits.ts, system-text.ts (client-safe),
                       visibility.ts (the visibility rule), delete.ts (deletion rules), purge.ts (hard delete + GC), permissions.ts (client-safe)
 src/lib/colors.ts     stable per-id colors (avatar tints, group sender names)
 src/lib/types/chat.ts shared chat types (ChatMessage, ConversationListItem, ...)
@@ -257,6 +257,17 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
   - They break sender runs, can't be replied to (the server rejects `replyToId` pointing at one) and never count as unread (excluded in the unread SQL and in the client store).
   - They do show as the chat-list preview.
 - **Creation:** `recordEvent()` in `groups.ts` creates them and bumps `conversation.updatedAt` in the same transaction.
+
+## Editing messages
+
+Telegram-style, **in place**: `Message.editedAt` (nullable) and the new `content`; no history is stored (like hard deletion). Server: `src/lib/chat/edit.ts` (`editMessage`, `getEditsSince`, `EditError`) and `chats/edit-actions.ts` (`editMessage`, `getEditsSince`); the rules live in `permissions.ts` (`editBlock`, client-safe, used by both sides).
+- **What:** TEXT (the text, 1–4000 after trim) and the caption of IMAGE/VIDEO/FILE (0–1000, can be removed). Never VOICE, LOCATION, SYSTEM or the media itself. A TEXT message can't become empty: the client opens the delete dialog ("Message is empty. Delete it?") instead of saving.
+- **Who:** DIRECT/GROUP: only the sender, only within `EDIT_WINDOW_HOURS` (runtime env, default 48; `ChatConversation.editWindowHours` hides "Edit" after it). CHANNEL: any admin, any post, no time limit; subscribers never. The server re-checks everything (`EDIT_ERRORS`: "You can only edit your own messages", "The time to edit this message has passed", …); the visibility rule decides whether the message still exists for the editor ("This message has been deleted" → the client drops it).
+- **No-op:** identical content saves nothing, keeps `editedAt`, sends no event. An edit never changes `createdAt` (order), `conversation.updatedAt`, `lastReadAt`, unread counts, views or read receipts, and never plays a sound. One conditional `updateMany` (id + conversation + visibility) does the write; edits are rate limited (`LIMITS.edits`, 60 per 10 minutes).
+- **Realtime:** `message:edited { conversationId, messageId, content, editedAt }` to the user rooms of the members who can still see the message (no `MessageHide`, not cleared past it), including the editor's other tabs. The payload carries no author, so channel subscribers learn nothing about which admin edited. Clients update the bubble, every quote of it (`applyEdit`, also the reply bar), the chat-list preview when it is the row's last message (`LastMessagePreview.id`, `applyEditToList`) and emoji-only rendering.
+- **Offline sync:** the open chat catches up with `getEditsSince(conversationId, since, from)` (edits after the last sync, only messages created at or after the oldest loaded one) on reconnect and when the tab is visible again. `since` starts at `ChatConversation.loadedAt` and then follows the server time returned by each sync.
+- **UI:** "Edit" (pencil) in the message menu (mobile sheet and desktop hover menu) only when allowed; ArrowUp in an empty desktop composer edits my newest editable message. Edit mode: a bar like the reply bar ("Edit message" / "Edit caption" with the thumbnail), the field filled with the text (caret at the end), the send button becomes a check mark, attach and mic are hidden, no typing indicator. Edit and reply are exclusive; Escape or X cancels and restores the previous draft; swipe-to-reply and "Select" are off while editing. Saving is optimistic (clock icon while saving, reverted with an error toast on failure).
+- **Label:** "edited" + the edit time sits before the time in the footer (or the overlay for emoji-only and caption-less media, and next to the view count in channels: "👁 123 · edited 14:32"). Hover (mouse) or tap shows "Sent: …" and "Edited: …". Not shown in the chat list or in quotes.
 
 ## Deleting messages and conversations
 
@@ -563,6 +574,7 @@ Full step-by-step guide (for the server admin): `DEPLOY.md`.
   - The client IP is the right-most `X-Forwarded-For` entry (the one Caddy appends).
   - ffmpeg runs at most 2 jobs at a time, each with a `FFMPEG_TIMEOUT_SECONDS` limit.
 - **Logging:** server code logs through `src/lib/logger.ts` (`logger.info/warn/error(scope, msg, err?)`, timestamped and levelled). Never log secrets, tokens, passwords or message contents.
+- **`EDIT_WINDOW_HOURS`** (runtime, default 48): how long a DIRECT/GROUP message can be edited. Validated in `src/server/env.ts`; documented in `.env.example`, `.env.production.example` and DEPLOY.md §5.
 - **`MAX_CHANNEL_MEMBERS`** (runtime, default 10000): the most subscribers a channel can have; checked inside the add/join transaction (`assertCapacity`). Validated in `src/server/env.ts`; documented in `.env.example`, `.env.production.example` and DEPLOY.md §5.
 - **Rule: every new env var** must be added to `.env.example`, `.env.production.example` (commented) **and** the table in `DEPLOY.md` §5. If the container needs a fixed value, set it in `docker-compose.prod.yml`.
   - Build-time variables (`NEXT_PUBLIC_*`, and `MAX_FILE_SIZE_MB` for the client check) must also be passed as `build.args` in `docker-compose.prod.yml` and declared as `ARG`/`ENV` in the Dockerfile build stage; changing them needs a rebuild.

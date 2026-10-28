@@ -21,6 +21,8 @@ const maxChannelMembers = process.env.MAX_CHANNEL_MEMBERS;
 if (maxChannelMembers && !(Number.isInteger(Number(maxChannelMembers)) && Number(maxChannelMembers) > 0)) {
   problems.push("MAX_CHANNEL_MEMBERS must be a positive whole number");
 }
+const editWindow = process.env.EDIT_WINDOW_HOURS;
+if (editWindow && !(Number(editWindow) > 0)) problems.push("EDIT_WINDOW_HOURS must be a positive number of hours");
 
 if (problems.length) {
   for (const problem of problems) console.error(`${new Date().toISOString()} ERROR [env] ${problem}`);

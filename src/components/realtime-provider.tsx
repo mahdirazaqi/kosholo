@@ -15,11 +15,13 @@ import type {
   ConversationRemovedPayload,
   ConversationUpdatedPayload,
   MessageDeletedPayload,
+  MessageEditedPayload,
   MessageNewPayload,
   TypingPayload,
   UserUpdatedPayload,
 } from "@/lib/realtime/events";
 import {
+  applyEditToList,
   applyMessageToList,
   countIncomingUnread,
   refreshUnreadSummary,
@@ -109,6 +111,9 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         .then((item) => item && insertConversation(item))
         .catch(() => {});
     };
+    // Chat-list preview only: no reordering, no unread change, no sound.
+    const onEdited = ({ conversationId, messageId, content }: MessageEditedPayload) =>
+      applyEditToList(conversationId, messageId, content);
     const onUserUpdated = ({ userId, avatarUrl }: UserUpdatedPayload) => {
       if (avatarUrl !== undefined) setAvatarOverride(userId, avatarUrl);
     };
@@ -147,6 +152,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     socket.on("message:deleted", onMessageDeleted);
     socket.on("conversation:cleared", onCleared);
     socket.on("conversation:deleted", onDeleted);
+    socket.on("message:edited", onEdited);
     socket.on("user:updated", onUserUpdated);
     socket.on("typing:start", onTypingStart);
     socket.on("typing:stop", onTypingStop);
@@ -169,6 +175,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       socket.off("message:deleted", onMessageDeleted);
       socket.off("conversation:cleared", onCleared);
       socket.off("conversation:deleted", onDeleted);
+      socket.off("message:edited", onEdited);
       socket.off("user:updated", onUserUpdated);
       socket.off("typing:start", onTypingStart);
       socket.off("typing:stop", onTypingStop);
