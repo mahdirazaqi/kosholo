@@ -37,6 +37,8 @@ export function systemMessageText(
       return meta.removed ? `${actor} removed the group photo` : `${actor} changed the group photo`;
     case "admin_demoted":
       return `${actor} removed ${targets} as admin`;
+    case "history_cleared":
+      return `${actor} cleared the group history`;
     default:
       return "Group event";
   }

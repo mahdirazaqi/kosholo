@@ -49,6 +49,27 @@ export type ConversationRemovedPayload = {
   reason: ConversationRemovedReason;
 };
 
+// Messages hard-deleted for everyone, or hidden "for me" (then only to my
+// own tabs/devices).
+export type MessageDeletedPayload = {
+  conversationId: string;
+  messageIds: string[];
+};
+
+// History cleared: every message created at or before `before` is gone for
+// the receiver (for me: my tabs only; for everyone: every member).
+export type ConversationClearedPayload = {
+  conversationId: string;
+  forEveryone: boolean;
+  before: string; // ISO
+};
+
+// The conversation was hard-deleted (DIRECT "delete for everyone", or a
+// DIRECT chat both members had cleared).
+export type ConversationDeletedPayload = {
+  conversationId: string;
+};
+
 export type PresenceState = {
   userId: string;
   online: boolean;
@@ -71,6 +92,12 @@ export interface ServerToClientEvents {
   "user:updated": (payload: UserUpdatedPayload) => void;
   // To user:{id} of a former member only.
   "conversation:removed": (payload: ConversationRemovedPayload) => void;
+  // For everyone: to user:{memberId} of every member. For me: to my user room.
+  "message:deleted": (payload: MessageDeletedPayload) => void;
+  // To the user rooms of the affected users (me, or every member).
+  "conversation:cleared": (payload: ConversationClearedPayload) => void;
+  // To user:{id} of every former member; their sockets leave conv:{id}.
+  "conversation:deleted": (payload: ConversationDeletedPayload) => void;
   // To user:{memberId} of every member except the typist.
   "typing:start": (payload: TypingPayload) => void;
   "typing:stop": (payload: TypingPayload) => void;

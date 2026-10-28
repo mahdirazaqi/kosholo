@@ -65,6 +65,13 @@ export const audioManager = {
     element().currentTime = seconds;
     emit({ currentTime: seconds });
   },
+  // A voice message was deleted: stop it if it's the one loaded.
+  release(srcs: string[]) {
+    if (!state.src || !srcs.includes(state.src)) return;
+    audio?.pause();
+    audio?.removeAttribute("src");
+    emit({ src: null, playing: false, currentTime: 0, duration: 0 });
+  },
   // 1x → 1.5x → 2x → 1x, shared by all voices.
   cycleRate() {
     const rate = state.rate === 1 ? 1.5 : state.rate === 1.5 ? 2 : 1;

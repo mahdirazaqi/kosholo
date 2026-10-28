@@ -32,3 +32,25 @@ export function emitRemoved(conversationId: string, userIds: string[], reason: C
   io.to(rooms).emit("conversation:removed", { conversationId, reason });
   io.in(rooms).socketsLeave(conversationRoom(conversationId));
 }
+
+// To specific users' rooms (e.g. "delete for me" → my other tabs/devices).
+export function emitToUsers<E extends keyof ServerToClientEvents>(
+  userIds: string[],
+  event: E,
+  ...args: Parameters<ServerToClientEvents[E]>
+) {
+  const io = tryGetIO();
+  if (!io || userIds.length === 0) return;
+  io.to(userIds.map(userRoom)).emit(event, ...args);
+}
+
+// A conversation was hard-deleted: tell its former members (captured before
+// the delete), pull their sockets out of the room, drop the cached members.
+export function emitConversationDeleted(conversationId: string, memberIds: string[]) {
+  invalidateMembership(conversationId);
+  const io = tryGetIO();
+  if (!io || memberIds.length === 0) return;
+  const rooms = memberIds.map(userRoom);
+  io.to(rooms).emit("conversation:deleted", { conversationId });
+  io.in(rooms).socketsLeave(conversationRoom(conversationId));
+}

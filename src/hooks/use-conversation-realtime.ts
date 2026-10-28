@@ -9,9 +9,12 @@ import {
   useRealtimeStore,
 } from "@/lib/realtime/client/store";
 import type {
+  ConversationClearedPayload,
+  ConversationDeletedPayload,
   ConversationReadPayload,
   ConversationRemovedPayload,
   ConversationUpdatedPayload,
+  MessageDeletedPayload,
   MessageNewPayload,
 } from "@/lib/realtime/events";
 import type { ChatMessage, ConversationRemovedReason } from "@/lib/types/chat";
@@ -25,13 +28,22 @@ type Options = {
   onUpdated: (payload: ConversationUpdatedPayload) => void;
   // I'm no longer a member (removed / left elsewhere / group deleted).
   onRemoved: (reason: ConversationRemovedReason) => void;
+  // Messages deleted (for everyone, or for me in another tab/device).
+  onDeleted: (messageIds: string[]) => void;
+  // History cleared: everything created at or before `before` is gone.
+  onCleared: (before: string) => void;
+  // The conversation was hard-deleted.
+  onConversationDeleted: () => void;
   // Newest server-confirmed createdAt currently shown, for catch-up.
   getLastConfirmedAt: () => string | null;
+  // Ids of the server-confirmed messages shown, to learn which were deleted
+  // while we were offline.
+  getKnownIds: () => string[];
 };
 
 // Everything the open chat needs from the socket:
 // - joins conv:{id} (and re-joins after reconnects),
-// - delivers message:new / conversation:read for this conversation,
+// - delivers message:new / conversation:read and deletions for this conversation,
 // - catches up on missed messages after a reconnect or when the tab is visible again,
 // - marks the conversation read (throttled, only while the tab is visible).
 // Returns `requestRead` for callers to signal "the user has seen new messages".
@@ -41,12 +53,17 @@ export function useConversationRealtime({
   onRead,
   onUpdated,
   onRemoved,
+  onDeleted,
+  onCleared,
+  onConversationDeleted,
   getLastConfirmedAt,
+  getKnownIds,
 }: Options) {
   // Latest callbacks without re-subscribing on every render.
-  const callbacks = useRef({ onMessage, onRead, onUpdated, onRemoved, getLastConfirmedAt });
+  const all = { onMessage, onRead, onUpdated, onRemoved, onDeleted, onCleared, onConversationDeleted, getLastConfirmedAt, getKnownIds };
+  const callbacks = useRef(all);
   useEffect(() => {
-    callbacks.current = { onMessage, onRead, onUpdated, onRemoved, getLastConfirmedAt };
+    callbacks.current = all;
   });
   const removed = useRef(false);
 
@@ -78,7 +95,7 @@ export function useConversationRealtime({
       const since = callbacks.current.getLastConfirmedAt();
       if (!since) return;
       try {
-        const result = await getMessagesSince(conversationId, since);
+        const result = await getMessagesSince(conversationId, since, callbacks.current.getKnownIds());
         if (!result) {
           // No longer a member (e.g. removed while offline).
           if (!removed.current) {
@@ -87,6 +104,7 @@ export function useConversationRealtime({
           }
           return;
         }
+        if (result.goneIds.length) callbacks.current.onDeleted(result.goneIds);
         for (const message of result.messages) callbacks.current.onMessage(message, null);
         for (const state of result.readStates) {
           if (state.lastReadAt) callbacks.current.onRead(state.userId, state.lastReadAt);
@@ -117,6 +135,17 @@ export function useConversationRealtime({
       removed.current = true;
       callbacks.current.onRemoved(reason);
     };
+    const onDeleted = ({ conversationId: id, messageIds }: MessageDeletedPayload) => {
+      if (id === conversationId) callbacks.current.onDeleted(messageIds);
+    };
+    const onCleared = ({ conversationId: id, before }: ConversationClearedPayload) => {
+      if (id === conversationId) callbacks.current.onCleared(before);
+    };
+    const onConversationDeleted = ({ conversationId: id }: ConversationDeletedPayload) => {
+      if (id !== conversationId) return;
+      removed.current = true;
+      callbacks.current.onConversationDeleted();
+    };
     const onVisibility = () => {
       if (document.visibilityState !== "visible" || removed.current) return;
       setActiveConversation(conversationId);
@@ -130,6 +159,9 @@ export function useConversationRealtime({
     socket.on("conversation:read", onRead);
     socket.on("conversation:updated", onUpdated);
     socket.on("conversation:removed", onRemoved);
+    socket.on("message:deleted", onDeleted);
+    socket.on("conversation:cleared", onCleared);
+    socket.on("conversation:deleted", onConversationDeleted);
     document.addEventListener("visibilitychange", onVisibility);
     if (socket.connected) join();
     requestRead.current();
@@ -140,6 +172,9 @@ export function useConversationRealtime({
       socket.off("conversation:read", onRead);
       socket.off("conversation:updated", onUpdated);
       socket.off("conversation:removed", onRemoved);
+      socket.off("message:deleted", onDeleted);
+      socket.off("conversation:cleared", onCleared);
+      socket.off("conversation:deleted", onConversationDeleted);
       document.removeEventListener("visibilitychange", onVisibility);
       if (read.timer) clearTimeout(read.timer);
       if (socket.connected) socket.emit("conversation:leave", conversationId);

@@ -2,6 +2,7 @@ import "server-only";
 
 import type { MemberRole, Prisma } from "@/generated/prisma/client";
 import { messageSelect, toChatMember, toChatMessage, conversationSelect } from "@/lib/chat/queries";
+import { collectGarbage, purgeConversation } from "@/lib/chat/purge";
 import { db } from "@/lib/db";
 import { formatNumber } from "@/lib/numbers";
 import type { ChatMember, ChatMessage, GroupInfo, SystemMeta } from "@/lib/types/chat";
@@ -36,7 +37,7 @@ async function requireAdmin(tx: Tx, conversationId: string, userId: string) {
 }
 
 // Records the event as a SYSTEM message and bumps the conversation.
-async function recordEvent(tx: Tx, conversationId: string, actor: Actor, meta: Omit<SystemMeta, "actorId" | "actorName">, at = new Date()) {
+export async function recordEvent(tx: Tx, conversationId: string, actor: Actor, meta: Omit<SystemMeta, "actorId" | "actorName">, at = new Date()) {
   const row = await tx.message.create({
     data: {
       conversationId,
@@ -139,15 +140,20 @@ export async function removeMember(actor: Actor, conversationId: string, userId:
       targetIds: [userId],
       targetNames: await namesOf(tx, [userId]),
     });
-    return { message };
+    // Messages only the removed member could still see are garbage now.
+    return { message, purged: await collectGarbage(tx, conversationId) };
   });
 }
 
 // Any member can leave. The last admin leaving promotes the longest-standing
-// member; the last member leaving deletes the conversation.
-export async function leaveGroup(actor: Actor, conversationId: string) {
+// member; the last member leaving deletes the conversation. `purgeHides`
+// ("leave and delete") also drops the user's "deleted for me" records.
+export async function leaveGroup(actor: Actor, conversationId: string, { purgeHides = false } = {}) {
   return db.$transaction(async (tx) => {
     const me = await membershipOf(tx, conversationId, actor.id);
+    if (purgeHides) {
+      await tx.messageHide.deleteMany({ where: { userId: actor.id, message: { conversationId } } });
+    }
     const others = await tx.conversationMember.findMany({
       where: { conversationId, userId: { not: actor.id } },
       orderBy: [{ joinedAt: "asc" }, { userId: "asc" }],
@@ -155,8 +161,7 @@ export async function leaveGroup(actor: Actor, conversationId: string) {
     });
 
     if (others.length === 0) {
-      await tx.conversation.delete({ where: { id: conversationId } });
-      return { deleted: true as const, messages: [] as ChatMessage[] };
+      return { deleted: true as const, messages: [] as ChatMessage[], purged: await purgeConversation(tx, conversationId) };
     }
 
     await tx.conversationMember.delete({
@@ -181,7 +186,7 @@ export async function leaveGroup(actor: Actor, conversationId: string) {
         ),
       );
     }
-    return { deleted: false as const, messages };
+    return { deleted: false as const, messages, purged: await collectGarbage(tx, conversationId) };
   });
 }
 
@@ -224,12 +229,8 @@ export async function setGroupPhoto(actor: Actor, conversationId: string, avatar
 export async function deleteGroup(actor: Actor, conversationId: string) {
   return db.$transaction(async (tx) => {
     await requireAdmin(tx, conversationId, actor.id);
-    const members = await tx.conversationMember.findMany({
-      where: { conversationId },
-      select: { userId: true },
-    });
-    await tx.conversation.delete({ where: { id: conversationId } });
-    return { memberIds: members.map((m) => m.userId) };
+    const purged = await purgeConversation(tx, conversationId);
+    return { memberIds: purged.deletedConversation?.memberIds ?? [], purged };
   });
 }
 

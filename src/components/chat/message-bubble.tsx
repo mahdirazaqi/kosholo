@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useRef, useState } from "react";
-import { AlertCircle, Check, CheckCheck, Clock3, Copy, MoreHorizontal, Reply, RotateCw } from "lucide-react";
+import { AlertCircle, Check, CheckCheck, CheckCircle2, Clock3, Copy, MoreHorizontal, Reply, RotateCw, Trash2 } from "lucide-react";
 import { ImageMedia } from "@/components/chat/media/image-media";
 import { VideoMedia } from "@/components/chat/media/video-media";
 import { VoiceMedia } from "@/components/chat/media/voice-media";
@@ -12,6 +12,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { vibrate } from "@/lib/client-utils";
@@ -34,6 +35,9 @@ export type BubbleActions = {
   onRetry: (message: ChatMessage) => void;
   onOpenMedia: (message: ChatMessage) => void; // full-screen image/video
   onCancelUpload: (message: ChatMessage) => void;
+  onSelect: (message: ChatMessage) => void; // enter selection mode with this message
+  onToggleSelect: (message: ChatMessage) => void;
+  onDelete: (message: ChatMessage) => void;
 };
 
 type Props = BubbleActions & {
@@ -45,6 +49,9 @@ type Props = BubbleActions & {
   isDesktop: boolean;
   highlighted: boolean;
   read: boolean; // my message, seen by the other member (DIRECT)
+  selecting: boolean; // selection mode: a tap toggles the message
+  selected: boolean;
+  removing: boolean; // being deleted: fades out before it's removed
 };
 
 export const MessageBubble = memo(function MessageBubble({
@@ -56,9 +63,12 @@ export const MessageBubble = memo(function MessageBubble({
   isDesktop,
   highlighted,
   read,
+  selecting,
+  selected,
+  removing,
   ...actions
 }: Props) {
-  const canInteract = message.status === "sent";
+  const canInteract = message.status === "sent" && !selecting;
   const emojiOnly = message.type === "TEXT" && isEmojiOnly(message.content);
   // Images/videos sit edge-to-edge in the bubble; the time overlays them when there's no caption.
   const visual = (message.type === "IMAGE" || message.type === "VIDEO") && message.media !== null;
@@ -100,6 +110,15 @@ export const MessageBubble = memo(function MessageBubble({
             Copy text
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem onSelect={() => actions.onSelect(message)}>
+          <CheckCircle2 />
+          Select
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onSelect={() => actions.onDelete(message)}>
+          <Trash2 />
+          Delete
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -108,13 +127,19 @@ export const MessageBubble = memo(function MessageBubble({
     <div
       data-message-id={message.id}
       className={cn(
-        "group/msg flex flex-col px-3 transition-colors",
+        "group/msg relative flex flex-col px-3 transition-colors",
         isMine ? "items-end" : "items-start",
         groupStart ? "pt-2" : "pt-0.5",
+        selecting && "ps-12",
+        selected && "bg-primary/8 dark:bg-primary/12",
         highlighted && "message-highlight",
-        isNew && "animate-in fade-in-0 slide-in-from-bottom-2 duration-200",
+        isNew && !removing && "animate-in fade-in-0 slide-in-from-bottom-2 duration-200",
+        removing && "pointer-events-none animate-out fade-out-0 zoom-out-95 fill-mode-forwards duration-200",
       )}
     >
+      {selecting && (
+        <SelectToggle selected={selected} onToggle={() => actions.onToggleSelect(message)} />
+      )}
       <div className={cn("flex max-w-[85%] items-end gap-1", isMine && "flex-row-reverse")}>
         {isGroup && !isMine && (
           // Avatar on the last bubble of a run; an empty slot keeps the run aligned.
@@ -220,6 +245,31 @@ export const MessageBubble = memo(function MessageBubble({
     </div>
   );
 });
+
+// Selection mode: the whole row is one toggle (≥44px tall), with a check
+// circle at the inline start. It sits above the bubble, so taps never open
+// media or jump to quotes while selecting.
+export function SelectToggle({ selected, onToggle }: { selected: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={selected}
+      aria-label="Select message"
+      onClick={onToggle}
+      className="absolute inset-0 z-10 flex min-h-11 items-center ps-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
+    >
+      <span
+        className={cn(
+          "flex size-6 items-center justify-center rounded-full border-2 transition-colors",
+          selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/50 bg-background/80",
+        )}
+      >
+        {selected && <Check className="size-4" strokeWidth={3} />}
+      </span>
+    </button>
+  );
+}
 
 function MessageTime({ value }: { value: string }) {
   const timeZone = useTimeZone();

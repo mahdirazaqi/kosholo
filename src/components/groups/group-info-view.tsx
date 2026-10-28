@@ -2,13 +2,11 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, LogOut, MessageCircle, Pencil, ShieldCheck, ShieldOff, Trash2, UserMinus, UserPlus, X } from "lucide-react";
+import { Check, Loader2, MessageCircle, Pencil, ShieldCheck, ShieldOff, UserMinus, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { startDirectConversation } from "@/app/(app)/(tabs)/contacts/actions";
 import {
   addMembers,
-  deleteGroup,
-  leaveGroup,
   removeMember,
   renameGroup,
   setMemberRole,
@@ -17,6 +15,7 @@ import { setGroupPhoto } from "@/app/(app)/photo-actions";
 import { AvatarEditor } from "@/components/avatar-editor";
 import { BackButton } from "@/components/back-button";
 import { BottomSheetContent } from "@/components/bottom-sheet";
+import { ConversationDangerZone } from "@/components/chat/conversation-actions";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MemberPicker } from "@/components/groups/member-picker";
 import { PresenceText } from "@/components/groups/presence-text";
@@ -28,7 +27,7 @@ import { Sheet, SheetDescription, SheetHeader, SheetTitle } from "@/components/u
 import { formatFullDate } from "@/lib/format-date";
 import { useTimeZone } from "@/hooks/use-time-zone";
 import { getSocket } from "@/lib/realtime/client/socket";
-import { subscribePresence } from "@/lib/realtime/client/store";
+import { isLocalDelete, subscribePresence } from "@/lib/realtime/client/store";
 import type { ConversationRemovedPayload, ConversationUpdatedPayload } from "@/lib/realtime/events";
 import type { ChatMember, GroupInfo } from "@/lib/types/chat";
 import type { PublicUser } from "@/lib/users";
@@ -36,8 +35,7 @@ import { groupTitleSchema, MAX_GROUP_MEMBERS } from "@/lib/validations/groups";
 import { formatCount, formatNumber } from "@/lib/numbers";
 
 type Confirm =
-  | { kind: "promote" | "demote" | "remove"; member: ChatMember }
-  | { kind: "leave" | "delete" };
+  { kind: "promote" | "demote" | "remove"; member: ChatMember };
 
 // Admin-only controls are hidden for members, but every action is checked
 // again on the server (group-actions.ts).
@@ -93,6 +91,8 @@ export function GroupInfoView({
     };
     const onRemoved = ({ conversationId, reason }: ConversationRemovedPayload) => {
       if (conversationId !== info.id) return;
+      // Leaving or deleting from this page navigates by itself.
+      if (isLocalDelete(conversationId)) return;
       toast.error(reason === "deleted" ? "This group was deleted" : "You're no longer a member of this group");
       router.replace("/");
     };
@@ -136,14 +136,10 @@ export function GroupInfoView({
         return act(() => setMemberRole(info.id, confirm.member.id, "MEMBER"), `${confirm.member.name} is no longer an admin`);
       case "remove":
         return act(() => removeMember(info.id, confirm.member.id), `${confirm.member.name} was removed from the group`);
-      case "leave":
-        return act(() => leaveGroup(info.id), "You left the group", () => router.replace("/"));
-      case "delete":
-        return act(() => deleteGroup(info.id), "Group deleted", () => router.replace("/"));
     }
   }
 
-  const confirmCopy = confirm && confirmText(confirm, info.title);
+  const confirmCopy = confirm && confirmText(confirm);
 
   return (
     <>
@@ -276,28 +272,9 @@ export function GroupInfoView({
           </ul>
         </section>
 
-        <section className="grid gap-2">
-          <Button
-            variant="outline"
-            size="lg"
-            onClick={() => setConfirm({ kind: "leave" })}
-            className="h-12 w-full rounded-xl text-base text-destructive hover:bg-destructive/10 hover:text-destructive"
-          >
-            <LogOut className="rtl:rotate-180" />
-            Leave group
-          </Button>
-          {isAdmin && (
-            <Button
-              variant="destructive"
-              size="lg"
-              onClick={() => setConfirm({ kind: "delete" })}
-              className="h-12 w-full rounded-xl text-base"
-            >
-              <Trash2 />
-              Delete group
-            </Button>
-          )}
-        </section>
+        <ConversationDangerZone
+          target={{ id: info.id, type: "GROUP", title: info.title, myRole: isAdmin ? "ADMIN" : "MEMBER" }}
+        />
       </div>
 
       {/* Member actions */}
@@ -400,7 +377,7 @@ export function GroupInfoView({
   );
 }
 
-function confirmText(confirm: Confirm, title: string) {
+function confirmText(confirm: Confirm) {
   switch (confirm.kind) {
     case "promote":
       return { title: "Make admin", description: `Make ${confirm.member.name} a group admin?`, confirm: "Make admin", destructive: false };
@@ -408,15 +385,6 @@ function confirmText(confirm: Confirm, title: string) {
       return { title: "Remove as admin", description: `Remove ${confirm.member.name} as admin?`, confirm: "Remove as admin", destructive: true };
     case "remove":
       return { title: "Remove from group", description: `Remove ${confirm.member.name} from the group?`, confirm: "Remove", destructive: true };
-    case "leave":
-      return { title: "Leave group", description: `Leave the group “${title}”?`, confirm: "Leave group", destructive: true };
-    case "delete":
-      return {
-        title: "Delete group",
-        description: `“${title}” and all its messages will be permanently deleted for every member. This can't be undone.`,
-        confirm: "Delete for everyone",
-        destructive: true,
-      };
   }
 }
 

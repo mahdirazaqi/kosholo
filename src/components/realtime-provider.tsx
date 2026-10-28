@@ -7,9 +7,12 @@ import { getSettings } from "@/lib/pwa/settings";
 import { getConversation, listConversations } from "@/app/(app)/chats/actions";
 import { getSocket } from "@/lib/realtime/client/socket";
 import type {
+  ConversationClearedPayload,
+  ConversationDeletedPayload,
   ConversationReadPayload,
   ConversationRemovedPayload,
   ConversationUpdatedPayload,
+  MessageDeletedPayload,
   MessageNewPayload,
   TypingPayload,
   UserUpdatedPayload,
@@ -19,6 +22,7 @@ import {
   hydrateConversations,
   insertConversation,
   markConversationRead,
+  refreshConversationRow,
   removeConversation,
   renameConversation,
   selectTotalUnread,
@@ -84,6 +88,10 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       if (avatarUrl !== undefined) setAvatarOverride(userId, avatarUrl);
     };
     const onRemoved = ({ conversationId }: ConversationRemovedPayload) => removeConversation(conversationId);
+    // Deletions change the row's preview/time/unread, or remove it.
+    const onMessageDeleted = ({ conversationId }: MessageDeletedPayload) => refreshConversationRow(conversationId);
+    const onCleared = ({ conversationId }: ConversationClearedPayload) => refreshConversationRow(conversationId);
+    const onDeleted = ({ conversationId }: ConversationDeletedPayload) => removeConversation(conversationId);
     const onTypingStart = (payload: TypingPayload) =>
       setTyping(payload.conversationId, payload.userId, payload.name);
     const onTypingStop = (payload: TypingPayload) =>
@@ -109,6 +117,9 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     socket.on("conversation:read", onRead);
     socket.on("conversation:updated", onUpdated);
     socket.on("conversation:removed", onRemoved);
+    socket.on("message:deleted", onMessageDeleted);
+    socket.on("conversation:cleared", onCleared);
+    socket.on("conversation:deleted", onDeleted);
     socket.on("user:updated", onUserUpdated);
     socket.on("typing:start", onTypingStart);
     socket.on("typing:stop", onTypingStop);
@@ -127,6 +138,9 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       socket.off("conversation:read", onRead);
       socket.off("conversation:updated", onUpdated);
       socket.off("conversation:removed", onRemoved);
+      socket.off("message:deleted", onMessageDeleted);
+      socket.off("conversation:cleared", onCleared);
+      socket.off("conversation:deleted", onDeleted);
       socket.off("user:updated", onUserUpdated);
       socket.off("typing:start", onTypingStart);
       socket.off("typing:stop", onTypingStop);

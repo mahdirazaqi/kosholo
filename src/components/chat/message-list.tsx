@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Copy, Loader2, Reply } from "lucide-react";
+import { CheckCircle2, ChevronDown, Copy, Loader2, Reply, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { previewText } from "@/components/chat/message-preview";
 import { MessageBubble, type BubbleActions } from "@/components/chat/message-bubble";
@@ -37,6 +37,12 @@ type Props = {
   onReply: (message: ChatMessage) => void;
   onRetry: (message: ChatMessage) => void;
   onCancelUpload: (message: ChatMessage) => void;
+  // Deletion: null when not in selection mode; ids of selected messages.
+  selection: Set<string> | null;
+  removing: Set<string>; // fading out before removal
+  onSelect: (message: ChatMessage) => void;
+  onToggleSelect: (message: ChatMessage) => void;
+  onDelete: (message: ChatMessage) => void;
 };
 
 const keyOf = (message: ChatMessage) => message.tempId ?? message.id;
@@ -53,9 +59,15 @@ export function MessageList({
   onReply,
   onRetry,
   onCancelUpload,
+  selection,
+  removing,
+  onSelect,
+  onToggleSelect,
+  onDelete,
 }: Props) {
   const timeZone = useTimeZone();
   const isDesktop = useIsDesktop();
+  const selecting = selection !== null;
   const scrollerRef = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
   const lastCommit = useRef<{ first?: string; last?: string; height: number } | null>(null);
@@ -74,6 +86,11 @@ export function MessageList({
   // Reply chosen from the mobile sheet; applied once the sheet has closed so
   // its focus trap doesn't fight the composer for focus.
   const pendingReply = useRef<ChatMessage | null>(null);
+
+  // A deleted message takes its open image/video viewer with it.
+  const viewerGone =
+    viewer?.messageId !== undefined && !messages.some((m) => m.id === viewer.messageId && !removing.has(m.id));
+  const shownViewer = viewerGone ? null : viewer;
 
   const scrollToBottom = useCallback((smooth = false) => {
     const scroller = scrollerRef.current;
@@ -176,13 +193,25 @@ export function MessageList({
       url: media.url,
       width: media.width,
       height: media.height,
+      messageId: message.id,
     });
   }, []);
 
   // Stable so memoized bubbles don't re-render on every list update.
   const actions = useMemo<BubbleActions>(
-    () => ({ onReply, onCopy, onOpenActions, onQuoteClick: jumpTo, onRetry, onOpenMedia, onCancelUpload }),
-    [onReply, onCopy, onOpenActions, jumpTo, onRetry, onOpenMedia, onCancelUpload],
+    () => ({
+      onReply,
+      onCopy,
+      onOpenActions,
+      onQuoteClick: jumpTo,
+      onRetry,
+      onOpenMedia,
+      onCancelUpload,
+      onSelect,
+      onToggleSelect,
+      onDelete,
+    }),
+    [onReply, onCopy, onOpenActions, jumpTo, onRetry, onOpenMedia, onCancelUpload, onSelect, onToggleSelect, onDelete],
   );
 
   const seenIndex = seenKey === null ? -1 : messages.findIndex((m) => keyOf(m) === seenKey);
@@ -233,7 +262,15 @@ export function MessageList({
             return (
               <Fragment key={keyOf(message)}>
                 {newDay && <DaySeparator date={message.createdAt} />}
-                <SystemMessage message={message} currentUserId={currentUserId} memberNames={memberNames} />
+                <SystemMessage
+                  message={message}
+                  currentUserId={currentUserId}
+                  memberNames={memberNames}
+                  selecting={selecting}
+                  selected={selection?.has(message.id) ?? false}
+                  removing={removing.has(message.id)}
+                  onToggleSelect={onToggleSelect}
+                />
               </Fragment>
             );
           }
@@ -250,6 +287,9 @@ export function MessageList({
                 isDesktop={isDesktop}
                 highlighted={highlight === message.id}
                 read={isRead(message)}
+                selecting={selecting}
+                selected={selection?.has(message.id) ?? false}
+                removing={removing.has(message.id)}
                 {...actions}
               />
             </Fragment>
@@ -277,7 +317,7 @@ export function MessageList({
         <ChevronDown className="size-5" />
       </Button>
 
-      <MediaViewer target={viewer} onClose={() => setViewer(null)} />
+      <MediaViewer target={shownViewer} onClose={() => setViewer(null)} />
 
       <Sheet open={actionsOpen} onOpenChange={setActionsOpen}>
         <BottomSheetContent
@@ -313,6 +353,23 @@ export function MessageList({
                     }}
                   />
                 )}
+                <ActionButton
+                  icon={<CheckCircle2 />}
+                  label="Select"
+                  onClick={() => {
+                    setActionsOpen(false);
+                    onSelect(actionsFor);
+                  }}
+                />
+                <ActionButton
+                  icon={<Trash2 />}
+                  label="Delete"
+                  destructive
+                  onClick={() => {
+                    setActionsOpen(false);
+                    onDelete(actionsFor);
+                  }}
+                />
               </div>
             </>
           )}
@@ -350,16 +407,23 @@ function ActionButton({
   icon,
   label,
   onClick,
+  destructive = false,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
+  destructive?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex h-12 items-center gap-3 rounded-xl px-3 text-base transition-colors hover:bg-muted active:bg-muted [&_svg]:size-5 [&_svg]:text-muted-foreground"
+      className={cn(
+        "flex h-12 items-center gap-3 rounded-xl px-3 text-base transition-colors [&_svg]:size-5",
+        destructive
+          ? "text-destructive hover:bg-destructive/10 active:bg-destructive/10"
+          : "hover:bg-muted active:bg-muted [&_svg]:text-muted-foreground",
+      )}
     >
       {icon}
       {label}

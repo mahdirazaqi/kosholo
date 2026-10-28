@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { getConversation } from "@/app/(app)/chats/actions";
 import { PREVIEW_LENGTH } from "@/lib/chat/limits";
 import { getSocket } from "@/lib/realtime/client/socket";
 import { TYPING_EXPIRE_MS, type PresenceState } from "@/lib/realtime/events";
@@ -124,6 +125,38 @@ export function renameConversation(conversationId: string, title: string) {
     ),
   });
 }
+
+// Replaces a row (or inserts it), keeping the list sorted.
+export function upsertConversation(item: ConversationListItem) {
+  const conversations = get().conversations;
+  if (!conversations) return;
+  set({ conversations: sortByRecent([item, ...conversations.filter((c) => c.id !== item.id)]) });
+}
+
+// After deletions the row's preview, time and unread count are recomputed on
+// the server (nothing derived is stored). No visible message left → no row.
+const refreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
+export function refreshConversationRow(conversationId: string) {
+  clearTimeout(refreshTimers.get(conversationId));
+  refreshTimers.set(
+    conversationId,
+    setTimeout(() => {
+      refreshTimers.delete(conversationId);
+      getConversation(conversationId)
+        .then((item) => (item ? upsertConversation(item) : removeConversation(conversationId)))
+        .catch(() => {});
+    }, 150),
+  );
+}
+
+// Conversations this tab is deleting or leaving itself: their
+// conversation:deleted / removed events don't need a toast here.
+const localDeletes = new Set<string>();
+export function markLocalDelete(conversationId: string) {
+  localDeletes.add(conversationId);
+  setTimeout(() => localDeletes.delete(conversationId), 30_000);
+}
+export const isLocalDelete = (conversationId: string) => localDeletes.has(conversationId);
 
 export function removeConversation(conversationId: string) {
   const conversations = get().conversations;

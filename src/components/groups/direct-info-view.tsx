@@ -1,19 +1,45 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, UserMinus, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { addContact, removeContact } from "@/app/(app)/(tabs)/contacts/actions";
 import { BackButton } from "@/components/back-button";
+import { ConversationDangerZone } from "@/components/chat/conversation-actions";
 import { PresenceText } from "@/components/groups/presence-text";
 import { PageHeader } from "@/components/page-header";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import { usePresence } from "@/hooks/use-presence";
+import { getSocket } from "@/lib/realtime/client/socket";
+import { isLocalDelete } from "@/lib/realtime/client/store";
+import type { ConversationDeletedPayload } from "@/lib/realtime/events";
 import type { PublicUser } from "@/lib/users";
 
-export function DirectInfoView({ user, initialIsContact }: { user: PublicUser; initialIsContact: boolean }) {
+export function DirectInfoView({
+  conversationId,
+  user,
+  initialIsContact,
+}: {
+  conversationId: string;
+  user: PublicUser;
+  initialIsContact: boolean;
+}) {
   usePresence(user.id);
+  const router = useRouter();
+
+  // Deleted for everyone by the other person (or from another tab).
+  useEffect(() => {
+    const socket = getSocket();
+    const onDeleted = ({ conversationId: id }: ConversationDeletedPayload) => {
+      if (id !== conversationId) return;
+      if (!isLocalDelete(id)) toast("This chat was deleted");
+      router.replace("/");
+    };
+    socket.on("conversation:deleted", onDeleted);
+    return () => void socket.off("conversation:deleted", onDeleted);
+  }, [conversationId, router]);
   const [isContact, setIsContact] = useState(initialIsContact);
   const [pending, startTransition] = useTransition();
 
@@ -56,6 +82,7 @@ export function DirectInfoView({ user, initialIsContact }: { user: PublicUser; i
           {pending ? <Loader2 className="animate-spin" /> : isContact ? <UserMinus /> : <UserPlus />}
           {isContact ? "Remove from contacts" : "Add to contacts"}
         </Button>
+        <ConversationDangerZone target={{ id: conversationId, type: "DIRECT", title: user.name, myRole: "MEMBER" }} />
       </div>
     </>
   );

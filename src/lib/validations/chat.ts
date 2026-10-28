@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MAX_MESSAGE_LENGTH } from "@/lib/chat/limits";
 import { MAX_CAPTION_LENGTH } from "@/lib/media/limits";
+import { MAX_DELETE_MESSAGES } from "@/lib/chat/permissions";
 
 // Text messages need content; media messages (uploadId) take an optional caption.
 export const sendMessageSchema = z
@@ -27,3 +28,18 @@ export const sendMessageSchema = z
   });
 
 export type SendMessageInput = z.input<typeof sendMessageSchema>;
+
+export const deleteMessagesSchema = z.object({
+  conversationId: z.uuid({ error: "Chat not found" }),
+  messageIds: z
+    .array(z.uuid({ error: "Invalid message" }))
+    .min(1, "No messages selected")
+    .max(MAX_DELETE_MESSAGES, `You can delete up to ${MAX_DELETE_MESSAGES} messages at once`)
+    .transform((ids) => [...new Set(ids)]),
+  forEveryone: z.boolean(),
+});
+
+export const conversationDeleteSchema = z.object({
+  conversationId: z.uuid({ error: "Chat not found" }),
+  forEveryone: z.boolean(),
+});

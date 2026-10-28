@@ -35,5 +35,5 @@ async function Info({ params }: Pick<PageProps<"/chats/[conversationId]/info">, 
   const other = conversation.otherUser;
   if (!other) notFound();
   const isContact = (await db.contact.count({ where: { ownerId: user.id, contactId: other.id } })) > 0;
-  return <DirectInfoView user={other} initialIsContact={isContact} />;
+  return <DirectInfoView conversationId={conversation.id} user={other} initialIsContact={isContact} />;
 }

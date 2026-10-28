@@ -4,6 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
+import { logger } from "@/lib/logger";
 
 export function uploadRoot() {
   return path.resolve(/* turbopackIgnore: true */ process.env.UPLOAD_DIR || "./uploads");
@@ -36,4 +37,22 @@ export async function removeFiles(...relatives: (string | null | undefined)[]) {
   await Promise.all(
     relatives.filter((r): r is string => Boolean(r)).map((r) => rm(absolutePath(r), { force: true }).catch(() => {})),
   );
+}
+
+// Like removeFiles, but reports problems: a missing file is fine (already
+// gone), any other error is logged. Returns how many files couldn't be deleted.
+export async function deleteFiles(relatives: string[]) {
+  const results = await Promise.all(
+    relatives.map(async (relative) => {
+      try {
+        await rm(absolutePath(relative));
+        return true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+        logger.error("media", `couldn't delete ${relative}`, error);
+        return false;
+      }
+    }),
+  );
+  return results.filter((ok) => !ok).length;
 }

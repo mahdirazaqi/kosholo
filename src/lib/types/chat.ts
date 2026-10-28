@@ -15,7 +15,8 @@ export type SystemEvent =
   | "renamed"
   | "admin_promoted"
   | "admin_demoted"
-  | "photo_changed";
+  | "photo_changed"
+  | "history_cleared";
 
 export type SystemMeta = {
   event: SystemEvent;
@@ -92,6 +93,7 @@ export type LastMessagePreview = {
 export type ConversationListItem = {
   id: string;
   type: ConversationType;
+  myRole: MemberRole; // the viewer's role (admin-only actions)
   title: string; // the other user's name for DIRECT
   avatarUrl: string | null;
   otherUser: PublicUser | null; // DIRECT only
@@ -136,3 +138,6 @@ export type GroupInfo = {
 };
 
 export type ConversationRemovedReason = "removed" | "left" | "deleted";
+
+// Who a deletion applies to.
+export type DeleteScope = "me" | "everyone";

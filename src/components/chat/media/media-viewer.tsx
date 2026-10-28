@@ -2,7 +2,13 @@
 
 import dynamic from "next/dynamic";
 
-export type ViewerTarget = { kind: "image" | "video"; url: string; width: number | null; height: number | null } | null;
+export type ViewerTarget = {
+  kind: "image" | "video";
+  url: string;
+  width: number | null;
+  height: number | null;
+  messageId?: string; // closes the viewer if that message is deleted
+} | null;
 
 // The lightbox and the video player are only downloaded when first opened.
 const ImageViewer = dynamic(() => import("@/components/chat/media/image-viewer"), { ssr: false });

@@ -5,6 +5,7 @@ import { unstable_rethrow } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import * as groups from "@/lib/chat/groups";
 import { GroupError, type Actor } from "@/lib/chat/groups";
+import { unlinkPurgedFiles } from "@/lib/chat/purge";
 import { emitRemoved, emitToMembers } from "@/lib/realtime/emit";
 import { invalidateMembership } from "@/lib/realtime/membership";
 import type { ChatMessage } from "@/lib/types/chat";
@@ -108,7 +109,8 @@ export async function removeMember(conversationId: string, userId: string) {
     const actor = await currentActor();
     const id = parseId(conversationId);
     const targetId = parseId(userId);
-    const { message } = await groups.removeMember(actor, id, targetId);
+    const { message, purged } = await groups.removeMember(actor, id, targetId);
+    await unlinkPurgedFiles(purged);
     emitRemoved(id, [targetId], "removed"); // also invalidates the membership cache
     await broadcast(id, [message]);
     await broadcastMembers(id);
@@ -117,10 +119,20 @@ export async function removeMember(conversationId: string, userId: string) {
 }
 
 export async function leaveGroup(conversationId: string) {
+  return leave(conversationId, false);
+}
+
+// "Leave and delete group": also forgets which messages I deleted for myself.
+export async function leaveAndDeleteGroup(conversationId: string) {
+  return leave(conversationId, true);
+}
+
+async function leave(conversationId: string, purgeHides: boolean) {
   return run(async () => {
     const actor = await currentActor();
     const id = parseId(conversationId);
-    const result = await groups.leaveGroup(actor, id);
+    const result = await groups.leaveGroup(actor, id, { purgeHides });
+    await unlinkPurgedFiles(result.purged);
     emitRemoved(id, [actor.id], "left");
     if (!result.deleted) {
       await broadcast(id, result.messages);
@@ -150,7 +162,8 @@ export async function deleteGroup(conversationId: string) {
   return run(async () => {
     const actor = await currentActor();
     const id = parseId(conversationId);
-    const { memberIds } = await groups.deleteGroup(actor, id);
+    const { memberIds, purged } = await groups.deleteGroup(actor, id);
+    await unlinkPurgedFiles(purged);
     emitRemoved(id, memberIds, "deleted");
     return {};
   });

@@ -4,11 +4,12 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { requireUser } from "@/lib/auth";
 import { getConversations, isMember } from "@/lib/chat/conversations";
-import { getMessages, getMessagesSince as queryMessagesSince } from "@/lib/chat/messages";
-import { messageSelect, toChatMessage } from "@/lib/chat/queries";
+import { getGoneIds, getMessages, getMessagesSince as queryMessagesSince } from "@/lib/chat/messages";
+import { messageSelect, quoteHiddenFor, toChatMessage, type MessageRow } from "@/lib/chat/queries";
+import { getViewer, visibleMessageWhere } from "@/lib/chat/visibility";
 import { db } from "@/lib/db";
 import { isRateLimited, LIMITS, RATE_LIMIT_ERROR, recordHit } from "@/lib/rate-limit";
-import { emitToMembers } from "@/lib/realtime/emit";
+import { emitToMembers, emitToUsers } from "@/lib/realtime/emit";
 import type {
   ChatMessage,
   ConversationListItem,
@@ -18,6 +19,7 @@ import type {
 import { sendMessageSchema, type SendMessageInput } from "@/lib/validations/chat";
 
 const NOT_FOUND = "Chat not found";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type SendMessageResult = { ok: true; message: ChatMessage } | { ok: false; error: string };
 
@@ -27,7 +29,8 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
   const { conversationId, content, uploadId, replyToId, tempId } = parsed.data;
 
-  if (!(await isMember(conversationId, me.id))) return { ok: false, error: NOT_FOUND };
+  const viewer = await getViewer(conversationId, me.id);
+  if (!viewer) return { ok: false, error: NOT_FOUND };
 
   const limitKey = `send:${me.id}`;
   if (isRateLimited(limitKey, LIMITS.messages)) return { ok: false, error: RATE_LIMIT_ERROR };
@@ -35,7 +38,7 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
 
   if (replyToId) {
     const original = await db.message.count({
-      where: { id: replyToId, conversationId, type: { not: "SYSTEM" } },
+      where: { AND: [{ id: replyToId, conversationId, type: { not: "SYSTEM" } }, visibleMessageWhere(viewer)] },
     });
     if (!original) return { ok: false, error: "The message you're replying to wasn't found" };
   }
@@ -73,10 +76,10 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
     }
     throw error;
   }
-  const message = toChatMessage(row);
+  const message = toChatMessage(row, viewer);
 
   // Every member's user room, including the sender's other tabs/devices.
-  await emitToMembers(conversationId, "message:new", { message, tempId: tempId ?? null });
+  await emitNewMessage(conversationId, row, tempId ?? null);
   await emitToMembers(conversationId, "conversation:read", {
     conversationId,
     userId: me.id,
@@ -86,6 +89,26 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
   // Refreshes the chat list on the next visit (not the current chat screen).
   revalidatePath("/");
   return { ok: true, message };
+}
+
+// message:new for every member. A quote of a message some members deleted
+// for themselves (or cleared) reaches them as "Message unavailable".
+async function emitNewMessage(conversationId: string, row: MessageRow, tempId: string | null) {
+  if (!row.replyTo) {
+    await emitToMembers(conversationId, "message:new", { message: toChatMessage(row), tempId });
+    return;
+  }
+  const members = await db.conversationMember.findMany({
+    where: { conversationId },
+    select: { userId: true, clearedAt: true },
+  });
+  const hidden = members.filter((member) => quoteHiddenFor(row, member));
+  const shown = members.filter((member) => !quoteHiddenFor(row, member));
+  emitToUsers(shown.map((member) => member.userId), "message:new", { message: toChatMessage(row), tempId });
+  emitToUsers(hidden.map((member) => member.userId), "message:new", {
+    message: { ...toChatMessage(row), replyTo: "deleted" },
+    tempId,
+  });
 }
 
 export async function markAsRead(conversationId: string): Promise<void> {
@@ -110,30 +133,39 @@ export async function loadOlderMessages(
   cursor: string,
 ): Promise<MessagesPage | null> {
   const me = await requireUser();
-  if (!(await isMember(conversationId, me.id))) return null;
-  if (typeof cursor !== "string" || cursor.length > 64) return null;
-
-  // An unknown cursor id makes Prisma throw; treat it as "nothing more".
-  try {
-    return await getMessages(conversationId, cursor);
-  } catch {
-    return { messages: [], nextCursor: null };
-  }
+  const viewer = await getViewer(conversationId, me.id);
+  if (!viewer) return null;
+  if (typeof cursor !== "string" || cursor.length > 100) return null;
+  return getMessages(conversationId, viewer, cursor);
 }
 
+const MAX_KNOWN_IDS = 500;
+
 // Catch-up after a reconnect or the tab becoming visible again: missed
-// messages plus the other members' current read positions.
+// messages, which of the shown messages (`knownIds`) were deleted meanwhile,
+// and the other members' current read positions.
 export async function getMessagesSince(
   conversationId: string,
   since: string,
-): Promise<{ messages: ChatMessage[]; hasMore: boolean; readStates: MemberReadState[] } | null> {
+  knownIds: string[] = [],
+): Promise<{
+  messages: ChatMessage[];
+  hasMore: boolean;
+  goneIds: string[];
+  readStates: MemberReadState[];
+} | null> {
   const me = await requireUser();
-  if (!(await isMember(conversationId, me.id))) return null;
+  const viewer = await getViewer(conversationId, me.id);
+  if (!viewer) return null;
   const date = new Date(since);
   if (Number.isNaN(date.getTime())) return null;
+  const ids = Array.isArray(knownIds)
+    ? knownIds.filter((id) => typeof id === "string" && UUID.test(id)).slice(-MAX_KNOWN_IDS)
+    : [];
 
-  const [result, members] = await Promise.all([
-    queryMessagesSince(conversationId, date),
+  const [result, goneIds, members] = await Promise.all([
+    queryMessagesSince(conversationId, viewer, date),
+    getGoneIds(conversationId, viewer, ids),
     db.conversationMember.findMany({
       where: { conversationId, userId: { not: me.id } },
       select: { userId: true, lastReadAt: true, joinedAt: true },
@@ -141,6 +173,7 @@ export async function getMessagesSince(
   ]);
   return {
     ...result,
+    goneIds,
     readStates: members.map((m) => ({
       userId: m.userId,
       lastReadAt: m.lastReadAt?.toISOString() ?? null,

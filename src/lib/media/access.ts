@@ -1,17 +1,20 @@
 import "server-only";
 
+import { getViewer, isVisibleTo } from "@/lib/chat/visibility";
 import { db } from "@/lib/db";
-import { isConversationMember } from "@/lib/realtime/membership";
 
 // Who may fetch /api/media/{id}:
 // - AVATAR: any signed-in user,
-// - otherwise: the uploader (their pending optimistic message), or a member of
-//   the conversation whose message uses the upload.
+// - a message's file: members who can see that message (visibility rule),
+// - an upload not attached to a message yet: its uploader (their pending
+//   optimistic message).
 export async function canReadUpload(upload: { id: string; kind: string; ownerId: string }, userId: string) {
-  if (upload.kind === "AVATAR" || upload.ownerId === userId) return true;
+  if (upload.kind === "AVATAR") return true;
   const message = await db.message.findUnique({
     where: { uploadId: upload.id },
-    select: { conversationId: true },
+    select: { conversationId: true, createdAt: true, hides: { where: { userId }, select: { userId: true } } },
   });
-  return message ? isConversationMember(message.conversationId, userId) : false;
+  if (!message) return upload.ownerId === userId;
+  const viewer = await getViewer(message.conversationId, userId);
+  return viewer !== null && isVisibleTo(viewer, { createdAt: message.createdAt, hiddenBy: message.hides.map((h) => h.userId) });
 }

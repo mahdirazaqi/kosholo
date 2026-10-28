@@ -6,6 +6,7 @@ import { ChatView } from "@/components/chat/chat-view";
 import { requireUser } from "@/lib/auth";
 import { getConversationForMember } from "@/lib/chat/conversations";
 import { getMessages } from "@/lib/chat/messages";
+import { getViewer } from "@/lib/chat/visibility";
 
 export const metadata: Metadata = { title: "Chat | Kosholo" };
 
@@ -24,9 +25,10 @@ async function Chat({ params }: Pick<PageProps<"/chats/[conversationId]">, "para
   const { conversationId } = await params;
   const user = await requireUser();
   const conversation = await getConversationForMember(conversationId, user.id);
-  if (!conversation) notFound();
+  const viewer = conversation && (await getViewer(conversation.id, user.id));
+  if (!conversation || !viewer) notFound();
 
-  const page = await getMessages(conversation.id);
+  const page = await getMessages(conversation.id, viewer);
   return (
     <ChatView
       // Remount per conversation so local message state never leaks across chats.

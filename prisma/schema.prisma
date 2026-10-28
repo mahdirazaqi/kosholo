@@ -49,6 +49,7 @@ model User {
   memberships          ConversationMember[]
   messages             Message[]
   uploads              Upload[]
+  messageHides         MessageHide[]
 
   @@map("users")
 }
@@ -91,6 +92,9 @@ model ConversationMember {
   role           MemberRole @default(MEMBER)
   joinedAt       DateTime   @default(now()) @map("joined_at") @db.Timestamptz
   lastReadAt     DateTime?  @map("last_read_at") @db.Timestamptz
+  // "Cleared history for me": messages created at or before this are
+  // invisible to this member (see src/lib/chat/visibility.ts).
+  clearedAt      DateTime?  @map("cleared_at") @db.Timestamptz
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -107,6 +111,9 @@ model Message {
   type           MessageType @default(TEXT)
   content        String?     @db.Text
   replyToId      String?     @map("reply_to_id") @db.Uuid
+  // Set when the quoted message was hard-deleted (replyToId is then nulled by
+  // the FK), so the quote still renders as "Message unavailable".
+  replyToDeleted Boolean     @default(false) @map("reply_to_deleted")
   // IMAGE / VIDEO / VOICE messages point at their processed file.
   uploadId       String?     @unique @map("upload_id") @db.Uuid
   meta           Json?
@@ -117,9 +124,25 @@ model Message {
   replyTo      Message?     @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
   upload       Upload?      @relation(fields: [uploadId], references: [id], onDelete: SetNull)
   replies      Message[]    @relation("MessageReplies")
+  hides        MessageHide[]
 
   @@index([conversationId, createdAt])
   @@map("messages")
+}
+
+// "Delete for me": the message is invisible to this user only. When no current
+// member can see a message any more, the message row itself is hard-deleted.
+model MessageHide {
+  userId    String   @map("user_id") @db.Uuid
+  messageId String   @map("message_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@id([userId, messageId])
+  @@index([messageId])
+  @@map("message_hides")
 }
 
 // A processed file on disk under UPLOAD_DIR (never served statically; see

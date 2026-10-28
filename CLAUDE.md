@@ -52,7 +52,8 @@ src/components/pwa/   service-worker registration (+ update toast), install bann
 src/sw/sw.ts          service worker source (Serwist), own tsconfig (webworker lib)
 scripts/              generate-icons.mjs (npm run icons), build-sw.mjs (npm run build:sw)
 src/components/contacts/ contacts list, contact sheet, add-contact sheet
-src/components/chat/  chat list, new-conversation/new-chat sheets, chat view, message list/bubble, system message, composer, emoji button
+src/components/chat/  chat list, new-conversation/new-chat sheets, chat view, message list/bubble, system message, composer, emoji button,
+                      delete-dialog, conversation-actions (clear/delete/leave menus + dialogs)
 src/components/groups/ new-group flow, member picker, group info view, direct info view
 src/components/chat/media/ image/video/voice bubbles, upload progress, viewer, attach + preview
 src/components/avatar-editor.tsx  change/remove a profile or group photo
@@ -70,7 +71,8 @@ src/lib/realtime/     events.ts (typed event contract + rooms), membership.ts (c
 src/lib/realtime/client/ socket.ts (typed client), store.ts (zustand), merge.ts (dedupe rule)
 src/lib/media/        limits.ts (shared), storage.ts, ffmpeg.ts, serialize.ts (no server-only: also used by the custom server);
                       process.ts (sharp/ffmpeg), access.ts, serve.ts, routes.ts (server-only); client/ (prepare, upload, audio-manager)
-src/lib/chat/         queries.ts (selects + mappers), conversations.ts, messages.ts, groups.ts (group rules), limits.ts, system-text.ts (client-safe)
+src/lib/chat/         queries.ts (selects + mappers), conversations.ts, messages.ts, groups.ts (group rules), limits.ts, system-text.ts (client-safe),
+                      visibility.ts (the visibility rule), delete.ts (deletion rules), purge.ts (hard delete + GC), permissions.ts (client-safe)
 src/lib/colors.ts     stable per-id colors (avatar tints, group sender names)
 src/lib/types/chat.ts shared chat types (ChatMessage, ConversationListItem, ...)
 public/emojibase/     self-hosted emoji data for the picker (no CDN)
@@ -182,11 +184,12 @@ Custom email/password auth. Do not add NextAuth or other auth libraries.
   - `ChatConversation` is the chat screen header data. `MessagesPage` is `{ messages (oldest → newest), nextCursor }`.
 - **Queries** (server-only, `src/lib/chat/`):
   - Always select with `messageSelect` / `conversationSelect` and map with `toChatMessage()` (`queries.ts`), so every query returns the same shape and never private user fields.
-  - `getConversations(userId)` returns only conversations with at least one message, sorted by `updatedAt`. Unread counts come from one raw SQL query: messages from others after `lastReadAt`.
-  - `getMessages(conversationId, cursor?)` pages 40 at a time, newest first from the DB, returned oldest → newest. `cursor` is the id of the oldest loaded message. It does **not** check membership, so callers must.
+  - `getConversations(userId)` returns only conversations with at least one message **visible to the user**, sorted by the newest visible message. The last message and unread count (others' messages after `lastReadAt`) come from one raw SQL query that applies the visibility rule. Each row has the viewer's `myRole`.
+  - `getMessages(conversationId, viewer, cursor?)` pages 40 visible messages at a time, newest first from the DB, returned oldest → newest. The `viewer` comes from `getViewer()`, which is also the membership check. `cursor` is the oldest loaded message's position (`"createdAt|id"`), not a row reference, so paging survives that message being deleted.
 - **Actions** (`src/app/(app)/chats/actions.ts`):
   - `sendMessage({ conversationId, content, replyToId? })`: zod-validated (trim, 1–4000 chars), checks membership, requires `replyToId` to be in the same conversation, and is rate limited to 60/min per user. In one transaction it creates the message, bumps `conversation.updatedAt` and sets the sender's `lastReadAt`. Returns `{ ok, message }`.
   - `markAsRead(conversationId)` and `loadOlderMessages(conversationId, cursor)`.
+  - `getMessagesSince(conversationId, since, knownIds)` also returns `goneIds`: which of the shown messages were deleted while the client was offline.
   - Chat actions call `revalidatePath("/")` so the chat list refetches on the next visit, without re-rendering the open chat.
 - **Client** (`src/components/chat/`):
   - `ChatView` owns the message state. Sending is optimistic: a temp message with `status: "sending"` and `tempId` is replaced by the server message (which keeps `tempId` so the React key is stable) or marked `failed` with a retry.
@@ -200,7 +203,7 @@ Custom email/password auth. Do not add NextAuth or other auth libraries.
   - Day/yesterday logic uses `dayNumber()`.
 - **Keyboard:** the viewport has `interactive-widget=resizes-content` (Android). `useVisualViewportHeight()` sets `--app-height` from `visualViewport` for iOS, and `AppShell` uses it. In the chat, the message list is the only scroll area.
 - **Emoji picker:** the frimousse-based shadcn `ui/emoji-picker.tsx`. Data is self-hosted in `public/emojibase/en`, with English category names in `messages.json`. Don't point it at a CDN (jsDelivr is blocked in some regions).
-- **Reply deletion:** `Message.replyTo` is `onDelete: SetNull`, so a deleted original currently drops the link. `"deleted"` is rendered as "Message unavailable" for when message deletion lands.
+- **Reply deletion:** `Message.replyTo` is `onDelete: SetNull`. When an original is hard-deleted, `purgeMessages()` first sets `replyToDeleted` on its replies, so the quote still renders as "Message unavailable" (`replyTo: "deleted"`). A quote of a message the viewer can't see (hidden or cleared) is also `"deleted"` for that viewer only: `toChatMessage(row, viewer)`, and `sendMessage` sends per-recipient `message:new` payloads when the quote is hidden for some members.
 
 ## Groups
 
@@ -211,10 +214,10 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
   - Only the actor's **contacts** can be added (at creation, or later by an admin). Creating a group needs at least 1 other member.
   - The creator is `ADMIN`, and a group can have several admins.
   - Admins can rename, add members, remove **non-admin** members, promote, demote another admin, and delete the group for everyone.
-  - Any member can leave. If the last admin leaves, the longest-standing member (`joinedAt`, then `userId`) becomes admin. If the last member leaves, the conversation is deleted.
+  - Any member can leave ("Leave and delete group" in the UI, which also drops their "deleted for me" records). If the last admin leaves, the longest-standing member (`joinedAt`, then `userId`) becomes admin. If the last member leaves, the conversation is deleted.
 - **Where:**
   - `src/lib/chat/groups.ts` (server-only) holds the rules. Every check runs **inside** the interactive transaction that makes the change, and violations throw `GroupError` with a user-facing message.
-  - `src/app/(app)/chats/group-actions.ts`: `createGroup`, `renameGroup`, `addMembers`, `removeMember`, `leaveGroup`, `setMemberRole` and `deleteGroup`. Each one runs `requireUser`, zod validation (`lib/validations/groups.ts`), the transaction, then realtime events, and returns `{ ok, error? }`.
+  - `src/app/(app)/chats/group-actions.ts`: `createGroup`, `renameGroup`, `addMembers`, `removeMember`, `leaveGroup`, `leaveAndDeleteGroup`, `setMemberRole` and `deleteGroup`. Each one runs `requireUser`, zod validation (`lib/validations/groups.ts`), the transaction, then realtime events, and returns `{ ok, error? }`.
   - `run()` rethrows Next control flow (`unstable_rethrow`). **UI hiding is cosmetic; the server is the authority.**
 - **Info data:** `getGroupInfo(conversationId, userId)` returns the title, avatar, createdAt, members (`ChatMember` = public user + role + joinedAt) and my role. `getMembers()` builds `conversation:updated` payloads.
 - **Pages:**
@@ -230,7 +233,7 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
 ### System messages
 
 - `MessageType.SYSTEM` with `Message.meta` (JSON, type `SystemMeta` in `lib/types/chat.ts`): `{ event, actorId, actorName, targetIds?, targetNames?, newTitle?, auto? }`.
-  - `event` is one of `created`, `member_added`, `member_removed`, `member_left`, `renamed`, `admin_promoted`, `admin_demoted` or `photo_changed` (with `removed: true` when the photo was removed).
+  - `event` is one of `created`, `member_added`, `member_removed`, `member_left`, `renamed`, `admin_promoted`, `admin_demoted`, `photo_changed` (with `removed: true` when the photo was removed) or `history_cleared` (an admin cleared the history for everyone).
   - `auto: true` marks the promotion that happens when the last admin leaves.
   - `senderId` is the actor.
 - **Names live in meta** so the text still renders after people leave. `systemMessageText(meta, meId, currentNames?)` (`lib/chat/system-text.ts`) builds the English sentence on the client: "You"/"you" for the viewer, and current member names when known.
@@ -238,6 +241,44 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
   - They break sender runs, can't be replied to (the server rejects `replyToId` pointing at one) and never count as unread (excluded in the unread SQL and in the client store).
   - They do show as the chat-list preview.
 - **Creation:** `recordEvent()` in `groups.ts` creates them and bumps `conversation.updatedAt` in the same transaction.
+
+## Deleting messages and conversations
+
+**Hard delete only.** There is no soft delete anywhere: no `deletedAt` / `isDeleted` flags. Deleting removes rows from the database and files from disk, and every deletion is irreversible (dialogs say "This can't be undone.").
+
+- **"For me"** can't remove a shared row, so it's stored as per-user visibility data:
+  - `MessageHide { userId, messageId }`: the message is deleted for that user only.
+  - `ConversationMember.clearedAt`: messages created at or before it are invisible to that member ("clear history for me", and "delete chat for me" in DIRECT).
+- **Garbage collection** (`collectGarbage()` in `lib/chat/purge.ts`) runs in the same transaction after every "for me" change and after a member leaves or is removed: messages **no current member** can see are hard-deleted with their uploads. A DIRECT conversation with no messages left whose members have all cleared it is hard-deleted too.
+- **Files:** `purgeMessages()` / `purgeConversation()` delete the `Upload` rows in the transaction and return their `path`/`thumbPath`; callers unlink them **after commit** with `unlinkPurgedFiles()` (missing files are ignored, other errors logged). Message uploads are never avatars.
+- Nothing derived is stored: after a deletion the chat-list row (preview, time, unread) is recomputed from the visibility rule (`refreshConversationRow()` on the client re-fetches it, or drops it when nothing is visible).
+
+**The visibility rule** (`src/lib/chat/visibility.ts`, apply it to every read): a message is visible to user U only if U is a **current member**, the message is **not in `MessageHide` for U**, and **U's `clearedAt` is null or older than `message.createdAt`**.
+- `getViewer(conversationId, userId)` is the membership check and returns `{ userId, clearedAt }`; `visibleMessageWhere(viewer)` is the Prisma filter (combine with `AND`); `visibleSql("m", "cm")` is the same rule for raw SQL; `isVisibleTo()` checks a loaded row.
+- Used by `getMessages`, `getMessagesSince` (+ `goneIds`), `getConversations` (last message, unread, "has a visible message"), quotes, the `sendMessage` reply check, and `/api/media` access.
+- A cleared conversation leaves the user's list and comes back with the next new message, showing only new messages.
+
+**Permissions** (`src/lib/chat/permissions.ts`, client-safe; the server re-checks everything inside the transaction in `src/lib/chat/delete.ts`):
+
+| Action | DIRECT | GROUP |
+|---|---|---|
+| Delete message for me | any visible message (incl. system) | any visible message (incl. system) |
+| Delete message for everyone | either member, any non-system message | own non-system messages; admins: any message, incl. system |
+| Clear history for me | either member | any member |
+| Clear history for everyone | either member (conversation kept) | admins only; adds a `history_cleared` system message |
+| Delete chat for me | either member (= clear for me) | — |
+| Delete chat for everyone | either member (hard-deletes the conversation) | admin "Delete group for everyone" (`deleteGroup`) |
+| Leave and delete group | — | any member: `leaveGroup` + removes my `MessageHide` rows for the group |
+
+- At most 100 message ids per request (`MAX_DELETE_MESSAGES`); all must be visible to the actor and belong to the conversation, or the whole request is rejected.
+
+**Server:** `src/lib/chat/delete.ts` (`deleteMessages`, `clearHistory`, `deleteDirectConversation`, throwing `DeleteError`) and `src/app/(app)/chats/delete-actions.ts` (`deleteMessages`, `clearHistory`, `deleteConversation`, each returning `{ ok, conversationDeleted } | { ok: false, error }`). Hard-deleted conversations go through `emitConversationDeleted()`, which also invalidates the membership cache.
+
+**Client:**
+- Message actions (long-press sheet / hover menu) have "Select" and "Delete". Selection mode turns the header into a bar ("{n} messages selected", X, delete); a tap toggles a message (check circle at the inline start); swipe-to-reply is off and the composer is `inert`; Escape exits and Delete opens the dialog on desktop.
+- `DeleteDialog` (`components/chat/delete-dialog.tsx`): title, the irreversible warning and an "Also delete for {name}" / "Delete for everyone" checkbox, shown only when **every** selected message may be deleted for everyone.
+- Deleting is optimistic: messages fade out at once (`removing`), reply bar, quotes, selection, a playing voice (`audioManager.release`) and an open viewer follow; on failure they're restored with an error toast.
+- Conversation actions (`components/chat/conversation-actions.tsx`): the header ⋮ menu, chat-list rows (long-press sheet on touch, right-click / hover menu on desktop) and the bottom of both info pages. "Clear history", "Delete chat" (DIRECT) or "Leave and delete group" (GROUP), plus the admin's "Delete group for everyone" in the header and group info. `markLocalDelete()` keeps the acting tab from toasting its own deletion; other open chats navigate to `/` with "This chat was deleted".
 
 ## Media (images, videos, voice, avatars)
 
@@ -279,11 +320,12 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
 
 **Serving and access** (`/api/media/[uploadId]`, `/thumb`; excluded from `proxy.ts` because Next limits bodies passing through the proxy, so these handlers authenticate themselves):
 - `AVATAR`: any signed-in user.
-- Other kinds: the uploader (for their pending optimistic message), or a member of the conversation whose message uses the upload.
+- A message's file: only users who can **see** that message (the visibility rule, so not after "delete for me" or "clear history").
+- An upload not attached to a message yet: its uploader (their pending optimistic message).
 - Everything else, unknown ids included, gets 404; no session gets 401.
 - Files stream from disk with HTTP Range (206/416), HEAD, `ETag` (304) and `Cache-Control: private, max-age=31536000, immutable`. They're never served statically.
 
-**Cleanup:** `src/server/media-cleanup.ts` runs hourly in the custom server. It deletes uploads (rows and files) older than 24h that no message uses and that aren't a user or group avatar. This covers abandoned sends, replaced avatars and files of deleted messages or groups. It also clears stale temp files.
+**Cleanup:** `src/server/media-cleanup.ts` runs hourly in the custom server. It deletes uploads (rows and files) older than 24h that no message uses and that aren't a user or group avatar. This covers abandoned sends and replaced avatars; files of deleted messages and conversations are unlinked right away by the deletion code (see Deleting). It also clears stale temp files.
 
 **UI:**
 - **Images:** a fixed aspect-ratio frame with the blur placeholder, then the thumb (the original for GIFs). The caption goes underneath, or the time overlays the image when there's no caption. Tapping opens `yet-another-react-lightbox` (zoom, download, pull down to close).
@@ -320,6 +362,9 @@ One process: Socket.IO is attached to the custom server.
 | S→C | `conversation:updated` | `{ conversationId, title?, avatarUrl?, members? }` | `user:{id}` of every member, after rename / photo / membership / role changes |
 | S→C | `user:updated` | `{ userId, name?, avatarUrl? }` | `user:{id}` of everyone sharing a conversation with the user or having them as a contact |
 | S→C | `conversation:removed` | `{ conversationId, reason: "removed" \| "left" \| "deleted" }` | `user:{id}` of the former member(s) |
+| S→C | `message:deleted` | `{ conversationId, messageIds }` | for everyone: `user:{id}` of every member; for me: my own `user:{id}` (other tabs/devices) |
+| S→C | `conversation:cleared` | `{ conversationId, forEveryone, before }` | the affected users' rooms (me, or every member); everything at or before `before` is gone |
+| S→C | `conversation:deleted` | `{ conversationId }` | `user:{id}` of every former member when the conversation is hard-deleted; their sockets leave `conv:{id}` |
 | C→S | `conversation:join` (ack `{ ok }`) / `conversation:leave` | `conversationId` | joins/leaves `conv:{id}` after a membership check |
 | C→S | `typing:start` / `typing:stop` | `conversationId` | membership-checked; `start` ignored if faster than 1/s per socket |
 | C→S | `presence:subscribe` (ack: states) / `presence:unsubscribe` | `{ userIds }` | joins `presence:{id}`; only for people I share a conversation with or have as contacts |
