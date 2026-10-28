@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { InfoSkeleton } from "@/components/skeletons";
+import { ChannelInfoView } from "@/components/channels/channel-info-view";
 import { DirectInfoView } from "@/components/groups/direct-info-view";
 import { GroupInfoView } from "@/components/groups/group-info-view";
 import { requireUser } from "@/lib/auth";
 import { getConversationForMember } from "@/lib/chat/conversations";
+import { getChannelInfo } from "@/lib/chat/channels";
 import { getGroupInfo } from "@/lib/chat/groups";
 import { getContacts } from "@/lib/contacts";
 import { db } from "@/lib/db";
@@ -26,14 +28,22 @@ async function Info({ params }: Pick<PageProps<"/chats/[conversationId]/info">, 
   const conversation = await getConversationForMember(conversationId, user.id);
   if (!conversation) notFound();
 
+  if (conversation.type === "CHANNEL") {
+    // Only admins get the contacts (for adding) and the admin list/invite token.
+    const info = await getChannelInfo(conversation.id, user.id);
+    if (!info) notFound();
+    const contacts = info.myRole === "ADMIN" ? await getContacts(user.id) : [];
+    return <ChannelInfoView key={info.id} initialInfo={info} contacts={contacts} />;
+  }
+
   if (conversation.type === "GROUP") {
     const [info, contacts] = await Promise.all([getGroupInfo(conversation.id, user.id), getContacts(user.id)]);
     if (!info) notFound();
-    return <GroupInfoView key={info.id} initialInfo={info} contacts={contacts} currentUserId={user.id} />;
+    return <GroupInfoView key={info.id} initialInfo={info} contacts={contacts} currentUserId={user.id} muted={conversation.muted} />;
   }
 
   const other = conversation.otherUser;
   if (!other) notFound();
   const isContact = (await db.contact.count({ where: { ownerId: user.id, contactId: other.id } })) > 0;
-  return <DirectInfoView conversationId={conversation.id} user={other} initialIsContact={isContact} />;
+  return <DirectInfoView conversationId={conversation.id} user={other} initialIsContact={isContact} muted={conversation.muted} />;
 }

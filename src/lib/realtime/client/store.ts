@@ -40,8 +40,9 @@ const sortByRecent = (items: ConversationListItem[]) =>
   items.sort((a, b) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
 
 // Sum of unread counts (tab badge, document title, installed-app badge).
+// Muted conversations keep their own badge in the list but don't count here.
 export const selectTotalUnread = (state: RealtimeState) =>
-  state.conversations?.reduce((total, item) => total + item.unreadCount, 0) ?? 0;
+  state.conversations?.reduce((total, item) => total + (item.muted ? 0 : item.unreadCount), 0) ?? 0;
 
 // ---- Chat list ----
 
@@ -123,10 +124,25 @@ export function renameConversation(conversationId: string, title: string) {
   if (!conversations) return;
   set({
     conversations: conversations.map((item) =>
-      item.id === conversationId && item.type === "GROUP" ? { ...item, title } : item,
+      item.id === conversationId && item.type !== "DIRECT" ? { ...item, title } : item,
     ),
   });
 }
+
+// Live changes to one row's own fields (mute switch, my role in a channel).
+export function patchConversation(
+  conversationId: string,
+  patch: Partial<Pick<ConversationListItem, "muted" | "myRole">>,
+) {
+  const conversations = get().conversations;
+  if (!conversations) return;
+  set({
+    conversations: conversations.map((item) => (item.id === conversationId ? { ...item, ...patch } : item)),
+  });
+}
+
+export const isConversationMuted = (conversationId: string) =>
+  get().conversations?.find((item) => item.id === conversationId)?.muted ?? false;
 
 // Replaces a row (or inserts it), keeping the list sorted.
 export function upsertConversation(item: ConversationListItem) {

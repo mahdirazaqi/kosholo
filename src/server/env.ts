@@ -17,6 +17,10 @@ else if (process.env.JWT_SECRET.length < 32) problems.push("JWT_SECRET must be a
 if (!process.env.UPLOAD_DIR) problems.push("UPLOAD_DIR is not set");
 const maxFileSize = process.env.MAX_FILE_SIZE_MB;
 if (maxFileSize && !(Number(maxFileSize) > 0)) problems.push("MAX_FILE_SIZE_MB must be a positive number of megabytes");
+const maxChannelMembers = process.env.MAX_CHANNEL_MEMBERS;
+if (maxChannelMembers && !(Number.isInteger(Number(maxChannelMembers)) && Number(maxChannelMembers) > 0)) {
+  problems.push("MAX_CHANNEL_MEMBERS must be a positive whole number");
+}
 
 if (problems.length) {
   for (const problem of problems) console.error(`${new Date().toISOString()} ERROR [env] ${problem}`);

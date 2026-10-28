@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { EllipsisVertical, Trash2, UserX, X } from "lucide-react";
+import { Bell, BellOff, EllipsisVertical, Megaphone, Trash2, UserX, X } from "lucide-react";
 import { toast } from "sonner";
-import { loadOlderMessages, sendMessage } from "@/app/(app)/chats/actions";
+import { getChannelStats, loadOlderMessages, sendMessage, setMuted } from "@/app/(app)/chats/actions";
 import { deleteMessages } from "@/app/(app)/chats/delete-actions";
 import { BackButton } from "@/components/back-button";
 import { ChatStatus } from "@/components/chat/chat-status";
@@ -27,14 +27,14 @@ import { useFileSender } from "@/hooks/use-file-sender";
 import { useMediaSender } from "@/hooks/use-media-sender";
 import { useVisualViewportHeight } from "@/hooks/use-visual-viewport-height";
 import { PREVIEW_LENGTH } from "@/lib/chat/limits";
-import { canDeleteForEveryone } from "@/lib/chat/permissions";
+import { canDeleteForEveryone, canPost } from "@/lib/chat/permissions";
 import { tempId } from "@/lib/client-utils";
 import { audioManager } from "@/lib/media/client/audio-manager";
 import { formatCount } from "@/lib/numbers";
 import { lastConfirmedAt, mergeMessage } from "@/lib/realtime/client/merge";
 import { getSocket } from "@/lib/realtime/client/socket";
 import { TYPING_CLIENT_THROTTLE_MS } from "@/lib/realtime/events";
-import { isLocalDelete, removeConversation, renameConversation } from "@/lib/realtime/client/store";
+import { isLocalDelete, patchConversation, removeConversation, renameConversation } from "@/lib/realtime/client/store";
 import type {
   ChatConversation,
   ChatLocation,
@@ -76,8 +76,14 @@ export function ChatView({
   const [selection, setSelection] = useState<Set<string> | null>(null);
   const [removing, setRemoving] = useState<Set<string>>(() => new Set());
   const [deleteTargets, setDeleteTargets] = useState<ChatMessage[] | null>(null);
-  const myRole = chat.members.find((member) => member.id === currentUser.id)?.role ?? "MEMBER";
-  const conversationActions = useConversationActions({ id: chat.id, type: chat.type, title: chat.title, myRole });
+  // From the conversation itself: channels never send their member list to subscribers.
+  const myRole = chat.myRole;
+  const isChannel = chat.type === "CHANNEL";
+  const mayPost = canPost(chat.type, myRole);
+  const conversationActions = useConversationActions(
+    { id: chat.id, type: chat.type, title: chat.title, myRole, muted: chat.muted, isOwner: chat.isOwner },
+    { onMuted: (muted) => setChat((current) => ({ ...current, muted })) },
+  );
 
   // Refs so loadOlder stays stable and concurrent callers share one request.
   const cursorRef = useRef(cursor);
@@ -99,13 +105,27 @@ export function ChatView({
             : state,
         ),
       ),
-    onUpdated: ({ title, avatarUrl, members }) => {
+    onUpdated: ({ title, avatarUrl, members, description, signMessages, memberCount, myRole: role, isOwner, muted }) => {
       setChat((current) => ({
         ...current,
-        ...(title !== undefined && current.type === "GROUP" ? { title } : {}),
-        ...(avatarUrl !== undefined && current.type === "GROUP" ? { avatarUrl } : {}),
+        ...(title !== undefined && current.type !== "DIRECT" ? { title } : {}),
+        ...(avatarUrl !== undefined && current.type !== "DIRECT" ? { avatarUrl } : {}),
         ...(members ? { members, memberCount: members.length } : {}),
+        ...(description !== undefined ? { description } : {}),
+        ...(signMessages !== undefined ? { signMessages } : {}),
+        ...(memberCount !== undefined ? { memberCount } : {}),
+        ...(role !== undefined ? { myRole: role } : {}),
+        ...(isOwner !== undefined ? { isOwner } : {}),
+        ...(muted !== undefined ? { muted } : {}),
       }));
+      if (role !== undefined) {
+        patchConversation(conversation.id, { myRole: role });
+        // Demoted: the composer is gone, so drop a pending reply or selection.
+        if (!canPost(conversation.type, role)) {
+          setReplyTo(null);
+          setSelection(null);
+        }
+      }
       if (title !== undefined) renameConversation(conversation.id, title);
       if (members) {
         // Keep known read positions; drop people who left; add newcomers.
@@ -194,6 +214,47 @@ export function ChatView({
       return next;
     });
   }, []);
+  // Channels: view counts are refetched for the loaded posts every 30s while
+  // the channel is open and visible (never pushed per read).
+  useEffect(() => {
+    if (!isChannel) return;
+    const refresh = async () => {
+      if (document.visibilityState !== "visible") return;
+      const ids = messagesRef.current.filter((m) => m.status === "sent" && m.type !== "SYSTEM").map((m) => m.id);
+      try {
+        const stats = await getChannelStats(conversation.id, ids);
+        if (!stats) return;
+        setMessages((current) =>
+          current.map((m) =>
+            m.type !== "SYSTEM" && m.status === "sent"
+              ? { ...m, views: Math.max(stats.views[m.id] ?? 0, m.views ?? 0) }
+              : m,
+          ),
+        );
+        setChat((current) => ({ ...current, memberCount: stats.memberCount }));
+      } catch {
+        // Next tick retries.
+      }
+    };
+    const timer = setInterval(() => void refresh(), CHANNEL_STATS_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [isChannel, conversation.id]);
+
+  const toggleMute = useCallback(() => {
+    const next = !chat.muted;
+    setChat((current) => ({ ...current, muted: next }));
+    patchConversation(chat.id, { muted: next });
+    void setMuted(chat.id, next)
+      .then((result) => {
+        if (!result.ok) throw new Error();
+      })
+      .catch(() => {
+        setChat((current) => ({ ...current, muted: !next }));
+        patchConversation(chat.id, { muted: !next });
+        toast.error("Couldn't change the notification setting");
+      });
+  }, [chat.id, chat.muted]);
+
   const askDelete = useCallback((message: ChatMessage) => setDeleteTargets([message]), []);
   const askDeleteSelection = useCallback(() => {
     const ids = selectionRef.current;
@@ -477,7 +538,7 @@ export function ChatView({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="min-w-52">
                   {conversationActionItems(
-                    { id: chat.id, type: chat.type, title: chat.title, myRole },
+                    { id: chat.id, type: chat.type, title: chat.title, myRole, muted: chat.muted, isOwner: chat.isOwner },
                     { withDeleteGroup: true },
                   ).map((item) => (
                     <DropdownMenuItem
@@ -504,7 +565,11 @@ export function ChatView({
                 size="sm"
               />
               <span className="min-w-0">
-                <span className="block truncate text-base leading-tight">{chat.title}</span>
+                <span className="flex items-center gap-1 text-base leading-tight">
+                  {isChannel && <Megaphone aria-label="Channel" className="size-4 shrink-0 text-muted-foreground" />}
+                  <span className="truncate">{chat.title}</span>
+                  {chat.muted && <BellOff aria-label="Muted" className="size-3.5 shrink-0 text-muted-foreground" />}
+                </span>
                 <ChatStatus conversation={chat} currentUserId={currentUser.id} />
               </span>
             </Link>
@@ -516,6 +581,8 @@ export function ChatView({
         messages={messages}
         currentUserId={currentUser.id}
         conversationType={chat.type}
+        channelTitle={isChannel ? chat.title : undefined}
+        isAdmin={myRole === "ADMIN"}
         memberNames={memberNames}
         readStates={readStates}
         hasMore={cursor !== null}
@@ -539,7 +606,22 @@ export function ChatView({
           className="flex shrink-0 items-center justify-center gap-2 border-t bg-muted/60 px-4 pt-4 pb-[max(env(safe-area-inset-bottom),1rem)] text-sm font-medium text-muted-foreground"
         >
           <UserX className="size-4.5" />
-          {removed === "deleted" ? "This group was deleted" : "You're no longer a member of this group"}
+          {removed === "deleted"
+            ? `This ${isChannel ? "channel" : "group"} was deleted`
+            : `You're no longer ${isChannel ? "subscribed to this channel" : "a member of this group"}`}
+        </div>
+      ) : !mayPost ? (
+        // Channel subscribers can't post: one full-width mute switch instead.
+        <div className="shrink-0 border-t bg-background px-3 pt-2 pb-[max(env(safe-area-inset-bottom),0.5rem)]">
+          <Button
+            variant="ghost"
+            size="lg"
+            onClick={toggleMute}
+            className="h-12 w-full gap-2 rounded-xl text-base font-semibold text-primary"
+          >
+            {chat.muted ? <Bell className="size-5" /> : <BellOff className="size-5" />}
+            {chat.muted ? "Unmute" : "Mute"}
+          </Button>
         </div>
       ) : (
         // Disabled (not unmounted, so a draft survives) while selecting.
@@ -570,6 +652,8 @@ export function ChatView({
         everyoneLabel={
           everyoneAllowed ? (chat.type === "DIRECT" ? `Also delete for ${chat.title}` : "Delete for everyone") : null
         }
+        alwaysEveryone={isChannel}
+        description={isChannel ? "It will be removed for every subscriber." : undefined}
         onConfirm={confirmDelete}
       />
       {conversationActions.dialog}
@@ -578,6 +662,7 @@ export function ChatView({
 }
 
 const REMOVE_ANIMATION_MS = 200;
+const CHANNEL_STATS_INTERVAL_MS = 30_000;
 
 function toReplyPreview(message: ChatMessage): ReplyPreview {
   return {

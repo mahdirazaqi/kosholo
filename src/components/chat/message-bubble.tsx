@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useRef, useState } from "react";
-import { AlertCircle, Check, CheckCheck, CheckCircle2, Clock3, Copy, MoreHorizontal, Reply, RotateCw, Trash2 } from "lucide-react";
+import { AlertCircle, Check, CheckCheck, CheckCircle2, Clock3, Copy, Download, Eye, MoreHorizontal, Reply, RotateCw, Trash2 } from "lucide-react";
 import { ImageMedia } from "@/components/chat/media/image-media";
 import { VideoMedia } from "@/components/chat/media/video-media";
 import { FileMedia } from "@/components/chat/media/file-media";
@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { vibrate } from "@/lib/client-utils";
+import { formatCompactNumber } from "@/lib/numbers";
 import { isEmojiOnly } from "@/lib/emoji";
 import { formatTime } from "@/lib/format-date";
 import { useTimeZone } from "@/hooks/use-time-zone";
@@ -55,6 +56,12 @@ type Props = BubbleActions & {
   selecting: boolean; // selection mode: a tap toggles the message
   selected: boolean;
   removing: boolean; // being deleted: fades out before it's removed
+  // Channels render posts as cards: `channelTitle` turns that on. Subscribers
+  // can only copy/download; admins also reply, select and delete.
+  channelTitle?: string;
+  showAuthor?: boolean; // admins see which admin posted
+  canReply: boolean;
+  canDelete: boolean;
 };
 
 export const MessageBubble = memo(function MessageBubble({
@@ -69,21 +76,28 @@ export const MessageBubble = memo(function MessageBubble({
   selecting,
   selected,
   removing,
+  channelTitle,
+  showAuthor = false,
+  canReply,
+  canDelete,
   ...actions
 }: Props) {
+  const isChannel = channelTitle !== undefined;
   const canInteract = message.status === "sent" && !selecting;
-  const emojiOnly = message.type === "TEXT" && isEmojiOnly(message.content);
+  const emojiOnly = !isChannel && message.type === "TEXT" && isEmojiOnly(message.content);
   // Images/videos sit edge-to-edge in the bubble; the time overlays them when there's no caption.
   const visual =
     ((message.type === "IMAGE" || message.type === "VIDEO") && message.media !== null) ||
     (message.type === "LOCATION" && message.location !== null);
-  const timeOverlay = visual && !message.content && message.type !== "LOCATION";
+  const timeOverlay = visual && !message.content && message.type !== "LOCATION" && !isChannel;
   const isNew = message.tempId !== undefined;
   // "Reply" from the dropdown is applied after it closes: the menu's focus trap
   // would otherwise pull focus back from the composer.
   const replyAfterClose = useRef(false);
 
-  const menu = isDesktop && canInteract && (
+  const downloadable = isChannel && message.media !== null && message.status === "sent";
+  const hasMenuItems = canReply || canDelete || Boolean(message.content) || downloadable;
+  const menu = isDesktop && canInteract && hasMenuItems && (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
@@ -105,25 +119,39 @@ export const MessageBubble = memo(function MessageBubble({
           actions.onReply(message);
         }}
       >
-        <DropdownMenuItem onSelect={() => (replyAfterClose.current = true)}>
-          <Reply />
-          Reply
-        </DropdownMenuItem>
+        {canReply && (
+          <DropdownMenuItem onSelect={() => (replyAfterClose.current = true)}>
+            <Reply />
+            Reply
+          </DropdownMenuItem>
+        )}
         {message.content && (
           <DropdownMenuItem onSelect={() => actions.onCopy(message)}>
             <Copy />
             Copy text
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem onSelect={() => actions.onSelect(message)}>
-          <CheckCircle2 />
-          Select
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onSelect={() => actions.onDelete(message)}>
-          <Trash2 />
-          Delete
-        </DropdownMenuItem>
+        {downloadable && message.media && (
+          <DropdownMenuItem asChild>
+            <a href={message.media.url} download={message.media.originalName ?? ""}>
+              <Download />
+              Download
+            </a>
+          </DropdownMenuItem>
+        )}
+        {canDelete && (
+          <>
+            <DropdownMenuItem onSelect={() => actions.onSelect(message)}>
+              <CheckCircle2 />
+              Select
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onSelect={() => actions.onDelete(message)}>
+              <Trash2 />
+              Delete
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -134,7 +162,7 @@ export const MessageBubble = memo(function MessageBubble({
       className={cn(
         "group/msg relative flex flex-col px-3 transition-colors",
         isMine ? "items-end" : "items-start",
-        groupStart ? "pt-2" : "pt-0.5",
+        groupStart ? (isChannel ? "pt-3" : "pt-2") : "pt-0.5",
         selecting && "ps-12",
         selected && "bg-primary/8 dark:bg-primary/12",
         highlighted && "message-highlight",
@@ -145,7 +173,13 @@ export const MessageBubble = memo(function MessageBubble({
       {selecting && (
         <SelectToggle selected={selected} onToggle={() => actions.onToggleSelect(message)} />
       )}
-      <div className={cn("flex max-w-[85%] items-end gap-1", isMine && "flex-row-reverse")}>
+      <div
+        className={cn(
+          "flex items-end gap-1",
+          isChannel ? "w-full max-w-xl" : "max-w-[85%]",
+          isMine && "flex-row-reverse",
+        )}
+      >
         {isGroup && !isMine && (
           // Avatar on the last bubble of a run; an empty slot keeps the run aligned.
           <span className="w-7 shrink-0 self-end">
@@ -153,13 +187,15 @@ export const MessageBubble = memo(function MessageBubble({
           </span>
         )}
         <Swipeable
-          enabled={canInteract && !isDesktop}
-          onSwipe={() => actions.onReply(message)}
+          enabled={canInteract && !isDesktop && hasMenuItems}
+          onSwipe={canReply ? () => actions.onReply(message) : undefined}
           onLongPress={() => actions.onOpenActions(message)}
+          className={isChannel ? "w-full" : undefined}
         >
           <div
             className={cn(
               "relative min-w-0 rounded-2xl",
+              isChannel && "w-full",
               emojiOnly
                 ? "px-1"
                 : isMine
@@ -170,6 +206,11 @@ export const MessageBubble = memo(function MessageBubble({
               !isDesktop && "select-none [-webkit-touch-callout:none]",
             )}
           >
+            {isChannel && groupStart && (
+              <p dir="auto" className={cn("mb-0.5 truncate text-sm font-semibold text-primary", visual && "px-2 pt-1")}>
+                {channelTitle}
+              </p>
+            )}
             {isGroup && !isMine && groupStart && (
               <p className={cn("mb-0.5 truncate text-xs font-semibold", visual && "px-2 pt-0.5", nameColor(message.sender.id))}>
                 {message.sender.name}
@@ -241,8 +282,25 @@ export const MessageBubble = memo(function MessageBubble({
                       : "text-muted-foreground",
                 )}
               >
+                {isChannel && (
+                  <span className="me-auto flex min-w-0 items-center gap-1">
+                    {(message.signature ?? (showAuthor ? message.sender.name : null)) && (
+                      <span dir="auto" className="truncate">
+                        {message.signature ?? message.sender.name}
+                      </span>
+                    )}
+                  </span>
+                )}
+                {isChannel && message.views !== undefined && message.status === "sent" && (
+                  <span className="flex items-center gap-0.5" aria-label={`${message.views} views`}>
+                    <Eye className="size-3.5" />
+                    {formatCompactNumber(message.views)}
+                  </span>
+                )}
                 <MessageTime value={message.createdAt} />
-                {isMine && <StatusIcon status={message.status} read={read} />}
+                {(isChannel ? message.status !== "sent" : isMine) && (
+                  <StatusIcon status={message.status} read={read} />
+                )}
               </div>
             )}
           </div>
@@ -374,11 +432,13 @@ function Swipeable({
   enabled,
   onSwipe,
   onLongPress,
+  className,
   children,
 }: {
   enabled: boolean;
-  onSwipe: () => void;
+  onSwipe?: () => void; // no swipe-to-reply when missing (e.g. channel subscribers)
   onLongPress: () => void;
+  className?: string;
   children: React.ReactNode;
 }) {
   const [offset, setOffset] = useState(0);
@@ -395,7 +455,7 @@ function Swipeable({
   function end() {
     const current = gesture.current;
     if (current?.timer) clearTimeout(current.timer);
-    if (current?.axis === "x" && current.armed) onSwipe();
+    if (current?.axis === "x" && current.armed) onSwipe?.();
     gesture.current = null;
     setDragging(false);
     setOffset(0);
@@ -403,7 +463,7 @@ function Swipeable({
 
   return (
     <div
-      className="relative min-w-0 touch-pan-y"
+      className={cn("relative min-w-0 touch-pan-y", className)}
       onContextMenu={(event) => enabled && event.preventDefault()}
       onPointerDown={(event) => {
         if (!enabled || event.pointerType === "mouse") return;
@@ -432,7 +492,7 @@ function Swipeable({
         if (current.axis === null) {
           if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
           if (current.timer) clearTimeout(current.timer);
-          current.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+          current.axis = onSwipe && Math.abs(dx) > Math.abs(dy) ? "x" : "y";
           if (current.axis === "x") {
             event.currentTarget.setPointerCapture(event.pointerId);
             setDragging(true);

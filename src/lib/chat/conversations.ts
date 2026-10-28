@@ -1,7 +1,7 @@
 import "server-only";
 
 import { Prisma } from "@/generated/prisma/client";
-import { conversationSelect, preview, toChatMember, toReadState } from "@/lib/chat/queries";
+import { conversationSelectFor, preview, toChatMember, toReadState } from "@/lib/chat/queries";
 import { visibleSql } from "@/lib/chat/visibility";
 import { db } from "@/lib/db";
 import type { ChatConversation, ConversationListItem, SystemMeta } from "@/lib/types/chat";
@@ -12,7 +12,7 @@ export function directKeyFor(userA: string, userB: string) {
   return [userA, userB].sort().join(":");
 }
 
-type ConversationRow = Prisma.ConversationGetPayload<{ select: typeof conversationSelect }>;
+type ConversationRow = Prisma.ConversationGetPayload<{ select: ReturnType<typeof conversationSelectFor> }>;
 
 function describe(conversation: ConversationRow, userId: string) {
   const otherUser =
@@ -43,16 +43,24 @@ export async function getConversationForMember(
 
   const conversation = await db.conversation.findFirst({
     where: { id: conversationId, members: { some: { userId } } },
-    select: conversationSelect,
+    select: conversationSelectFor(userId),
   });
   if (!conversation) return null;
 
+  const me = conversation.members.find((member) => member.userId === userId);
+  const isChannel = conversation.type === "CHANNEL";
   return {
     id: conversation.id,
     type: conversation.type,
-    members: conversation.members.map(toChatMember),
-    memberCount: conversation.members.length,
-    readStates: conversation.members.filter((member) => member.userId !== userId).map(toReadState),
+    // Channels: the loaded rows are only mine, and no member data goes out.
+    members: isChannel ? [] : conversation.members.map(toChatMember),
+    memberCount: conversation._count.members,
+    readStates: isChannel ? [] : conversation.members.filter((member) => member.userId !== userId).map(toReadState),
+    myRole: me?.role ?? "MEMBER",
+    isOwner: isChannel && conversation.ownerId === userId,
+    muted: me?.muted ?? false,
+    description: conversation.description,
+    signMessages: conversation.signMessages,
     ...describe(conversation, userId),
   };
 }
@@ -69,9 +77,9 @@ export async function getConversations(
 
   // Per membership: the newest visible message and the visible unread count.
   const summaries = await db.$queryRaw<
-    { conversation_id: string; last_id: string | null; unread: number }[]
+    { conversation_id: string; last_id: string | null; unread: number; muted: boolean }[]
   >(Prisma.sql`
-    SELECT cm.conversation_id,
+    SELECT cm.conversation_id, cm.muted,
       (SELECT m.id FROM messages m
         WHERE m.conversation_id = cm.conversation_id AND ${visibleSql("m", "cm")}
         ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_id,
@@ -91,7 +99,7 @@ export async function getConversations(
   const [conversations, lastMessages] = await Promise.all([
     db.conversation.findMany({
       where: { id: { in: visible.map((row) => row.conversation_id) } },
-      select: conversationSelect,
+      select: conversationSelectFor(userId),
     }),
     db.message.findMany({
       where: { id: { in: visible.map((row) => row.last_id!) } },
@@ -115,23 +123,32 @@ export async function getConversations(
     const conversation = conversationById.get(summary.conversation_id);
     const last = messageById.get(summary.last_id!);
     if (!conversation || !last) continue; // deleted between the two queries
+    const myRole = conversation.members.find((member) => member.userId === userId)?.role ?? "MEMBER";
+    // Channel subscribers never learn which admin posted or changed something.
+    const hideAuthor = conversation.type === "CHANNEL" && myRole !== "ADMIN";
+    const channelTitle = conversation.title ?? "Channel";
+    const systemMeta = last.type === "SYSTEM" ? (last.meta as SystemMeta | null) : null;
     items.push({
       id: conversation.id,
       type: conversation.type,
-      myRole: conversation.members.find((member) => member.userId === userId)?.role ?? "MEMBER",
+      myRole,
       ...describe(conversation, userId),
       lastMessage: {
         type: last.type,
         duration: last.upload?.duration ?? null,
         content: preview(last.content),
         isMine: last.sender.id === userId,
-        senderName: last.sender.name,
-        meta: last.type === "SYSTEM" ? (last.meta as SystemMeta | null) : null,
+        senderName: hideAuthor ? channelTitle : last.sender.name,
+        meta:
+          systemMeta && hideAuthor
+            ? { event: systemMeta.event, actorId: conversation.id, actorName: channelTitle, newTitle: systemMeta.newTitle, removed: systemMeta.removed }
+            : systemMeta,
         fileName: last.upload?.originalName ?? null,
         locationLabel: last.locationLabel,
       },
       lastMessageAt: last.createdAt.toISOString(),
       unreadCount: summary.unread,
+      muted: summary.muted,
     });
   }
   return items.sort((a, b) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));

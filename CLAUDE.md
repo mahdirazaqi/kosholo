@@ -57,7 +57,9 @@ src/components/chat/  chat list, new-conversation/new-chat sheets, chat view, me
 src/components/groups/ new-group flow, member picker, group info view, direct info view
 src/components/chat/media/ image/video/voice/file bubbles, upload progress, viewer, attach + preview (media and files)
 src/components/chat/location/ location bubble + thumb (static tiles), picker and viewer (Leaflet, lazy)
-src/components/avatar-editor.tsx  change/remove a profile or group photo
+src/components/channels/ channel info view (admin tools), new-channel flow, join card; src/components/linkified-text.tsx (safe links)
+src/app/(app)/chats/channel-actions.ts  all channel Server Actions; src/app/(app)/join/[token]/ invite-link page
+src/components/avatar-editor.tsx  change/remove a profile, group or channel photo
 src/app/api/upload/   POST: upload + process (Route Handler, auth inside); files/: the resumable FILE protocol
 src/app/api/media/    GET/HEAD [uploadId] and [uploadId]/thumb: access-checked, Range-aware streaming
 src/app/(app)/photo-actions.ts  setProfilePhoto, setGroupPhoto
@@ -74,7 +76,7 @@ src/lib/realtime/     events.ts (typed event contract + rooms), membership.ts (c
 src/lib/realtime/client/ socket.ts (typed client), store.ts (zustand), merge.ts (dedupe rule)
 src/lib/media/        limits.ts (shared), storage.ts, ffmpeg.ts, serialize.ts (no server-only: also used by the custom server);
                       process.ts (sharp/ffmpeg), access.ts, serve.ts, routes.ts (server-only); client/ (prepare, upload, audio-manager)
-src/lib/chat/         queries.ts (selects + mappers), conversations.ts, messages.ts, groups.ts (group rules), limits.ts, system-text.ts (client-safe),
+src/lib/chat/         queries.ts (selects + mappers), conversations.ts, messages.ts, groups.ts (group rules), channels.ts (channel rules), channel-view.ts (subscriber copy of a post, client-safe), views.ts (post view counts), limits.ts, system-text.ts (client-safe),
                       visibility.ts (the visibility rule), delete.ts (deletion rules), purge.ts (hard delete + GC), permissions.ts (client-safe)
 src/lib/colors.ts     stable per-id colors (avatar tints, group sender names)
 src/lib/types/chat.ts shared chat types (ChatMessage, ConversationListItem, ...)
@@ -259,7 +261,7 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
 - Nothing derived is stored: after a deletion the chat-list row (preview, time, unread) is recomputed from the visibility rule (`refreshConversationRow()` on the client re-fetches it, or drops it when nothing is visible).
 
 **The visibility rule** (`src/lib/chat/visibility.ts`, apply it to every read): a message is visible to user U only if U is a **current member**, the message is **not in `MessageHide` for U**, and **U's `clearedAt` is null or older than `message.createdAt`**.
-- `getViewer(conversationId, userId)` is the membership check and returns `{ userId, clearedAt }`; `visibleMessageWhere(viewer)` is the Prisma filter (combine with `AND`); `visibleSql("m", "cm")` is the same rule for raw SQL; `isVisibleTo()` checks a loaded row.
+- `getViewer(conversationId, userId)` is the membership check and returns `{ userId, clearedAt, role, conversationType }`; `visibleMessageWhere(viewer)` is the Prisma filter (combine with `AND`); `visibleSql("m", "cm")` is the same rule for raw SQL; `isVisibleTo()` checks a loaded row.
 - Used by `getMessages`, `getMessagesSince` (+ `goneIds`), `getConversations` (last message, unread, "has a visible message"), quotes, the `sendMessage` reply check, and `/api/media` access.
 - A cleared conversation leaves the user's list and comes back with the next new message, showing only new messages.
 
@@ -275,6 +277,7 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
 | Delete chat for everyone | either member (hard-deletes the conversation) | admin "Delete group for everyone" (`deleteGroup`) |
 | Leave and delete group | — | any member: `leaveGroup` + removes my `MessageHide` rows for the group |
 
+- **CHANNEL:** there is no "delete message for me" (subscribers can't delete individual posts at all). Admins delete any post/system message for everyone (the dialog has no checkbox, `alwaysEveryone`) and clear the history for everyone (adds `history_cleared`); every member clears for me or leaves. The owner deletes the channel (`conversation:deleted` to every member).
 - At most 100 message ids per request (`MAX_DELETE_MESSAGES`); all must be visible to the actor and belong to the conversation, or the whole request is rejected.
 
 **Server:** `src/lib/chat/delete.ts` (`deleteMessages`, `clearHistory`, `deleteDirectConversation`, throwing `DeleteError`) and `src/app/(app)/chats/delete-actions.ts` (`deleteMessages`, `clearHistory`, `deleteConversation`, each returning `{ ok, conversationDeleted } | { ok: false, error }`). Hard-deleted conversations go through `emitConversationDeleted()`, which also invalidates the membership cache.
@@ -385,6 +388,60 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
 - **Viewer:** interactive map with the marker, "My location" (distance via haversine, "1.2 km"), "Open in…" (Google Maps, Neshan, Balad, `geo:` from `src/lib/map-links.ts`) and "Copy coordinates".
 - LOCATION and FILE messages follow the hard-delete and visibility rules like every other message (deleting a FILE message removes its file and thumbnail).
 
+## Channels
+
+Telegram-style broadcast channels. A channel is a `Conversation` with `type: CHANNEL`: admins publish, subscribers (role `MEMBER`) only read. They reuse the conversation, message types, upload, hard-delete, visibility and realtime layers; code branches on `conversation.type` where behavior differs.
+
+- **Schema:** `Conversation.description` (≤255), `inviteToken` (unique), `signMessages`, `ownerId` (the single owner); `ConversationMember.muted` (all types, see Muting).
+- **Join:** an admin adds people **from their contacts**, or a person opens an invite link. Capacity is `MAX_CHANNEL_MEMBERS`. No join/leave/add/remove system messages exist. System messages in channels are only `created`, `renamed`, `photo_changed` and `history_cleared`, and their text never names the actor (`systemMessageText(..., "CHANNEL")`).
+- **Where:** `src/lib/chat/channels.ts` (server-only; rules, all checks inside the transaction, `ChannelError`), `src/app/(app)/chats/channel-actions.ts` (create/update/add/remove/role/leave/transfer/delete/invite/list/join; `requireUser` → zod → transaction → events), `setChannelPhoto` in `photo-actions.ts`, `lib/validations/channels.ts`. **UI hiding is cosmetic; the server is the authority.**
+
+### Permissions (enforced on the server)
+
+| Action | Member | Admin | Owner |
+|---|---|---|---|
+| Read posts, mute/unmute, clear history for me, leave | ✓ | ✓ | ✓ (see leaving) |
+| Send posts (all message types), reply, typing events | ✗ | ✓ | ✓ |
+| Delete any post for everyone, clear history for everyone | ✗ | ✓ | ✓ |
+| See the member list, add members from contacts, remove members | ✗ | ✓ | ✓ |
+| Edit title/description/photo, toggle `signMessages`, create/reset invite link | ✗ | ✓ | ✓ |
+| Promote a member to admin | ✗ | ✓ | ✓ |
+| Demote or remove an admin, transfer ownership, delete the channel | ✗ | ✗ | ✓ |
+
+- `sendMessage` rejects non-admins (`canPost`); typing events from non-admins are dropped by the socket server (roles come from the membership cache). Replies are part of sending.
+- The owner can't be removed or demoted. If the owner leaves, ownership moves to the longest-standing other admin (`joinedAt`, then `userId`); with no other admin, leaving is refused ("Appoint another admin first or delete the channel").
+- **Transfer ownership** needs the owner's password (bcrypt, `LIMITS.passwordFailures`); the target must already be an admin; the old owner stays an admin.
+
+### Privacy (subscribers must never learn who else is in the channel)
+
+For non-admins, no payload (page props, Server Action result, socket event) may contain the member list, member ids, other members' presence, or which admin posted:
+- `ChatConversation.members` / `readStates` are always empty for channels; `conversationSelectFor(userId)` loads only the viewer's own member row for a channel (never 10k users). `ChatConversation` carries `myRole`, `isOwner` (boolean, never the owner's id), `memberCount`, `muted`, `description`, `signMessages` instead.
+- The only way to list people is `listChannelMembers` (admins only, 50 per page, search by name/username, keyset cursor). Admins and the invite token come from `getChannelInfo` and are empty for subscribers.
+- **Post author:** `toChatMessage(row, viewer)` (and `toMemberView` in `channel-view.ts`, used by `emitMessageNew`) replaces `sender` for non-admins with the channel identity (`id` = conversation id, name = title, channel avatar). With `signMessages` on, `ChatMessage.signature` holds only the admin's display name (no id, no username). Quotes' `senderName` and system-message `meta` (`actorId`/`actorName`) get the same treatment, and so does the chat-list preview (`getConversations`). Admins see the real sender.
+- `message:new` is built **per audience**: admin version to admins, subscriber version to subscribers. `conversation:read` stays on the reader's own rooms. `presence:subscribe` never returns anyone from a channel unless the viewer is an admin of it (`getWatchablePresence`). `user:updated` (profile photo) reaches only a channel's admins.
+- Typing is visible to other admins only.
+
+### Views
+
+`ChatMessage.views` = the number of current members whose `lastReadAt >= post.createdAt` (the author counts), computed for a page of posts in one SQL query (`lib/chat/views.ts`, no table). New posts start at 1. They are **not** pushed per read: the open channel polls `getChannelStats` every 30s (visible tab only) for the loaded posts and the subscriber count. Shown as `Eye` + `formatCompactNumber` ("1.2K").
+
+### Invite links
+
+- Token: `randomBytes(24).toString("base64url")` (32 chars). Admins create (on first use), copy, share (`navigator.share`, else copy) and reset it from the info page; reset replaces the token, so the old link dies at once. The token is only ever sent to admins.
+- `/join/[token]` (`proxy.ts` sends logged-out users to `/login?from=…` and back): preview card (avatar, title, "Channel", subscriber count, description) with "Join channel"; already a member → redirect to the channel; unknown/reset token → "This invite link isn't valid". Rate limits: `LIMITS.badInviteLinks` (unknown tokens per user and IP) on the page, `LIMITS.channelJoins` (every join attempt per user and IP) in `joinChannel`. A full channel says "This channel is full".
+- Joining and being added emit `conversation:joined` to the user's rooms (no system message); admins get `membersChanged`.
+
+### Muting (all conversation types)
+
+`ConversationMember.muted`, toggled by `setMuted` ("Mute" / "Unmute": header menu, chat-list row menu, info pages, and the subscribers' bottom bar in channels). Muted conversations play no notification sound, don't count in `selectTotalUnread` (tab badge, title, app icon), show their unread badge in gray and a `BellOff` icon next to the name. Other tabs follow through `conversation:updated { muted }` to the user's own rooms.
+
+### UI
+
+- New channel: "New channel" (megaphone) in the chat-list sheet → `/chats/new-channel` (step 1 photo, name, description; step 2 pick subscribers or "Skip").
+- Chat list: megaphone next to the name, no sender prefix in the preview.
+- Channel page = the same `ChatView`: subtitle "{n} subscribers" (no presence); posts render as full-width cards (`channelTitle` on `MessageBubble`: channel name on the first post of a run, content, caption, footer with signature/author, views and time; no read ticks, no avatars). Admins get the normal composer; subscribers a single full-width "Mute" / "Unmute" button instead. Subscribers' message menu: "Copy text" and "Download" only; admins also "Reply", "Select", "Delete".
+- Info page (`ChannelInfoView`): large avatar, name, "Channel", subscriber count, description with safe links (`LinkifiedText`: http/https only, `rel="noopener noreferrer"`), mute switch. Admins also get invite link tools, the "Sign posts" switch, edit name/description/photo, "Add subscribers", admin and subscriber lists with search and per-person actions. The owner gets "Transfer ownership" and "Delete channel". Everyone gets "Clear history" and "Leave channel".
+
 ## Realtime (Socket.IO)
 
 One process: Socket.IO is attached to the custom server.
@@ -399,10 +456,11 @@ One process: Socket.IO is attached to the custom server.
 |---|---|---|---|
 | S→C | `session:ready` | `{ userId }` | the socket, after auth |
 | S→C | `message:new` | `{ message: ChatMessage, tempId }` | `user:{id}` of **every** member (incl. sender's other tabs) |
-| S→C | `conversation:read` | `{ conversationId, userId, lastReadAt }` | `user:{id}` of every member |
-| S→C | `typing:start` / `typing:stop` | `{ conversationId, userId, name }` | `user:{id}` of the other members |
+| S→C | `conversation:read` | `{ conversationId, userId, lastReadAt }` | `user:{id}` of every member (channels: only the reader's own rooms) |
+| S→C | `typing:start` / `typing:stop` | `{ conversationId, userId, name }` | `user:{id}` of the other members (channels: other admins only) |
 | S→C | `presence:update` | `{ userId, online, lastSeenAt }` | `presence:{userId}` |
-| S→C | `conversation:updated` | `{ conversationId, title?, avatarUrl?, members? }` | `user:{id}` of every member, after rename / photo / membership / role changes |
+| S→C | `conversation:updated` | `{ conversationId, title?, avatarUrl?, members?, description?, signMessages?, memberCount?, membersChanged?, myRole?, isOwner?, muted? }` | `user:{id}` of every member, after rename / photo / membership / role changes. Channels: `members`, `memberCount`, `membersChanged` go to admins only; `myRole`/`isOwner`/`muted` only to the user they describe |
+| S→C | `conversation:joined` | `{ conversationId }` | the joining user's own rooms (added to a channel or joined by invite link); the client fetches the list row. No system message |
 | S→C | `user:updated` | `{ userId, name?, avatarUrl? }` | `user:{id}` of everyone sharing a conversation with the user or having them as a contact |
 | S→C | `conversation:removed` | `{ conversationId, reason: "removed" \| "left" \| "deleted" }` | `user:{id}` of the former member(s) |
 | S→C | `message:deleted` | `{ conversationId, messageIds }` | for everyone: `user:{id}` of every member; for me: my own `user:{id}` (other tabs/devices) |
@@ -421,9 +479,11 @@ Typing goes to user rooms rather than `conv:{id}` so the chat list can show it t
 
 **Auth:** the handshake reads the httpOnly `session` cookie and verifies it with `verifySession` (`session-token.ts`), then sets `socket.data.userId` and `socket.data.name`. Invalid or missing sessions are rejected with `unauthorized`.
 
-**Membership:** every client event that names a conversation is checked with `isConversationMember` (`lib/realtime/membership.ts`). It has a 60s in-memory TTL; call `invalidateMembership(id)` when members change.
+**Membership:** every client event that names a conversation is checked with `isConversationMember` (`lib/realtime/membership.ts`). The 60s in-memory cache (`getMembership`) holds the conversation type, the member ids **and the admin ids**; call `invalidateMembership(id)` when members or roles change.
 
 **Emitting from Server Actions:** use `emitToMembers(conversationId, event, payload)` (`lib/realtime/emit.ts`). It's a no-op without a socket server, so mutations never fail because of realtime.
+- Every fan-out goes through `emitChunked`: rooms in batches of 500 with a `setImmediate` yield between, so a 10k-subscriber channel never blocks the event loop.
+- `emitToAdmins` / `emitToSubscribers` / `emitRead` / `emitMessageNew` are the role-aware variants. **A new message must go out through `emitMessageNew`** (it builds the admin and subscriber versions for channels, and handles per-recipient hidden quotes).
 - **Membership changes:**
   - Call `invalidateMembership(id)` **before** emitting to the new member list (adds).
   - Use `emitRemoved(id, userIds, reason)` for people who are no longer members. It emits `conversation:removed`, runs `io.in(user rooms).socketsLeave(conv room)` and invalidates the cache.
@@ -494,6 +554,7 @@ Full step-by-step guide (for the server admin): `DEPLOY.md`.
   - The client IP is the right-most `X-Forwarded-For` entry (the one Caddy appends).
   - ffmpeg runs at most 2 jobs at a time, each with a `FFMPEG_TIMEOUT_SECONDS` limit.
 - **Logging:** server code logs through `src/lib/logger.ts` (`logger.info/warn/error(scope, msg, err?)`, timestamped and levelled). Never log secrets, tokens, passwords or message contents.
+- **`MAX_CHANNEL_MEMBERS`** (runtime, default 10000): the most subscribers a channel can have; checked inside the add/join transaction (`assertCapacity`). Validated in `src/server/env.ts`; documented in `.env.example`, `.env.production.example` and DEPLOY.md §5.
 - **Rule: every new env var** must be added to `.env.example`, `.env.production.example` (commented) **and** the table in `DEPLOY.md` §5. If the container needs a fixed value, set it in `docker-compose.prod.yml`.
   - Build-time variables (`NEXT_PUBLIC_*`, and `MAX_FILE_SIZE_MB` for the client check) must also be passed as `build.args` in `docker-compose.prod.yml` and declared as `ARG`/`ENV` in the Dockerfile build stage; changing them needs a rebuild.
 - **Lockfile:** the image uses npm 11 (`npm ci`), which is stricter than local npm 10 about optional platform packages. If `npm ci` fails in the image, regenerate `package-lock.json` with npm 11, e.g. a full `npm install` inside `node:24.11-trixie-slim`, and check it with `npm ci --dry-run` both there and locally.

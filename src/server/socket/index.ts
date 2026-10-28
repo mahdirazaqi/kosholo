@@ -1,4 +1,4 @@
-import { getMemberIds, isConversationMember, isUuid } from "@/lib/realtime/membership";
+import { getMembership, isConversationMember, isUuid } from "@/lib/realtime/membership";
 import {
   conversationRoom,
   presenceRoom,
@@ -40,9 +40,15 @@ export function registerSocketHandlers(io: AppServer) {
     const typingIn = new Map<string, number>(); // conversationId → last accepted start
     const typingPayload = (conversationId: string) => ({ conversationId, userId, name });
 
+    // Null = not allowed to type here. Channels: only admins type, and only
+    // other admins see it (subscribers never learn who is in the channel).
     async function otherMemberRooms(conversationId: string) {
-      const memberIds = await getMemberIds(conversationId);
+      const { type, memberIds, adminIds } = await getMembership(conversationId);
       if (!memberIds.includes(userId)) return null;
+      if (type === "CHANNEL") {
+        if (!adminIds.has(userId)) return null;
+        return [...adminIds].filter((id) => id !== userId).map(userRoom);
+      }
       return memberIds.filter((id) => id !== userId).map(userRoom);
     }
 

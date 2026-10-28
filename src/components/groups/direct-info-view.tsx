@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { addContact, removeContact } from "@/app/(app)/(tabs)/contacts/actions";
 import { BackButton } from "@/components/back-button";
 import { ConversationDangerZone } from "@/components/chat/conversation-actions";
+import { MuteSwitch } from "@/components/chat/mute-switch";
 import { PresenceText } from "@/components/groups/presence-text";
 import { PageHeader } from "@/components/page-header";
 import { UserAvatar } from "@/components/user-avatar";
@@ -21,10 +22,12 @@ export function DirectInfoView({
   conversationId,
   user,
   initialIsContact,
+  muted,
 }: {
   conversationId: string;
   user: PublicUser;
   initialIsContact: boolean;
+  muted: boolean;
 }) {
   usePresence(user.id);
   const router = useRouter();
@@ -82,7 +85,8 @@ export function DirectInfoView({
           {pending ? <Loader2 className="animate-spin" /> : isContact ? <UserMinus /> : <UserPlus />}
           {isContact ? "Remove from contacts" : "Add to contacts"}
         </Button>
-        <ConversationDangerZone target={{ id: conversationId, type: "DIRECT", title: user.name, myRole: "MEMBER" }} />
+        <MuteSwitch conversationId={conversationId} initialMuted={muted} />
+        <ConversationDangerZone target={{ id: conversationId, type: "DIRECT", title: user.name, myRole: "MEMBER", muted }} />
       </div>
     </>
   );

@@ -2,11 +2,11 @@
 
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Prisma } from "@/generated/prisma/client";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getClientIp } from "@/lib/request";
 import { fieldErrors, formValues, type FormState } from "@/lib/form";
 import {
   isRateLimited,
@@ -36,17 +36,6 @@ let dummyHash: Promise<string> | undefined;
 function getDummyHash() {
   dummyHash ??= bcrypt.hash("kosholo-dummy-password", BCRYPT_COST);
   return dummyHash;
-}
-
-// The client IP for rate limiting. In production the app is only reachable
-// through Caddy, which sets X-Forwarded-For to the real client address
-// (ignoring whatever the client sent); we only trust that first proxy hop,
-// i.e. the right-most entry. Without a proxy the custom server fills the
-// header from the socket address.
-async function getClientIp() {
-  const headerList = await headers();
-  const forwarded = headerList.get("x-forwarded-for")?.split(",").at(-1)?.trim();
-  return forwarded || "unknown";
 }
 
 // Only allow same-site relative paths after login.

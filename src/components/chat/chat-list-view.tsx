@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { EllipsisVertical, Loader2, MessageCirclePlus, MessagesSquare } from "lucide-react";
+import { BellOff, EllipsisVertical, Loader2, Megaphone, MessageCirclePlus, MessagesSquare } from "lucide-react";
 import { toast } from "sonner";
 import { listMyContacts } from "@/app/(app)/(tabs)/contacts/actions";
 import {
@@ -172,10 +172,11 @@ export const ConversationRow = memo(function ConversationRow({
   const timeZone = useTimeZone();
   const typingNames = typing ? Object.values(typing) : null;
   const { lastMessage, unreadCount } = conversation;
-  const isGroup = conversation.type === "GROUP";
+  const isGroup = conversation.type !== "DIRECT";
   // "You: …" for mine; "Jane: …" for others in groups; system events as text.
+  // Channel posts have no sender prefix.
   const prefix =
-    !lastMessage || lastMessage.type === "SYSTEM"
+    !lastMessage || lastMessage.type === "SYSTEM" || conversation.type === "CHANNEL"
       ? null
       : lastMessage.isMine
         ? "You: "
@@ -185,7 +186,7 @@ export const ConversationRow = memo(function ConversationRow({
   const previewBody = !lastMessage
     ? null
     : lastMessage.type === "SYSTEM" && lastMessage.meta
-      ? systemMessageText(lastMessage.meta, currentUserId)
+      ? systemMessageText(lastMessage.meta, currentUserId, undefined, conversation.type)
       : previewText(lastMessage);
   const avatarUser = conversation.otherUser ?? {
     id: conversation.id,
@@ -196,7 +197,13 @@ export const ConversationRow = memo(function ConversationRow({
   // Row actions: long-press (touch) → bottom sheet; right-click or the hover
   // button (desktop) → dropdown. Both open the shared confirm dialogs.
   const isDesktop = useIsDesktop();
-  const target = { id: conversation.id, type: conversation.type, title: conversation.title, myRole: conversation.myRole };
+  const target = {
+    id: conversation.id,
+    type: conversation.type,
+    title: conversation.title,
+    myRole: conversation.myRole,
+    muted: conversation.muted,
+  };
   const { open: openAction, dialog } = useConversationActions(target);
   const items = conversationActionItems(target);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -251,7 +258,13 @@ export const ConversationRow = memo(function ConversationRow({
         <UserAvatar user={avatarUser} size="lg" className="size-13" />
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-baseline gap-2">
-            <span className="min-w-0 flex-1 truncate font-semibold">{conversation.title}</span>
+            <span className="flex min-w-0 flex-1 items-center gap-1">
+              {conversation.type === "CHANNEL" && (
+                <Megaphone aria-label="Channel" className="size-4 shrink-0 text-muted-foreground" />
+              )}
+              <span className="truncate font-semibold">{conversation.title}</span>
+              {conversation.muted && <BellOff aria-label="Muted" className="size-3.5 shrink-0 text-muted-foreground" />}
+            </span>
             {conversation.lastMessageAt && (
               <time
                 dateTime={conversation.lastMessageAt}
@@ -276,7 +289,10 @@ export const ConversationRow = memo(function ConversationRow({
             {unreadCount > 0 && (
               <span
                 aria-label={`${formatCount(unreadCount, "unread message")}`}
-                className="flex h-5.5 min-w-5.5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground"
+                className={cn(
+                  "flex h-5.5 min-w-5.5 shrink-0 items-center justify-center rounded-full px-1.5 text-xs font-bold",
+                  conversation.muted ? "bg-muted-foreground/40 text-background" : "bg-primary text-primary-foreground",
+                )}
               >
                 {unreadCount > 99 ? "99+" : formatNumber(unreadCount)}
               </span>

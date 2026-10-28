@@ -25,6 +25,7 @@ export function DeleteDialog({
   description,
   everyoneLabel,
   confirmLabel = "Delete",
+  alwaysEveryone = false,
   pending = false,
   onConfirm,
 }: {
@@ -35,6 +36,8 @@ export function DeleteDialog({
   // Shown only when deleting for everyone is allowed.
   everyoneLabel?: string | null;
   confirmLabel?: string;
+  // Channel posts have no "delete for me": always for everyone, no checkbox.
+  alwaysEveryone?: boolean;
   pending?: boolean;
   onConfirm: (forEveryone: boolean) => void;
 }) {
@@ -44,8 +47,9 @@ export function DeleteDialog({
         <DeleteDialogBody
           title={title}
           description={description}
-          everyoneLabel={everyoneLabel}
+          everyoneLabel={alwaysEveryone ? null : everyoneLabel}
           confirmLabel={confirmLabel}
+          alwaysEveryone={alwaysEveryone}
           pending={pending}
           onConfirm={onConfirm}
         />
@@ -60,6 +64,7 @@ function DeleteDialogBody({
   description,
   everyoneLabel,
   confirmLabel,
+  alwaysEveryone,
   pending,
   onConfirm,
 }: {
@@ -67,6 +72,7 @@ function DeleteDialogBody({
   description?: React.ReactNode;
   everyoneLabel?: string | null;
   confirmLabel: string;
+  alwaysEveryone: boolean;
   pending: boolean;
   onConfirm: (forEveryone: boolean) => void;
 }) {
@@ -104,7 +110,7 @@ function DeleteDialogBody({
           variant="destructive"
           size="lg"
           disabled={pending}
-          onClick={() => onConfirm(forEveryone)}
+          onClick={() => onConfirm(alwaysEveryone || forEveryone)}
           className="h-11 rounded-xl text-base"
         >
           {pending && <Loader2 className="animate-spin" />}

@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, MessageCircle, Users } from "lucide-react";
+import { ChevronRight, Megaphone, MessageCircle, Users } from "lucide-react";
 import { BottomSheetContent } from "@/components/bottom-sheet";
 import { Sheet, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
-// "New chat" (contact picker) or "New group" (/chats/new-group).
+// "New chat" (contact picker), "New group" (/chats/new-group) or "New channel"
+// (/chats/new-channel).
 export function NewConversationSheet({
   open,
   onOpenChange,
@@ -34,6 +35,13 @@ export function NewConversationSheet({
             title="New group"
             description="Chat with several contacts"
             href="/chats/new-group"
+            onClick={() => onOpenChange(false)}
+          />
+          <Option
+            icon={<Megaphone />}
+            title="New channel"
+            description="Publish posts to subscribers"
+            href="/chats/new-channel"
             onClick={() => onOpenChange(false)}
           />
         </div>

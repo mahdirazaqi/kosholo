@@ -57,7 +57,9 @@ export function userDisconnected(io: AppServer, userId: string) {
 }
 
 // Only users who share a conversation with me, or are in my contacts, can be
-// watched; anything else is silently dropped.
+// watched; anything else is silently dropped. A channel doesn't count as
+// "sharing" unless I'm one of its admins: subscribers must never see who else
+// is in the channel, online or not.
 export async function getWatchablePresence(viewerId: string, userIds: unknown): Promise<PresenceState[]> {
   if (!Array.isArray(userIds)) return [];
   const ids = [...new Set(userIds.filter(isUuid))].slice(0, MAX_SUBSCRIBE);
@@ -67,7 +69,18 @@ export async function getWatchablePresence(viewerId: string, userIds: unknown): 
     where: {
       id: { in: ids },
       OR: [
-        { memberships: { some: { conversation: { members: { some: { userId: viewerId } } } } } },
+        {
+          memberships: {
+            some: {
+              conversation: {
+                OR: [
+                  { type: { not: "CHANNEL" }, members: { some: { userId: viewerId } } },
+                  { type: "CHANNEL", members: { some: { userId: viewerId, role: "ADMIN" } } },
+                ],
+              },
+            },
+          },
+        },
         { contactOf: { some: { ownerId: viewerId } } },
       ],
     },

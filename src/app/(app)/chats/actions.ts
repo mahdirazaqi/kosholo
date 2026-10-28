@@ -6,10 +6,12 @@ import { requireUser } from "@/lib/auth";
 import { getConversations, isMember } from "@/lib/chat/conversations";
 import { getGoneIds, getMessages, getMessagesSince as queryMessagesSince } from "@/lib/chat/messages";
 import { messageSelect, quoteHiddenFor, toChatMessage, type MessageRow } from "@/lib/chat/queries";
+import { canPost } from "@/lib/chat/permissions";
+import { getViewCounts } from "@/lib/chat/views";
 import { getViewer, visibleMessageWhere } from "@/lib/chat/visibility";
 import { db } from "@/lib/db";
 import { isRateLimited, LIMITS, RATE_LIMIT_ERROR, recordHit } from "@/lib/rate-limit";
-import { emitToMembers, emitToUsers } from "@/lib/realtime/emit";
+import { emitMessageNew, emitRead, emitToUsers } from "@/lib/realtime/emit";
 import type {
   ChatMessage,
   ConversationListItem,
@@ -31,6 +33,10 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
 
   const viewer = await getViewer(conversationId, me.id);
   if (!viewer) return { ok: false, error: NOT_FOUND };
+  // Channels: only admins publish (the server is the authority, not the UI).
+  if (!canPost(viewer.conversationType, viewer.role)) {
+    return { ok: false, error: "Only admins can post in this channel" };
+  }
 
   const limitKey = `send:${me.id}`;
   if (isRateLimited(limitKey, LIMITS.messages)) return { ok: false, error: RATE_LIMIT_ERROR };
@@ -87,26 +93,38 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
     }
     throw error;
   }
-  const message = toChatMessage(row, viewer);
+  const isChannel = viewer.conversationType === "CHANNEL";
+  // A new post has one view: its author.
+  const message = isChannel ? { ...toChatMessage(row, viewer), views: 1 } : toChatMessage(row, viewer);
 
   // Every member's user room, including the sender's other tabs/devices.
-  await emitNewMessage(conversationId, row, tempId ?? null);
-  await emitToMembers(conversationId, "conversation:read", {
-    conversationId,
-    userId: me.id,
-    lastReadAt: now.toISOString(),
-  });
+  if (isChannel) await emitChannelPost(conversationId, row, message, tempId ?? null);
+  else await emitNewMessage(conversationId, row, tempId ?? null);
+  await emitRead(conversationId, me.id, now.toISOString());
 
   // Refreshes the chat list on the next visit (not the current chat screen).
   revalidatePath("/");
   return { ok: true, message };
 }
 
+// Channel post: admins get the real author, subscribers the channel identity
+// (emitMessageNew). Subscribers who cleared their history past the quoted post
+// see "Message unavailable".
+async function emitChannelPost(conversationId: string, row: MessageRow, message: ChatMessage, tempId: string | null) {
+  const cleared = row.replyTo
+    ? await db.conversationMember.findMany({
+        where: { conversationId, clearedAt: { gte: row.replyTo.createdAt } },
+        select: { userId: true },
+      })
+    : [];
+  await emitMessageNew(conversationId, message, tempId, new Set(cleared.map((member) => member.userId)));
+}
+
 // message:new for every member. A quote of a message some members deleted
 // for themselves (or cleared) reaches them as "Message unavailable".
 async function emitNewMessage(conversationId: string, row: MessageRow, tempId: string | null) {
   if (!row.replyTo) {
-    await emitToMembers(conversationId, "message:new", { message: toChatMessage(row), tempId });
+    await emitMessageNew(conversationId, toChatMessage(row), tempId);
     return;
   }
   const members = await db.conversationMember.findMany({
@@ -131,12 +149,42 @@ export async function markAsRead(conversationId: string): Promise<void> {
     where: { conversationId_userId: { conversationId, userId: me.id } },
     data: { lastReadAt },
   });
-  await emitToMembers(conversationId, "conversation:read", {
-    conversationId,
-    userId: me.id,
-    lastReadAt: lastReadAt.toISOString(),
-  });
+  await emitRead(conversationId, me.id, lastReadAt.toISOString());
   revalidatePath("/");
+}
+
+// Mute / unmute for me (every conversation type). Only my own tabs and
+// devices hear about it.
+export async function setMuted(conversationId: string, muted: boolean): Promise<{ ok: boolean }> {
+  const me = await requireUser();
+  if (typeof muted !== "boolean" || !(await isMember(conversationId, me.id))) return { ok: false };
+  await db.conversationMember.update({
+    where: { conversationId_userId: { conversationId, userId: me.id } },
+    data: { muted },
+  });
+  emitToUsers([me.id], "conversation:updated", { conversationId, muted });
+  revalidatePath("/");
+  return { ok: true };
+}
+
+// Channel only, polled every 30s while a channel is open: fresh view counts
+// for the posts on screen and the subscriber count. Views are never pushed
+// per read, so a busy channel can't cause a fan-out storm.
+export async function getChannelStats(
+  conversationId: string,
+  messageIds: string[],
+): Promise<{ views: Record<string, number>; memberCount: number } | null> {
+  const me = await requireUser();
+  const viewer = await getViewer(conversationId, me.id);
+  if (!viewer || viewer.conversationType !== "CHANNEL") return null;
+  const ids = Array.isArray(messageIds)
+    ? messageIds.filter((id) => typeof id === "string" && UUID.test(id)).slice(0, MAX_KNOWN_IDS)
+    : [];
+  const [views, memberCount] = await Promise.all([
+    getViewCounts(conversationId, ids),
+    db.conversationMember.count({ where: { conversationId } }),
+  ]);
+  return { views, memberCount };
 }
 
 export async function loadOlderMessages(
@@ -177,10 +225,13 @@ export async function getMessagesSince(
   const [result, goneIds, members] = await Promise.all([
     queryMessagesSince(conversationId, viewer, date),
     getGoneIds(conversationId, viewer, ids),
-    db.conversationMember.findMany({
-      where: { conversationId, userId: { not: me.id } },
-      select: { userId: true, lastReadAt: true, joinedAt: true },
-    }),
+    // Channels: no member data goes to the client.
+    viewer.conversationType === "CHANNEL"
+      ? Promise.resolve([])
+      : db.conversationMember.findMany({
+          where: { conversationId, userId: { not: me.id } },
+          select: { userId: true, lastReadAt: true, joinedAt: true },
+        }),
   ]);
   return {
     ...result,

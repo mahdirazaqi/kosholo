@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { messageSelect, toChatMessage } from "@/lib/chat/queries";
+import { attachViews } from "@/lib/chat/views";
 import { visibleMessageWhere, type Viewer } from "@/lib/chat/visibility";
 import { db } from "@/lib/db";
 import type { MessagesPage } from "@/lib/types/chat";
@@ -37,8 +38,9 @@ export async function getMessages(conversationId: string, viewer: Viewer, cursor
   const hasMore = rows.length > PAGE_SIZE;
   const page = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
   const oldest = page.at(-1);
+  const messages = page.map((row) => toChatMessage(row, viewer)).reverse();
   return {
-    messages: page.map((row) => toChatMessage(row, viewer)).reverse(),
+    messages: viewer.conversationType === "CHANNEL" ? await attachViews(conversationId, messages) : messages,
     nextCursor: hasMore && oldest ? encodeCursor(oldest) : null,
   };
 }
@@ -54,8 +56,9 @@ export async function getMessagesSince(conversationId: string, viewer: Viewer, s
     take: SINCE_LIMIT + 1,
     select: messageSelect,
   });
+  const messages = rows.slice(0, SINCE_LIMIT).map((row) => toChatMessage(row, viewer));
   return {
-    messages: rows.slice(0, SINCE_LIMIT).map((row) => toChatMessage(row, viewer)),
+    messages: viewer.conversationType === "CHANNEL" ? await attachViews(conversationId, messages) : messages,
     hasMore: rows.length > SINCE_LIMIT,
   };
 }

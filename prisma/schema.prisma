@@ -10,6 +10,7 @@ datasource db {
 enum ConversationType {
   DIRECT
   GROUP
+  CHANNEL // admins publish, members (subscribers) only read
 }
 
 enum MemberRole {
@@ -49,6 +50,7 @@ model User {
   contacts             Contact[]            @relation("ContactOwner")
   contactOf            Contact[]            @relation("ContactTarget")
   createdConversations Conversation[]
+  ownedChannels        Conversation[]       @relation("ChannelOwner")
   memberships          ConversationMember[]
   messages             Message[]
   uploads              Upload[]
@@ -79,11 +81,20 @@ model Conversation {
   // DIRECT only: both user ids sorted and joined with ":". Null for groups.
   // The unique index guarantees one direct conversation per pair.
   directKey   String?          @unique @map("direct_key")
+  // GROUP / CHANNEL: optional description (≤255, validated in application code).
+  description String?          @db.VarChar(255)
+  // CHANNEL only: secret invite token (admins see it; reset replaces it).
+  inviteToken String?          @unique @map("invite_token")
+  // CHANNEL only: posts show the posting admin's display name.
+  signMessages Boolean         @default(false) @map("sign_messages")
+  // CHANNEL only: the single owner (the creator, transferable).
+  ownerId     String?          @map("owner_id") @db.Uuid
   createdById String           @map("created_by_id") @db.Uuid
   createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
   createdBy User                 @relation(fields: [createdById], references: [id])
+  owner     User?                @relation("ChannelOwner", fields: [ownerId], references: [id])
   members   ConversationMember[]
   messages  Message[]
 
@@ -99,6 +110,8 @@ model ConversationMember {
   // "Cleared history for me": messages created at or before this are
   // invisible to this member (see src/lib/chat/visibility.ts).
   clearedAt      DateTime?  @map("cleared_at") @db.Timestamptz
+  // Muted conversations: no sound, not in the unread badge totals.
+  muted          Boolean    @default(false)
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -8,7 +8,7 @@ import { DeleteError } from "@/lib/chat/delete";
 import type { Actor } from "@/lib/chat/groups";
 import { unlinkPurgedFiles, type Purged } from "@/lib/chat/purge";
 import { logger } from "@/lib/logger";
-import { emitConversationDeleted, emitToMembers, emitToUsers } from "@/lib/realtime/emit";
+import { emitConversationDeleted, emitMessageNew, emitToMembers, emitToUsers } from "@/lib/realtime/emit";
 import { conversationDeleteSchema, deleteMessagesSchema } from "@/lib/validations/chat";
 
 // Every action: requireUser → validate → transactional change with permission
@@ -25,7 +25,7 @@ async function run(work: (actor: Actor) => Promise<Purged>): Promise<DeleteActio
     const purged = await work({ id: user.id, name: user.name });
     await unlinkPurgedFiles(purged);
     if (purged.deletedConversation) {
-      emitConversationDeleted(purged.deletedConversation.id, purged.deletedConversation.memberIds);
+      await emitConversationDeleted(purged.deletedConversation.id, purged.deletedConversation.memberIds);
     }
     revalidatePath("/");
     return { ok: true, conversationDeleted: purged.deletedConversation !== null };
@@ -62,7 +62,7 @@ export async function clearHistory(input: { conversationId: string; forEveryone:
     const payload = { conversationId, forEveryone, before: clearedAt.toISOString() };
     if (forEveryone) await emitToMembers(conversationId, "conversation:cleared", payload);
     else emitToUsers([actor.id], "conversation:cleared", payload);
-    if (message) await emitToMembers(conversationId, "message:new", { message, tempId: null });
+    if (message) await emitMessageNew(conversationId, message, null);
     return purged;
   });
 }

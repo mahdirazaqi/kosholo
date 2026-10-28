@@ -9,6 +9,7 @@ import { getSocket } from "@/lib/realtime/client/socket";
 import type {
   ConversationClearedPayload,
   ConversationDeletedPayload,
+  ConversationJoinedPayload,
   ConversationReadPayload,
   ConversationRemovedPayload,
   ConversationUpdatedPayload,
@@ -21,7 +22,9 @@ import {
   applyMessageToList,
   hydrateConversations,
   insertConversation,
+  isConversationMuted,
   markConversationRead,
+  patchConversation,
   refreshConversationRow,
   removeConversation,
   renameConversation,
@@ -67,7 +70,13 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       const openAndVisible =
         activeConversationId === message.conversationId && document.visibilityState === "visible";
       // A soft chime for others' messages in conversations not on screen.
-      if (message.sender.id !== me && message.type !== "SYSTEM" && !openAndVisible && getSettings().sound) {
+      if (
+        message.sender.id !== me &&
+        message.type !== "SYSTEM" &&
+        !openAndVisible &&
+        !isConversationMuted(message.conversationId) &&
+        getSettings().sound
+      ) {
         playNotificationSound();
       }
       if (!applyMessageToList(message)) {
@@ -80,9 +89,18 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       // Read in another tab/device of mine.
       if (userId === useRealtimeStore.getState().me) markConversationRead(conversationId);
     };
-    const onUpdated = ({ conversationId, title, avatarUrl }: ConversationUpdatedPayload) => {
+    const onUpdated = ({ conversationId, title, avatarUrl, muted, myRole }: ConversationUpdatedPayload) => {
       if (title !== undefined) renameConversation(conversationId, title);
       if (avatarUrl !== undefined) setAvatarOverride(conversationId, avatarUrl);
+      if (muted !== undefined) patchConversation(conversationId, { muted });
+      if (myRole !== undefined) patchConversation(conversationId, { myRole });
+    };
+    // Added to a channel, or joined through its invite link: no system message,
+    // the row is fetched and inserted.
+    const onJoined = ({ conversationId }: ConversationJoinedPayload) => {
+      getConversation(conversationId)
+        .then((item) => item && insertConversation(item))
+        .catch(() => {});
     };
     const onUserUpdated = ({ userId, avatarUrl }: UserUpdatedPayload) => {
       if (avatarUrl !== undefined) setAvatarOverride(userId, avatarUrl);
@@ -116,6 +134,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     socket.on("message:new", onMessage);
     socket.on("conversation:read", onRead);
     socket.on("conversation:updated", onUpdated);
+    socket.on("conversation:joined", onJoined);
     socket.on("conversation:removed", onRemoved);
     socket.on("message:deleted", onMessageDeleted);
     socket.on("conversation:cleared", onCleared);
@@ -137,6 +156,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       socket.off("message:new", onMessage);
       socket.off("conversation:read", onRead);
       socket.off("conversation:updated", onUpdated);
+      socket.off("conversation:joined", onJoined);
       socket.off("conversation:removed", onRemoved);
       socket.off("message:deleted", onMessageDeleted);
       socket.off("conversation:cleared", onCleared);

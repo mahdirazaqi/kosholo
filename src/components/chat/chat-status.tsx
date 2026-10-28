@@ -21,7 +21,7 @@ export function ChatStatus({
 }) {
   const connected = useRealtimeStore((state) => state.connected);
   const typing = useRealtimeStore((state) => state.typing[conversation.id]);
-  const isGroup = conversation.type === "GROUP";
+  const isGroup = conversation.type !== "DIRECT";
 
   let content: React.ReactNode;
   if (!connected) {
@@ -33,6 +33,9 @@ export function ChatStatus({
     );
   } else if (typing && Object.keys(typing).length > 0) {
     content = <TypingIndicator label={typingLabel(Object.values(typing), isGroup)} />;
+  } else if (conversation.type === "CHANNEL") {
+    // Subscribers never see presence; the count is all there is.
+    content = <>{formatCount(conversation.memberCount, "subscriber")}</>;
   } else if (isGroup) {
     content = <GroupPresence conversation={conversation} currentUserId={currentUserId} />;
   } else {

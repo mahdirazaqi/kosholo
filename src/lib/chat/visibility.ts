@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Prisma } from "@/generated/prisma/client";
+import type { ConversationType, MemberRole } from "@/generated/prisma/enums";
 import { db } from "@/lib/db";
 import { userIdSchema } from "@/lib/validations/contacts";
 
@@ -11,7 +12,12 @@ import { userIdSchema } from "@/lib/validations/contacts";
 // (1) is `getViewer()` returning a viewer; (2) and (3) are `visibleMessageWhere()`
 // for Prisma queries and `visibleSql()` for raw SQL. Every read path uses them.
 
-export type Viewer = { userId: string; clearedAt: Date | null };
+export type Viewer = {
+  userId: string;
+  clearedAt: Date | null;
+  role: MemberRole;
+  conversationType: ConversationType;
+};
 
 type Client = Prisma.TransactionClient | typeof db;
 
@@ -21,9 +27,11 @@ export async function getViewer(conversationId: string, userId: string, client: 
   if (!userIdSchema.safeParse(conversationId).success) return null;
   const member = await client.conversationMember.findUnique({
     where: { conversationId_userId: { conversationId, userId } },
-    select: { clearedAt: true },
+    select: { clearedAt: true, role: true, conversation: { select: { type: true } } },
   });
-  return member ? { userId, clearedAt: member.clearedAt } : null;
+  return member
+    ? { userId, clearedAt: member.clearedAt, role: member.role, conversationType: member.conversation.type }
+    : null;
 }
 
 // Messages visible to `viewer`. Combine with other conditions through AND, so
@@ -48,7 +56,7 @@ export function visibleSql(m: string, cm: string) {
 
 // For a message already loaded with its creation time and the users who hid it
 // (quotes, per-recipient realtime payloads).
-export function isVisibleTo(viewer: Viewer, message: { createdAt: Date; hiddenBy: string[] }) {
+export function isVisibleTo(viewer: Pick<Viewer, "userId" | "clearedAt">, message: { createdAt: Date; hiddenBy: string[] }) {
   if (message.hiddenBy.includes(viewer.userId)) return false;
   return !viewer.clearedAt || message.createdAt > viewer.clearedAt;
 }

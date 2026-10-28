@@ -1,6 +1,6 @@
 // Socket.IO contract shared by the client and the server. Every event name and
 // payload lives here; both sides use Socket.IO's typed-event generics.
-import type { ChatMember, ChatMessage, ConversationRemovedReason } from "@/lib/types/chat";
+import type { ChatMember, ChatMessage, ConversationRemovedReason, MemberRole } from "@/lib/types/chat";
 
 // ---- Rooms ----
 // user:{id}      every socket of a user (all tabs/devices). Per-user delivery.
@@ -33,7 +33,22 @@ export type ConversationUpdatedPayload = {
   conversationId: string;
   title?: string;
   avatarUrl?: string | null; // group photo ("/api/media/{id}") or removed
-  members?: ChatMember[]; // full current member list
+  members?: ChatMember[]; // full current member list (groups; never in channels)
+  description?: string | null;
+  // Channels: only the fields below that concern the receiver go to them, and
+  // the member list or invite token are never part of an event to subscribers.
+  signMessages?: boolean;
+  memberCount?: number; // admins only
+  membersChanged?: boolean; // admins only: refetch the subscriber/admin lists
+  myRole?: MemberRole; // to the user whose role changed
+  isOwner?: boolean; // to the users whose ownership changed
+  muted?: boolean; // to my own tabs/devices
+};
+
+// To a user's own rooms when they joined or were added to a conversation
+// (a channel): the client fetches the chat-list row.
+export type ConversationJoinedPayload = {
+  conversationId: string;
 };
 
 // A user's public profile changed (name / photo).
@@ -90,6 +105,8 @@ export interface ServerToClientEvents {
   "conversation:updated": (payload: ConversationUpdatedPayload) => void;
   // To everyone who shares a conversation with the user or has them as a contact.
   "user:updated": (payload: UserUpdatedPayload) => void;
+  // To user:{id} of someone who just joined or was added (no system message).
+  "conversation:joined": (payload: ConversationJoinedPayload) => void;
   // To user:{id} of a former member only.
   "conversation:removed": (payload: ConversationRemovedPayload) => void;
   // For everyone: to user:{memberId} of every member. For me: to my user room.
@@ -98,7 +115,7 @@ export interface ServerToClientEvents {
   "conversation:cleared": (payload: ConversationClearedPayload) => void;
   // To user:{id} of every former member; their sockets leave conv:{id}.
   "conversation:deleted": (payload: ConversationDeletedPayload) => void;
-  // To user:{memberId} of every member except the typist.
+  // To user:{memberId} of every member except the typist (channels: other admins only).
   "typing:start": (payload: TypingPayload) => void;
   "typing:stop": (payload: TypingPayload) => void;
   // To presence:{userId}.

@@ -17,6 +17,8 @@ export type SystemEvent =
   | "admin_demoted"
   | "photo_changed"
   | "history_cleared";
+// Channels only use created, renamed, photo_changed and history_cleared, and
+// their text never names the actor (see lib/chat/system-text.ts).
 
 export type SystemMeta = {
   event: SystemEvent;
@@ -80,6 +82,10 @@ export type ChatMessage = {
   status: MessageStatus;
   tempId?: string; // id of the optimistic message this one replaced
   local?: LocalUpload; // optimistic media message still uploading
+  // CHANNEL posts: the admin's display name when the channel signs posts
+  // (members never get an id or username), and the view count.
+  signature?: string;
+  views?: number;
 };
 
 export type LocalUpload = {
@@ -117,6 +123,7 @@ export type ConversationListItem = {
   lastMessage: LastMessagePreview | null;
   lastMessageAt: string | null;
   unreadCount: number;
+  muted: boolean; // no sound, not counted in the unread totals
 };
 
 // A member as seen by other members (public user shape + membership).
@@ -139,10 +146,39 @@ export type ChatConversation = {
   title: string;
   avatarUrl: string | null;
   otherUser: PublicUser | null; // DIRECT only
-  members: ChatMember[]; // everyone, including the viewer
+  // GROUP/DIRECT: everyone, including the viewer. CHANNEL: always empty
+  // (the member list is admin-only and served by listChannelMembers).
+  members: ChatMember[];
   memberCount: number;
-  readStates: MemberReadState[]; // every member except the viewer
+  readStates: MemberReadState[]; // every member except the viewer (empty in channels)
+  myRole: MemberRole;
+  isOwner: boolean; // CHANNEL only
+  muted: boolean;
+  description: string | null; // GROUP/CHANNEL
+  signMessages: boolean; // CHANNEL
 };
+
+// A channel member as an admin sees them.
+export type ChannelMember = ChatMember & { isOwner: boolean };
+
+// Channel info page. `members` is the first page of subscribers (admins only);
+// `admins`, `inviteToken` and `members` are empty/null for plain members.
+export type ChannelInfo = {
+  id: string;
+  title: string;
+  avatarUrl: string | null;
+  description: string | null;
+  createdAt: string;
+  memberCount: number;
+  signMessages: boolean;
+  muted: boolean;
+  myRole: MemberRole;
+  isOwner: boolean;
+  inviteToken: string | null;
+  admins: ChannelMember[];
+};
+
+export type ChannelMembersPage = { members: ChannelMember[]; nextCursor: string | null };
 
 // Group info page.
 export type GroupInfo = {

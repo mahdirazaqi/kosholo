@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronDown, Copy, Loader2, Reply, Trash2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, Copy, Download, Loader2, Reply, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { previewText } from "@/components/chat/message-preview";
 import { MessageBubble, type BubbleActions } from "@/components/chat/message-bubble";
@@ -28,6 +28,8 @@ type Props = {
   messages: ChatMessage[];
   currentUserId: string;
   conversationType: ConversationType;
+  channelTitle?: string; // CHANNEL: posts render as cards under this name
+  isAdmin: boolean; // channels: admins reply, select and delete; subscribers only read
   memberNames: Map<string, string>; // current names, for system messages
   readStates: MemberReadState[]; // other members
   hasMore: boolean;
@@ -52,6 +54,8 @@ export function MessageList({
   messages,
   currentUserId,
   conversationType,
+  channelTitle,
+  isAdmin,
   memberNames,
   readStates,
   hasMore,
@@ -70,6 +74,10 @@ export function MessageList({
   const timeZone = useTimeZone();
   const isDesktop = useIsDesktop();
   const selecting = selection !== null;
+  const isChannel = conversationType === "CHANNEL";
+  // Everyone may reply and delete in chats; in channels only admins.
+  const canReply = !isChannel || isAdmin;
+  const canDelete = !isChannel || isAdmin;
   const scrollerRef = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
   const lastCommit = useRef<{ first?: string; last?: string; height: number } | null>(null);
@@ -253,7 +261,7 @@ export function MessageList({
         {messages.length === 0 && (
           <div className="flex h-[calc(100%-2rem)] items-center justify-center px-8 text-center">
             <p className="rounded-2xl bg-background/80 px-4 py-3 text-sm leading-6 text-muted-foreground shadow-xs ring-1 ring-foreground/5">
-              No messages yet. Send the first one 👋
+              {isChannel ? (isAdmin ? "No posts yet. Publish the first one 📣" : "No posts yet") : "No messages yet. Send the first one 👋"}
             </p>
           </div>
         )}
@@ -262,8 +270,8 @@ export function MessageList({
           const previous = messages[index - 1];
           const next = messages[index + 1];
           const newDay = !previous || dayNumber(previous.createdAt, timeZone) !== dayNumber(message.createdAt, timeZone);
-          const groupStart = newDay || !continues(previous, message);
-          const groupEnd = !next || !continues(message, next) || dayNumber(next.createdAt, timeZone) !== dayNumber(message.createdAt, timeZone);
+          const groupStart = newDay || !continues(previous, message, isChannel);
+          const groupEnd = !next || !continues(message, next, isChannel) || dayNumber(next.createdAt, timeZone) !== dayNumber(message.createdAt, timeZone);
 
           if (message.type === "SYSTEM") {
             return (
@@ -273,6 +281,7 @@ export function MessageList({
                   message={message}
                   currentUserId={currentUserId}
                   memberNames={memberNames}
+                  conversationType={conversationType}
                   selecting={selecting}
                   selected={selection?.has(message.id) ?? false}
                   removing={removing.has(message.id)}
@@ -287,7 +296,7 @@ export function MessageList({
               {newDay && <DaySeparator date={message.createdAt} />}
               <MessageBubble
                 message={message}
-                isMine={message.sender.id === currentUserId}
+                isMine={!isChannel && message.sender.id === currentUserId}
                 groupStart={groupStart}
                 groupEnd={groupEnd}
                 isGroup={conversationType === "GROUP"}
@@ -297,6 +306,10 @@ export function MessageList({
                 selecting={selecting}
                 selected={selection?.has(message.id) ?? false}
                 removing={removing.has(message.id)}
+                channelTitle={channelTitle}
+                showAuthor={isChannel && isAdmin}
+                canReply={canReply}
+                canDelete={canDelete}
                 {...actions}
               />
             </Fragment>
@@ -347,14 +360,16 @@ export function MessageList({
                 })}
               </SheetDescription>
               <div className="grid gap-1 px-2 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
-                <ActionButton
-                  icon={<Reply />}
-                  label="Reply"
-                  onClick={() => {
-                    pendingReply.current = actionsFor;
-                    setActionsOpen(false);
-                  }}
-                />
+                {canReply && (
+                  <ActionButton
+                    icon={<Reply />}
+                    label="Reply"
+                    onClick={() => {
+                      pendingReply.current = actionsFor;
+                      setActionsOpen(false);
+                    }}
+                  />
+                )}
                 {actionsFor.content && (
                   <ActionButton
                     icon={<Copy />}
@@ -365,23 +380,38 @@ export function MessageList({
                     }}
                   />
                 )}
-                <ActionButton
-                  icon={<CheckCircle2 />}
-                  label="Select"
-                  onClick={() => {
-                    setActionsOpen(false);
-                    onSelect(actionsFor);
-                  }}
-                />
-                <ActionButton
-                  icon={<Trash2 />}
-                  label="Delete"
-                  destructive
-                  onClick={() => {
-                    setActionsOpen(false);
-                    onDelete(actionsFor);
-                  }}
-                />
+                {isChannel && actionsFor.media && (
+                  <a
+                    href={actionsFor.media.url}
+                    download={actionsFor.media.originalName ?? ""}
+                    onClick={() => setActionsOpen(false)}
+                    className="flex h-12 items-center gap-3 rounded-xl px-3 text-base transition-colors hover:bg-muted active:bg-muted [&_svg]:size-5 [&_svg]:text-muted-foreground"
+                  >
+                    <Download />
+                    Download
+                  </a>
+                )}
+                {canDelete && (
+                  <>
+                    <ActionButton
+                      icon={<CheckCircle2 />}
+                      label="Select"
+                      onClick={() => {
+                        setActionsOpen(false);
+                        onSelect(actionsFor);
+                      }}
+                    />
+                    <ActionButton
+                      icon={<Trash2 />}
+                      label="Delete"
+                      destructive
+                      onClick={() => {
+                        setActionsOpen(false);
+                        onDelete(actionsFor);
+                      }}
+                    />
+                  </>
+                )}
               </div>
             </>
           )}
@@ -392,11 +422,12 @@ export function MessageList({
 }
 
 // Same sender within 5 minutes → same visual group. System messages break runs.
-function continues(a: ChatMessage, b: ChatMessage) {
+// Channel posts all come from the channel, whichever admin wrote them.
+function continues(a: ChatMessage, b: ChatMessage, channel: boolean) {
   return (
     a.type !== "SYSTEM" &&
     b.type !== "SYSTEM" &&
-    a.sender.id === b.sender.id &&
+    (channel || a.sender.id === b.sender.id) &&
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() <= GROUP_WINDOW_MS
   );
 }

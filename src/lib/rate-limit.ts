@@ -18,6 +18,11 @@ export const LIMITS = {
   registrations: { max: 5, windowMs: 60 * 60 * 1000 },
   userLookups: { max: 30, windowMs: 10 * 60 * 1000 },
   messages: { max: 60, windowMs: 60 * 1000 },
+  // Channel invite links: every join attempt, and every unknown token seen.
+  channelJoins: { max: 20, windowMs: 10 * 60 * 1000 },
+  badInviteLinks: { max: 10, windowMs: 10 * 60 * 1000 },
+  // Wrong passwords when transferring channel ownership.
+  passwordFailures: { max: 5, windowMs: 15 * 60 * 1000 },
 } as const;
 
 type Limit = { max: number; windowMs: number };

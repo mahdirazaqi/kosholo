@@ -16,6 +16,7 @@ import { AvatarEditor } from "@/components/avatar-editor";
 import { BackButton } from "@/components/back-button";
 import { BottomSheetContent } from "@/components/bottom-sheet";
 import { ConversationDangerZone } from "@/components/chat/conversation-actions";
+import { MuteSwitch } from "@/components/chat/mute-switch";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MemberPicker } from "@/components/groups/member-picker";
 import { PresenceText } from "@/components/groups/presence-text";
@@ -43,7 +44,9 @@ export function GroupInfoView({
   initialInfo,
   contacts,
   currentUserId,
+  muted,
 }: {
+  muted: boolean;
   initialInfo: GroupInfo;
   contacts: PublicUser[];
   currentUserId: string;
@@ -272,8 +275,9 @@ export function GroupInfoView({
           </ul>
         </section>
 
+        <MuteSwitch conversationId={info.id} initialMuted={muted} />
         <ConversationDangerZone
-          target={{ id: info.id, type: "GROUP", title: info.title, myRole: isAdmin ? "ADMIN" : "MEMBER" }}
+          target={{ id: info.id, type: "GROUP", title: info.title, myRole: isAdmin ? "ADMIN" : "MEMBER", muted }}
         />
       </div>
 

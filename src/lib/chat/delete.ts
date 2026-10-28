@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { recordEvent, type Actor } from "@/lib/chat/groups";
-import { canClearForEveryone, canDeleteForEveryone } from "@/lib/chat/permissions";
+import { canClearForEveryone, canDeleteForEveryone, canDeleteForMe } from "@/lib/chat/permissions";
 import { collectGarbage, purgeConversation, purgeMessages, type Purged } from "@/lib/chat/purge";
 import { visibleMessageWhere } from "@/lib/chat/visibility";
 import { db } from "@/lib/db";
@@ -30,7 +30,7 @@ async function membershipOf(tx: Tx, conversationId: string, userId: string) {
   return {
     role: member.role,
     type: member.conversation.type,
-    viewer: { userId, clearedAt: member.clearedAt },
+    viewer: { userId, clearedAt: member.clearedAt, role: member.role, conversationType: member.conversation.type },
   };
 }
 
@@ -53,6 +53,9 @@ export async function deleteMessages(
     if (messages.length !== messageIds.length) {
       throw new DeleteError("Some of these messages are no longer available");
     }
+    if (!forEveryone && !canDeleteForMe(me.type)) {
+      throw new DeleteError("Posts can only be deleted for everyone");
+    }
 
     if (forEveryone) {
       const who = { id: actor.id, role: me.role, conversationType: me.type };
@@ -73,7 +76,7 @@ export async function deleteMessages(
 export type ClearHistoryResult = {
   purged: Purged;
   clearedAt: Date;
-  message: ChatMessage | null; // GROUP, for everyone: "… cleared the group history"
+  message: ChatMessage | null; // GROUP/CHANNEL, for everyone: "history cleared"
 };
 
 export async function clearHistory(
@@ -87,11 +90,11 @@ export async function clearHistory(
 
     if (forEveryone) {
       if (!canClearForEveryone({ role: me.role, conversationType: me.type })) {
-        throw new DeleteError("Only group admins can clear the history for everyone");
+        throw new DeleteError("Only admins can clear the history for everyone");
       }
       const purged = await purgeMessages(tx, { conversationId, createdAt: { lte: clearedAt } });
       const message =
-        me.type === "GROUP"
+        me.type !== "DIRECT"
           ? // A moment later so it's never covered by the clear itself.
             await recordEvent(tx, conversationId, actor, { event: "history_cleared" }, new Date(clearedAt.getTime() + 1))
           : null;

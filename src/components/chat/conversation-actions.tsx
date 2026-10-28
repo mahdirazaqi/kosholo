@@ -2,8 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Eraser, LogOut, Trash2 } from "lucide-react";
+import { Bell, BellOff, Eraser, LogOut, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { setMuted } from "@/app/(app)/chats/actions";
+import { deleteChannel, leaveChannel } from "@/app/(app)/chats/channel-actions";
 import { clearHistory, deleteConversation } from "@/app/(app)/chats/delete-actions";
 import { deleteGroup, leaveAndDeleteGroup } from "@/app/(app)/chats/group-actions";
 import { DeleteDialog } from "@/components/chat/delete-dialog";
@@ -12,6 +14,7 @@ import { canClearForEveryone } from "@/lib/chat/permissions";
 import {
   markLocalDelete,
   refreshConversationRow,
+  patchConversation,
   removeConversation,
 } from "@/lib/realtime/client/store";
 import type { ConversationType, MemberRole } from "@/lib/types/chat";
@@ -25,9 +28,11 @@ export type ConversationActionTarget = {
   type: ConversationType;
   title: string; // the other person's name for DIRECT
   myRole: MemberRole;
+  muted: boolean;
+  isOwner?: boolean; // CHANNEL: the owner can delete it for everyone
 };
 
-export type ConversationAction = "clear" | "delete" | "leave" | "deleteGroup";
+export type ConversationAction = "mute" | "clear" | "delete" | "leave" | "deleteGroup";
 
 export type ConversationActionItem = {
   kind: ConversationAction;
@@ -36,17 +41,25 @@ export type ConversationActionItem = {
   destructive: boolean;
 };
 
-// `withDeleteGroup`: the admin's "Delete group for everyone" (header and info
-// page, not chat-list rows).
+// `withDeleteGroup`: the admin's "Delete group for everyone" / the channel
+// owner's "Delete channel" (header and info page, not chat-list rows).
 export function conversationActionItems(
   target: ConversationActionTarget,
   { withDeleteGroup = false } = {},
 ): ConversationActionItem[] {
   const items: ConversationActionItem[] = [
+    target.muted
+      ? { kind: "mute", label: "Unmute", icon: <Bell />, destructive: false }
+      : { kind: "mute", label: "Mute", icon: <BellOff />, destructive: false },
     { kind: "clear", label: "Clear history", icon: <Eraser />, destructive: false },
   ];
   if (target.type === "DIRECT") {
     items.push({ kind: "delete", label: "Delete chat", icon: <Trash2 />, destructive: true });
+  } else if (target.type === "CHANNEL") {
+    items.push({ kind: "leave", label: "Leave channel", icon: <LogOut className="rtl:rotate-180" />, destructive: true });
+    if (withDeleteGroup && target.isOwner) {
+      items.push({ kind: "deleteGroup", label: "Delete channel", icon: <Trash2 />, destructive: true });
+    }
   } else {
     items.push({ kind: "leave", label: "Leave and delete group", icon: <LogOut className="rtl:rotate-180" />, destructive: true });
     if (withDeleteGroup && target.myRole === "ADMIN") {
@@ -61,7 +74,10 @@ const inChat = (conversationId: string) =>
 
 // Returns `open(kind)` to start an action (it opens the confirm dialog) and the
 // dialog element to render.
-export function useConversationActions(target: ConversationActionTarget) {
+export function useConversationActions(
+  target: ConversationActionTarget,
+  { onMuted }: { onMuted?: (muted: boolean) => void } = {},
+) {
   const router = useRouter();
   const [action, setAction] = useState<ConversationAction | null>(null);
   const [pending, startTransition] = useTransition();
@@ -69,6 +85,23 @@ export function useConversationActions(target: ConversationActionTarget) {
   function leaveChat() {
     removeConversation(target.id);
     if (inChat(target.id)) router.replace("/");
+  }
+
+  // Mute needs no confirmation: optimistic, undone if the server says no.
+  function toggleMute() {
+    const muted = !target.muted;
+    patchConversation(target.id, { muted });
+    onMuted?.(muted);
+    void setMuted(target.id, muted)
+      .then((result) => {
+        if (!result.ok) throw new Error();
+        toast.success(muted ? "Muted" : "Unmuted");
+      })
+      .catch(() => {
+        patchConversation(target.id, { muted: !muted });
+        onMuted?.(!muted);
+        toast.error("Couldn't change the notification setting");
+      });
   }
 
   function run(forEveryone: boolean) {
@@ -82,8 +115,12 @@ export function useConversationActions(target: ConversationActionTarget) {
           : kind === "delete"
             ? await deleteConversation({ conversationId: target.id, forEveryone })
             : kind === "leave"
-              ? await leaveAndDeleteGroup(target.id)
-              : await deleteGroup(target.id);
+              ? target.type === "CHANNEL"
+                ? await leaveChannel(target.id)
+                : await leaveAndDeleteGroup(target.id)
+              : target.type === "CHANNEL"
+                ? await deleteChannel(target.id)
+                : await deleteGroup(target.id);
       if (!result.ok) return void toast.error(result.error);
       setAction(null);
 
@@ -94,7 +131,8 @@ export function useConversationActions(target: ConversationActionTarget) {
         else refreshConversationRow(target.id);
         return;
       }
-      toast.success(kind === "leave" ? "You left the group" : kind === "deleteGroup" ? "Group deleted" : "Chat deleted");
+      const noun = target.type === "CHANNEL" ? "channel" : "group";
+      toast.success(kind === "leave" ? `You left the ${noun}` : kind === "deleteGroup" ? `${noun[0].toUpperCase()}${noun.slice(1)} deleted` : "Chat deleted");
       leaveChat();
     });
   }
@@ -109,12 +147,16 @@ export function useConversationActions(target: ConversationActionTarget) {
     />
   );
 
-  return { open: setAction, dialog };
+  // "mute" runs at once; the rest open their confirm dialog.
+  const open = (kind: ConversationAction) => (kind === "mute" ? toggleMute() : setAction(kind));
+  return { open, dialog };
 }
 
 function copyFor(action: ConversationAction, target: ConversationActionTarget) {
   const direct = target.type === "DIRECT";
   switch (action) {
+    case "mute":
+      throw new Error("mute has no dialog");
     case "clear":
       return {
         title: "Clear history?",
@@ -134,6 +176,14 @@ function copyFor(action: ConversationAction, target: ConversationActionTarget) {
         confirmLabel: "Delete",
       };
     case "leave":
+      if (target.type === "CHANNEL") {
+        return {
+          title: "Leave channel?",
+          description: `You'll leave “${target.title}” and it will be removed from your chats.`,
+          everyoneLabel: null,
+          confirmLabel: "Leave channel",
+        };
+      }
       return {
         title: "Leave and delete group?",
         description: `You'll leave “${target.title}” and it will be removed from your chats.`,
@@ -141,6 +191,14 @@ function copyFor(action: ConversationAction, target: ConversationActionTarget) {
         confirmLabel: "Leave and delete",
       };
     case "deleteGroup":
+      if (target.type === "CHANNEL") {
+        return {
+          title: "Delete channel?",
+          description: `“${target.title}”, all its posts and files will be permanently deleted for every subscriber. This can't be undone.`,
+          everyoneLabel: null,
+          confirmLabel: "Delete channel",
+        };
+      }
       return {
         title: "Delete group for everyone?",
         description: `“${target.title}” and all its messages will be permanently deleted for every member.`,
@@ -155,7 +213,9 @@ export function ConversationDangerZone({ target }: { target: ConversationActionT
   const { open, dialog } = useConversationActions(target);
   return (
     <section className="grid gap-2">
-      {conversationActionItems(target, { withDeleteGroup: true }).map((item) => (
+      {conversationActionItems(target, { withDeleteGroup: true })
+        .filter((item) => item.kind !== "mute") // the info pages have their own switch
+        .map((item) => (
         <Button
           key={item.kind}
           variant={item.kind === "deleteGroup" ? "destructive" : "outline"}

@@ -1,4 +1,4 @@
-import type { SystemMeta } from "@/lib/types/chat";
+import type { ConversationType, SystemMeta } from "@/lib/types/chat";
 
 // English text for a SYSTEM message. "You"/"you" replaces the current user's
 // name. `currentNames` (id → name) prefers members' current names; the names
@@ -7,7 +7,10 @@ export function systemMessageText(
   meta: SystemMeta,
   meId: string | null,
   currentNames?: Map<string, string>,
+  conversationType?: ConversationType,
 ) {
+  // Channels never name who did something (subscribers can't know).
+  if (conversationType === "CHANNEL") return channelEventText(meta);
   const nameOf = (id: string, stored: string | undefined, you: string) =>
     id === meId ? you : (currentNames?.get(id) ?? stored ?? "Someone");
   const actor = nameOf(meta.actorId, meta.actorName, "You");
@@ -41,6 +44,21 @@ export function systemMessageText(
       return `${actor} cleared the group history`;
     default:
       return "Group event";
+  }
+}
+
+function channelEventText(meta: SystemMeta) {
+  switch (meta.event) {
+    case "created":
+      return meta.newTitle ? `Channel “${meta.newTitle}” created` : "Channel created";
+    case "renamed":
+      return `Channel name changed to “${meta.newTitle ?? ""}”`;
+    case "photo_changed":
+      return meta.removed ? "Channel photo removed" : "Channel photo changed";
+    case "history_cleared":
+      return "Channel history was cleared";
+    default:
+      return "Channel event";
   }
 }
 
