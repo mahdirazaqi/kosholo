@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronDown, Copy, Bookmark, Download, Loader2, Pencil, Reply, Trash2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, Copy, Bookmark, Download, Forward, Loader2, Pencil, Reply, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { previewText } from "@/components/chat/message-preview";
 import { MessageBubble, type BubbleActions } from "@/components/chat/message-bubble";
@@ -55,6 +55,7 @@ type Props = {
   editing: boolean; // the composer is in edit mode
   conversationId: string;
   onSave: (message: ChatMessage) => void;
+  onForward: (message: ChatMessage) => void;
   onOpenForward: (message: ChatMessage) => void;
 };
 
@@ -86,6 +87,7 @@ export function MessageList({
   editing,
   conversationId,
   onSave,
+  onForward,
   onOpenForward,
 }: Props) {
   const timeZone = useTimeZone();
@@ -264,9 +266,10 @@ export function MessageList({
       onDelete,
       onEdit,
       onSave,
+      onForward,
       onOpenForward,
     }),
-    [onSave, onOpenForward, onReply, onCopy, onOpenActions, jumpTo, onRetry, onOpenMedia, onCancelUpload, onResumeUpload, onSelect, onToggleSelect, onDelete, onEdit],
+    [onSave, onForward, onOpenForward, onReply, onCopy, onOpenActions, jumpTo, onRetry, onOpenMedia, onCancelUpload, onResumeUpload, onSelect, onToggleSelect, onDelete, onEdit],
   );
 
   const seenIndex = seenKey === null ? -1 : messages.findIndex((m) => keyOf(m) === seenKey);
@@ -353,6 +356,7 @@ export function MessageList({
                 canDelete={canDelete}
                 canEdit={canEditMessage(message)}
                 editing={editing}
+                canForward={message.status === "sent"}
                 canSave={!isSaved && message.status === "sent"}
                 savedChat={isSaved}
                 {...actions}
@@ -385,6 +389,10 @@ export function MessageList({
       <MediaViewer
         target={shownViewer}
         onClose={() => setViewer(null)}
+        onForward={() => {
+          const message = messages.find((m) => m.id === shownViewer?.messageId);
+          if (message) onForward(message);
+        }}
         onSave={
           !isSaved && shownViewer?.messageId
             ? () => {
@@ -423,6 +431,16 @@ export function MessageList({
                     onClick={() => {
                       pendingReply.current = actionsFor;
                       setActionsOpen(false);
+                    }}
+                  />
+                )}
+                {actionsFor.status === "sent" && (
+                  <ActionButton
+                    icon={<Forward />}
+                    label="Forward"
+                    onClick={() => {
+                      setActionsOpen(false);
+                      onForward(actionsFor);
                     }}
                   />
                 )}

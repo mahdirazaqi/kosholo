@@ -185,7 +185,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("keydown", unlockAudio);
       socket.disconnect();
       clearBadges();
-      useRealtimeStore.setState({ connected: false, conversations: null, unread: null, typing: {}, presence: {}, avatars: {}, me: null });
+      useRealtimeStore.setState({ connected: false, conversations: null, unread: null, pendingForwards: {}, typing: {}, presence: {}, avatars: {}, me: null });
     };
   }, []);
 

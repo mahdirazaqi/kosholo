@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Check, Mic, Pencil, Reply, SendHorizontal, X } from "lucide-react";
+import { Check, Forward, Mic, Pencil, Reply, SendHorizontal, X } from "lucide-react";
 import { EmojiButton } from "@/components/chat/emoji-button";
 import { AttachButton } from "@/components/chat/media/attach-button";
 import { LocationThumb } from "@/components/chat/location/location-media";
@@ -11,6 +11,15 @@ import type { VoiceRecording } from "@/hooks/use-media-sender";
 import type { PreparedFile } from "@/lib/media/client/prepare";
 import { previewText } from "@/components/chat/message-preview";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { formatCount } from "@/lib/numbers";
+import type { PendingForward } from "@/lib/realtime/client/store";
 import { useIsDesktop } from "@/hooks/use-media-query";
 import type { ChatMessage } from "@/lib/types/chat";
 import { MAX_MESSAGE_LENGTH } from "@/lib/chat/limits";
@@ -38,6 +47,11 @@ type Props = {
   onCancelEdit: () => void;
   onSaveEdit: (content: string) => void;
   onEditLast: () => void; // ArrowUp in an empty composer (desktop)
+  // Pending forward (single target): exclusive with reply and edit. What is
+  // typed becomes the comment; sending works with an empty field.
+  forward: PendingForward | null;
+  onSendForward: (comment: string) => void;
+  onForwardAction: (action: "toggleSender" | "toggleCaptions" | "change" | "cancel") => void;
   onSend: (content: string) => void;
   onSendFiles: (files: PreparedFile[], caption: string | null) => void;
   onSendDocuments: (files: File[], caption: string | null) => void; // FILE messages, original bytes
@@ -48,7 +62,7 @@ type Props = {
 };
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
-  { replyTo, onCancelReply, editing, onCancelEdit, onSaveEdit, onEditLast, onSend, onSendFiles, onSendDocuments, onSendLocation, onSendVoice, onInput, onBlur },
+  { replyTo, onCancelReply, editing, onCancelEdit, onSaveEdit, onEditLast, forward, onSendForward, onForwardAction, onSend, onSendFiles, onSendDocuments, onSendLocation, onSendVoice, onInput, onBlur },
   ref,
 ) {
   const isDesktop = useIsDesktop();
@@ -128,6 +142,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   function submit() {
     const content = value.trim();
     if (editing) return onSaveEdit(content); // empty text/caption is handled by the parent
+    if (forward) {
+      onSendForward(content);
+      update("", 0);
+      return;
+    }
     if (!content) return;
     onSend(content);
     update("", 0);
@@ -168,6 +187,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           </Button>
         </div>
       )}
+
+      {forward && <ForwardBar forward={forward} onAction={onForwardAction} />}
 
       {replyTo && (
         <div className="flex animate-in items-center gap-3 px-3 pt-2 fade-in-0 slide-in-from-bottom-1 duration-150">
@@ -212,7 +233,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         className="relative flex items-end gap-1 px-2 pt-2"
       >
         <EmojiButton onPick={insertEmoji} onClose={focus} />
-        {!editing && (
+        {!editing && !forward && (
           <AttachButton onSend={onSendFiles} onSendDocuments={onSendDocuments} onSendLocation={onSendLocation} />
         )}
 
@@ -266,7 +287,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           >
             <Check className="size-5" />
           </Button>
-        ) : canSend ? (
+        ) : canSend || forward ? (
           <Button
             type="submit"
             size="icon-lg"
@@ -285,3 +306,85 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     </div>
   );
 });
+
+const CAPTION_TYPES = ["IMAGE", "VIDEO", "FILE"];
+
+// Above the composer: what is about to be forwarded. Tapping it opens the
+// options (sender name, captions, change recipient, cancel).
+function ForwardBar({
+  forward,
+  onAction,
+}: {
+  forward: PendingForward;
+  onAction: (action: "toggleSender" | "toggleCaptions" | "change" | "cancel") => void;
+}) {
+  const { messages, hideSender, hideCaptions } = forward;
+  const names = [...new Set(messages.map((m) => m.forward?.name ?? m.sender.name))];
+  const shown = names.slice(0, 2).join(", ");
+  const from = names.length > 2 ? `${shown} and ${names.length - 2} more` : shown;
+  const first = messages[0];
+  const hasCaption = messages.some((m) => CAPTION_TYPES.includes(m.type) && Boolean(m.content));
+  const preview =
+    messages.length === 1
+      ? previewText({
+          ...first,
+          duration: first.media?.duration,
+          fileName: first.media?.originalName,
+          locationLabel: first.location?.label,
+        })
+      : null;
+
+  return (
+    <div className="flex animate-in items-center gap-3 px-3 pt-2 fade-in-0 slide-in-from-bottom-1 duration-150">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="Forward options"
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            <Forward className="size-5 shrink-0 text-primary" />
+            {messages.length === 1 && first.media?.thumbUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={first.media.thumbUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" />
+            )}
+            <span className="min-w-0 flex-1 border-s-2 border-primary ps-2">
+              <span className="block truncate text-xs font-semibold text-primary">
+                {messages.length === 1 ? "Forward message" : `Forward ${formatCount(messages.length, "message")}`}
+              </span>
+              <span dir="auto" className="block truncate text-sm text-muted-foreground">
+                {hideSender ? "Sender name is hidden" : `From: ${from}`}
+                {preview && ` · ${preview}`}
+              </span>
+            </span>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="min-w-56">
+          <DropdownMenuItem onSelect={() => onAction("toggleSender")}>
+            {hideSender ? "Show sender name" : "Hide sender name"}
+          </DropdownMenuItem>
+          {hasCaption && hideSender && (
+            <DropdownMenuItem onSelect={() => onAction("toggleCaptions")}>
+              {hideCaptions ? "Show captions" : "Hide captions"}
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onSelect={() => onAction("change")}>Change recipient</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onSelect={() => onAction("cancel")}>
+            Cancel forward
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-lg"
+        aria-label="Cancel forward"
+        onClick={() => onAction("cancel")}
+        className="size-11 shrink-0 rounded-full text-muted-foreground"
+      >
+        <X className="size-5" />
+      </Button>
+    </div>
+  );
+}

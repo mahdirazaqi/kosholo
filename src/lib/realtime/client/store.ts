@@ -7,6 +7,21 @@ import { getSocket } from "@/lib/realtime/client/socket";
 import { TYPING_EXPIRE_MS, type PresenceState } from "@/lib/realtime/events";
 import type { ChatMessage, ConversationListItem, UnreadSummary } from "@/lib/types/chat";
 
+// Messages chosen to be forwarded into one conversation's composer.
+export type PendingForward = {
+  sourceConversationId: string;
+  messages: ChatMessage[]; // original order
+  hideSender: boolean;
+  hideCaptions: boolean;
+};
+
+export function setPendingForward(conversationId: string, pending: PendingForward | null) {
+  const pendingForwards = { ...get().pendingForwards };
+  if (pending) pendingForwards[conversationId] = pending;
+  else delete pendingForwards[conversationId];
+  set({ pendingForwards });
+}
+
 // Client realtime state. Only mutated from effects/event handlers, never during
 // render, so the module-level store stays empty on the server.
 type RealtimeState = {
@@ -23,6 +38,9 @@ type RealtimeState = {
   // conversationId → userId → display name
   typing: Record<string, Record<string, string>>;
   presence: Record<string, PresenceState>;
+  // Forwards waiting in a conversation's composer (single-target forwarding),
+  // per target conversation. Kept across navigation; lost on reload.
+  pendingForwards: Record<string, PendingForward>;
   // Live photo changes, keyed by user id or group conversation id.
   avatars: Record<string, string | null>;
 };
@@ -35,6 +53,7 @@ export const useRealtimeStore = create<RealtimeState>(() => ({
   activeConversationId: null,
   typing: {},
   presence: {},
+  pendingForwards: {},
   avatars: {},
 }));
 

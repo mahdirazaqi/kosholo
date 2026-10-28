@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Bookmark } from "lucide-react";
+import { Bookmark, Forward } from "lucide-react";
 import type { ChatLocation } from "@/lib/types/chat";
 
 export type ViewerTarget =
@@ -24,10 +24,12 @@ export function MediaViewer({
   target,
   onClose,
   onSave,
+  onForward,
 }: {
   target: ViewerTarget;
   onClose: () => void;
   onSave?: () => void; // "Save" to Saved Messages
+  onForward?: () => void; // open the forward picker
 }) {
   if (!target) return null;
   const viewer =
@@ -41,17 +43,26 @@ export function MediaViewer({
   return (
     <>
       {viewer}
-      {onSave && (
+      {(onSave || onForward) && (
         // Above the lightbox / player, at the inline start (its toolbar is at the end).
-        <button
-          type="button"
-          onClick={onSave}
-          className="fixed start-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[10001] flex h-11 items-center gap-2 rounded-full bg-black/60 px-4 text-sm font-medium text-white backdrop-blur hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-        >
-          <Bookmark className="size-4.5" />
-          Save
-        </button>
+        <div className="fixed start-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[10001] flex gap-2">
+          {onForward && (
+            <button type="button" onClick={onForward} className={VIEWER_BUTTON}>
+              <Forward className="size-4.5" />
+              Forward
+            </button>
+          )}
+          {onSave && (
+            <button type="button" onClick={onSave} className={VIEWER_BUTTON}>
+              <Bookmark className="size-4.5" />
+              Save
+            </button>
+          )}
+        </div>
       )}
     </>
   );
 }
+
+const VIEWER_BUTTON =
+  "flex h-11 items-center gap-2 rounded-full bg-black/60 px-4 text-sm font-medium text-white backdrop-blur hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white";

@@ -3,17 +3,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, Bookmark, EllipsisVertical, Megaphone, Trash2, UserX, X } from "lucide-react";
+import { Bell, BellOff, Bookmark, EllipsisVertical, Forward, Megaphone, Trash2, UserX, X } from "lucide-react";
 import { toast } from "sonner";
 import { getChannelStats, loadOlderMessages, sendMessage, setMuted } from "@/app/(app)/chats/actions";
 import { deleteMessages } from "@/app/(app)/chats/delete-actions";
 import { editMessage } from "@/app/(app)/chats/edit-actions";
+import { ensureDirectConversation, forwardMessages } from "@/app/(app)/chats/forward-actions";
 import { checkForwardOrigin, saveMessages } from "@/app/(app)/chats/saved-actions";
 import { BackButton } from "@/components/back-button";
 import { ChatStatus } from "@/components/chat/chat-status";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { conversationActionItems, useConversationActions } from "@/components/chat/conversation-actions";
 import { DeleteDialog } from "@/components/chat/delete-dialog";
+import { ForwardPicker, type ForwardDraft, type PickedTarget } from "@/components/chat/forward-picker";
 import { MessageList } from "@/components/chat/message-list";
 import { PageHeader } from "@/components/page-header";
 import { UserAvatar } from "@/components/user-avatar";
@@ -37,7 +39,7 @@ import { formatCount } from "@/lib/numbers";
 import { applyEdit, lastConfirmedAt, mergeMessage } from "@/lib/realtime/client/merge";
 import { getSocket } from "@/lib/realtime/client/socket";
 import { TYPING_CLIENT_THROTTLE_MS } from "@/lib/realtime/events";
-import { isLocalDelete, patchConversation, removeConversation, renameConversation } from "@/lib/realtime/client/store";
+import { isLocalDelete, patchConversation, removeConversation, renameConversation, setPendingForward, useRealtimeStore } from "@/lib/realtime/client/store";
 import type {
   ChatConversation,
   ChatLocation,
@@ -77,7 +79,14 @@ export function ChatView({
   const [cursor, setCursor] = useState(initialPage.nextCursor);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
-  // Edit mode and reply mode are mutually exclusive.
+  // The forward picker (messages chosen to forward) and the forward waiting in
+  // this composer (kept in the store so it survives navigating away and back).
+  const [forwardDraft, setForwardDraft] = useState<ForwardDraft | null>(null);
+  const pendingForward = useRealtimeStore((state) => state.pendingForwards[conversation.id]) ?? null;
+  const forwardRetries = useRef(
+    new Map<string, { sourceConversationId: string; messageId: string; hideSender: boolean; hideCaptions: boolean }>(),
+  );
+  // Edit mode and reply mode are mutually exclusive (and with a pending forward).
   const [editing, setEditing] = useState<ChatMessage | null>(null);
   // The delete dialog was opened because an edit emptied a text message.
   const [emptyEditPrompt, setEmptyEditPrompt] = useState(false);
@@ -444,8 +453,38 @@ export function ChatView({
   const { isMediaPending, retry: retryMedia } = media;
   const documents = useFileSender({ conversationId: conversation.id, currentUser, setMessages });
 
+  // Retrying a failed copy forwards just that message again.
+  const retryForward = useCallback(
+    async (message: ChatMessage) => {
+      const info = message.tempId ? forwardRetries.current.get(message.tempId) : undefined;
+      if (!info || !message.tempId) return false;
+      const id = message.tempId;
+      setMessages((current) => current.map((m) => (m.tempId === id ? { ...m, status: "sending" } : m)));
+      try {
+        const result = await forwardMessages({
+          sourceConversationId: info.sourceConversationId,
+          messageIds: [info.messageId],
+          targets: [{ conversationId: conversation.id }],
+          hideSender: info.hideSender,
+          hideCaptions: info.hideCaptions,
+          tempIds: [id],
+        });
+        const target = result.ok ? result.results[0] : null;
+        if (!target?.ok || !target.messages[0]) throw new Error(result.ok ? target?.error : result.error);
+        setMessages((current) => mergeMessage(current, target.messages[0], id));
+        forwardRetries.current.delete(id);
+      } catch (error) {
+        setMessages((current) => current.map((m) => (m.tempId === id && m.status !== "sent" ? { ...m, status: "failed" } : m)));
+        toast.error(error instanceof Error && error.message ? error.message : "Couldn't forward");
+      }
+      return true;
+    },
+    [conversation.id],
+  );
+
   const retry = useCallback(
     (message: ChatMessage) => {
+      if (message.tempId && forwardRetries.current.has(message.tempId)) return void retryForward(message);
       // Media and files re-run their own pipeline (re-upload only if needed).
       if (documents.isPending(message.tempId)) return documents.retry(message);
       if (isMediaPending(message.tempId)) return void retryMedia(message.tempId!);
@@ -454,7 +493,7 @@ export function ChatView({
       );
       void deliver(message);
     },
-    [deliver, isMediaPending, retryMedia, documents],
+    [deliver, isMediaPending, retryMedia, documents, retryForward],
   );
 
   const cancelUpload = useCallback(
@@ -515,6 +554,12 @@ export function ChatView({
         setSelection(null);
         return;
       }
+      if (useRealtimeStore.getState().pendingForwards[conversation.id] && !layerOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        setPendingForward(conversation.id, null);
+        return;
+      }
       if (editingRef.current && !layerOpen) {
         event.preventDefault();
         event.stopPropagation();
@@ -531,7 +576,7 @@ export function ChatView({
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [router, askDeleteSelection]);
+  }, [router, askDeleteSelection, conversation.id]);
 
   // May I edit this message right now? (The server checks again.)
   const canEditMessage = useCallback(
@@ -592,11 +637,162 @@ export function ChatView({
     [router],
   );
 
+  // ---- Forwarding ----
+  const startForward = useCallback(
+    (messages: ChatMessage[]) => {
+      const sendable = messages.filter((m) => m.status === "sent" && m.type !== "SYSTEM");
+      if (sendable.length === 0) return void toast.error("Service messages can't be forwarded");
+      setForwardDraft({ sourceConversationId: conversation.id, messages: sendable });
+    },
+    [conversation.id],
+  );
+  const forwardOne = useCallback((message: ChatMessage) => startForward([message]), [startForward]);
+  const forwardSelection = useCallback(() => {
+    const ids = selectionRef.current;
+    if (!ids?.size) return;
+    startForward(messagesRef.current.filter((m) => ids.has(m.id))); // original order
+  }, [startForward]);
+
+  // One target picked: the messages wait in that chat's composer (a contact
+  // without a chat gets its direct conversation created now). Changing the
+  // recipient moves the pending forward and keeps its options.
+  const pickForwardTarget = useCallback(
+    async (target: PickedTarget) => {
+      if (!forwardDraft) return;
+      let targetId: string;
+      if ("userId" in target) {
+        const result = await ensureDirectConversation(target.userId).catch(() => null);
+        if (!result?.ok) return void toast.error(result?.error ?? "Couldn't open the chat");
+        targetId = result.conversationId;
+      } else {
+        targetId = target.conversationId;
+      }
+      const previous = useRealtimeStore.getState().pendingForwards[conversation.id];
+      setPendingForward(targetId, {
+        sourceConversationId: forwardDraft.sourceConversationId,
+        messages: forwardDraft.messages,
+        hideSender: previous?.hideSender ?? false,
+        hideCaptions: previous?.hideCaptions ?? false,
+      });
+      if (previous && targetId !== conversation.id) setPendingForward(conversation.id, null);
+      setSelection(null);
+      setReplyTo(null);
+      setEditing(null);
+      if (targetId !== conversation.id) router.push(`/chats/${targetId}`);
+    },
+    [forwardDraft, conversation.id, router],
+  );
+
+  const forwardAction = useCallback(
+    (action: "toggleSender" | "toggleCaptions" | "change" | "cancel") => {
+      const pending = useRealtimeStore.getState().pendingForwards[conversation.id];
+      if (!pending) return;
+      if (action === "cancel") return setPendingForward(conversation.id, null);
+      if (action === "change") {
+        return setForwardDraft({ sourceConversationId: pending.sourceConversationId, messages: pending.messages });
+      }
+      if (action === "toggleSender") {
+        // Captions can only be hidden together with the sender.
+        const hideSender = !pending.hideSender;
+        return setPendingForward(conversation.id, { ...pending, hideSender, hideCaptions: hideSender && pending.hideCaptions });
+      }
+      setPendingForward(conversation.id, { ...pending, hideCaptions: !pending.hideCaptions });
+    },
+    [conversation.id],
+  );
+
+  // Optimistic bubbles (the comment first, then the copies), replaced by the
+  // server's messages through the tempId dedupe; failed ones can be retried.
+  const sendForward = useCallback(
+    async (rawComment: string) => {
+      const pending = useRealtimeStore.getState().pendingForwards[conversation.id];
+      if (!pending) return;
+      setPendingForward(conversation.id, null);
+      const comment = rawComment.trim();
+      const hideCaptions = pending.hideSender && pending.hideCaptions;
+      const base = {
+        conversationId: conversation.id,
+        meta: null,
+        media: null,
+        location: null,
+        sender: currentUser,
+        replyTo: null,
+        status: "sending" as const,
+      };
+      const now = Date.now();
+      const optimistic: ChatMessage[] = [];
+      if (comment) {
+        const id = tempId();
+        optimistic.push({ ...base, id, tempId: id, type: "TEXT", content: comment, createdAt: new Date(now).toISOString() });
+      }
+      for (const source of pending.messages) {
+        const id = tempId();
+        const captioned = ["IMAGE", "VIDEO", "FILE"].includes(source.type);
+        forwardRetries.current.set(id, {
+          sourceConversationId: pending.sourceConversationId,
+          messageId: source.id,
+          hideSender: pending.hideSender,
+          hideCaptions,
+        });
+        optimistic.push({
+          ...base,
+          id,
+          tempId: id,
+          type: source.type,
+          content: hideCaptions && captioned ? null : source.content,
+          media: source.media,
+          location: source.location,
+          createdAt: new Date(now + optimistic.length).toISOString(),
+          forward: pending.hideSender
+            ? null
+            : (source.forward ?? {
+                name: source.sender.name,
+                conversationId: pending.sourceConversationId,
+                messageId: source.id,
+                originalDate: source.createdAt,
+              }),
+        });
+      }
+      setMessages((current) => [...current, ...optimistic]);
+      requestRead.current();
+
+      const tempIds = optimistic.map((m) => m.tempId!);
+      const failAll = (error?: string) => {
+        const ids = new Set(tempIds);
+        setMessages((current) =>
+          current.map((m) => (m.tempId && ids.has(m.tempId) && m.status !== "sent" ? { ...m, status: "failed" } : m)),
+        );
+        if (error) toast.error(error);
+      };
+      try {
+        const result = await forwardMessages({
+          sourceConversationId: pending.sourceConversationId,
+          messageIds: pending.messages.map((m) => m.id),
+          targets: [{ conversationId: conversation.id }],
+          comment: comment || null,
+          hideSender: pending.hideSender,
+          hideCaptions,
+          tempIds,
+        });
+        const target = result.ok ? result.results[0] : null;
+        if (!target?.ok) return failAll(result.ok ? target?.error : result.error);
+        target.messages.forEach((message, index) =>
+          setMessages((current) => mergeMessage(current, message, tempIds[index])),
+        );
+        for (const id of tempIds) forwardRetries.current.delete(id);
+      } catch {
+        failAll();
+      }
+    },
+    [conversation.id, currentUser, requestRead],
+  );
+
   const startEdit = useCallback((message: ChatMessage) => {
+    setPendingForward(conversation.id, null); // forward, reply and edit are exclusive
     setReplyTo(null);
     setSelection(null);
     setEditing(message);
-  }, []);
+  }, [conversation.id]);
 
   // ArrowUp in an empty composer: my newest editable message.
   const editLast = useCallback(() => {
@@ -649,10 +845,11 @@ export function ChatView({
   );
 
   const startReply = useCallback((message: ChatMessage) => {
+    setPendingForward(conversation.id, null);
     setEditing(null);
     setReplyTo(message);
     composerRef.current?.focus();
-  }, []);
+  }, [conversation.id]);
 
   const other = chat.otherUser;
   const selectedCount = selection?.size ?? 0;
@@ -675,6 +872,16 @@ export function ChatView({
           title={<span aria-live="polite">{formatCount(selectedCount, "message")} selected</span>}
           end={
             <div className="-me-2 flex items-center">
+            <Button
+              variant="ghost"
+              size="icon-lg"
+              aria-label="Forward selected messages"
+              disabled={selectedCount === 0}
+              onClick={forwardSelection}
+              className="size-11 rounded-full"
+            >
+              <Forward className="size-5.5" />
+            </Button>
             {!isSaved && (
               <Button
                 variant="ghost"
@@ -790,6 +997,7 @@ export function ChatView({
         editing={editing !== null}
         conversationId={chat.id}
         onSave={saveOne}
+        onForward={forwardOne}
         onOpenForward={openForward}
       />
 
@@ -828,6 +1036,9 @@ export function ChatView({
             onCancelEdit={() => setEditing(null)}
             onSaveEdit={saveEdit}
             onEditLast={editLast}
+            forward={pendingForward}
+            onSendForward={(comment) => void sendForward(comment)}
+            onForwardAction={forwardAction}
             onSend={send}
             onSendFiles={sendFiles}
             onSendDocuments={sendDocuments}
@@ -861,6 +1072,13 @@ export function ChatView({
         onConfirm={confirmDelete}
       />
       {conversationActions.dialog}
+      <ForwardPicker
+        open={forwardDraft !== null}
+        onOpenChange={(open) => !open && setForwardDraft(null)}
+        draft={forwardDraft}
+        onPickSingle={(target) => void pickForwardTarget(target)}
+        onForwarded={() => setSelection(null)}
+      />
     </div>
   );
 }

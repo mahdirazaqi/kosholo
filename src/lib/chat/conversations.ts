@@ -153,3 +153,31 @@ export async function getConversations(
   }
   return items.sort((a, b) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""));
 }
+
+// The single DIRECT conversation between two users, created on the fly (both
+// as MEMBER). Safe against a concurrent creation: the unique directKey decides
+// and the loser reads the winner's row (whose transaction added the members).
+export async function getOrCreateDirectConversation(userId: string, otherId: string): Promise<string> {
+  const directKey = directKeyFor(userId, otherId);
+  try {
+    return await db.$transaction(async (tx) => {
+      const conversation = await tx.conversation.upsert({
+        where: { directKey },
+        create: { type: "DIRECT", directKey, createdById: userId },
+        update: {},
+        select: { id: true },
+      });
+      await tx.conversationMember.createMany({
+        data: [
+          { conversationId: conversation.id, userId, role: "MEMBER" },
+          { conversationId: conversation.id, userId: otherId, role: "MEMBER" },
+        ],
+        skipDuplicates: true,
+      });
+      return conversation.id;
+    });
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
+    return (await db.conversation.findUniqueOrThrow({ where: { directKey }, select: { id: true } })).id;
+  }
+}

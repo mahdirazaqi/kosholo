@@ -2,9 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { Prisma } from "@/generated/prisma/client";
 import { requireUser } from "@/lib/auth";
-import { directKeyFor } from "@/lib/chat/conversations";
+import { getOrCreateDirectConversation } from "@/lib/chat/conversations";
 import { getContacts } from "@/lib/contacts";
 import { db } from "@/lib/db";
 import { isRateLimited, LIMITS, RATE_LIMIT_ERROR, recordHit } from "@/lib/rate-limit";
@@ -92,36 +91,7 @@ export async function startDirectConversation(otherUserId: string): Promise<Acti
   const exists = await db.user.count({ where: { id: otherId } });
   if (!exists) return { ok: false, error: NOT_FOUND };
 
-  const directKey = directKeyFor(me.id, otherId);
-  let conversationId: string;
-  try {
-    conversationId = await db.$transaction(async (tx) => {
-      const conversation = await tx.conversation.upsert({
-        where: { directKey },
-        create: { type: "DIRECT", directKey, createdById: me.id },
-        update: {},
-        select: { id: true },
-      });
-      await tx.conversationMember.createMany({
-        data: [
-          { conversationId: conversation.id, userId: me.id, role: "MEMBER" },
-          { conversationId: conversation.id, userId: otherId, role: "MEMBER" },
-        ],
-        skipDuplicates: true,
-      });
-      return conversation.id;
-    });
-  } catch (error) {
-    // A concurrent request created it first; its transaction also added the members.
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) {
-      throw error;
-    }
-    const existing = await db.conversation.findUniqueOrThrow({
-      where: { directKey },
-      select: { id: true },
-    });
-    conversationId = existing.id;
-  }
+  const conversationId = await getOrCreateDirectConversation(me.id, otherId);
 
   redirect(`/chats/${conversationId}`);
 }

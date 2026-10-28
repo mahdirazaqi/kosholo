@@ -45,6 +45,7 @@ export type BubbleActions = {
   onDelete: (message: ChatMessage) => void;
   onEdit: (message: ChatMessage) => void;
   onSave: (message: ChatMessage) => void; // copy into Saved Messages
+  onForward: (message: ChatMessage) => void; // open the forward picker
   onOpenForward: (message: ChatMessage) => void; // "Forwarded from …": open the original
 };
 
@@ -68,6 +69,7 @@ type Props = BubbleActions & {
   canDelete: boolean;
   canEdit: boolean; // own message / channel admin, editable type, inside the window
   editing: boolean; // the composer is in edit mode: no swipe-to-reply, no selecting
+  canForward: boolean; // any sent, non-system message
   canSave: boolean; // not offered inside Saved Messages itself
   savedChat: boolean; // Saved Messages: no ticks
 };
@@ -90,6 +92,7 @@ export const MessageBubble = memo(function MessageBubble({
   canDelete,
   canEdit,
   editing,
+  canForward,
   canSave,
   savedChat,
   ...actions
@@ -108,7 +111,7 @@ export const MessageBubble = memo(function MessageBubble({
   const replyAfterClose = useRef(false);
 
   const downloadable = isChannel && message.media !== null && message.status === "sent";
-  const hasMenuItems = canReply || canDelete || canEdit || canSave || Boolean(message.content) || downloadable;
+  const hasMenuItems = canReply || canDelete || canEdit || canSave || canForward || Boolean(message.content) || downloadable;
   const menu = isDesktop && canInteract && hasMenuItems && (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -147,6 +150,12 @@ export const MessageBubble = memo(function MessageBubble({
           <DropdownMenuItem onSelect={() => actions.onCopy(message)}>
             <Copy />
             Copy text
+          </DropdownMenuItem>
+        )}
+        {canForward && (
+          <DropdownMenuItem onSelect={() => actions.onForward(message)}>
+            <Forward />
+            Forward
           </DropdownMenuItem>
         )}
         {canSave && (

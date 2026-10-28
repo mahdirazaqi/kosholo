@@ -2,29 +2,30 @@
 
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
-import { requireUser } from "@/lib/auth";
-import { logger } from "@/lib/logger";
-import { canOpenOriginal, MAX_SAVE_MESSAGES, SavedError, saveMessages as saveInDb } from "@/lib/chat/saved";
-import { isRateLimited, LIMITS, RATE_LIMIT_ERROR, recordHit } from "@/lib/rate-limit";
-import { emitToUsers } from "@/lib/realtime/emit";
-import { userIdSchema } from "@/lib/validations/contacts";
 import { z } from "zod";
+import { requireUser } from "@/lib/auth";
+import { ForwardError, MAX_FORWARD_MESSAGES } from "@/lib/chat/forward";
+import { runForward } from "@/lib/chat/forward-emit";
+import { canOpenOriginal, savedTarget } from "@/lib/chat/saved";
+import { logger } from "@/lib/logger";
+import { isRateLimited, LIMITS, RATE_LIMIT_ERROR, recordHit } from "@/lib/rate-limit";
+import { userIdSchema } from "@/lib/validations/contacts";
 
 const saveSchema = z.object({
   conversationId: z.uuid({ error: "Chat not found" }),
   messageIds: z
     .array(z.uuid({ error: "Invalid message" }))
     .min(1, "No messages selected")
-    .max(MAX_SAVE_MESSAGES, `You can save up to ${MAX_SAVE_MESSAGES} messages at once`)
-    .transform((ids) => [...new Set(ids)]),
+    .max(MAX_FORWARD_MESSAGES, `You can save up to ${MAX_FORWARD_MESSAGES} messages at once`),
 });
 
 export type SaveMessagesResult =
   | { ok: true; count: number; savedConversationId: string }
   | { ok: false; error: string };
 
-// Copies messages into my Saved Messages (one transaction, original order).
-// The copies reach only my own rooms (my other tabs and devices).
+// Saving = forwarding to my own Saved Messages (the one copy implementation in
+// lib/chat/forward.ts): independent copies with the forward snapshot, files
+// shared. The copies reach only my own rooms (I'm its only member).
 export async function saveMessages(input: { conversationId: string; messageIds: string[] }): Promise<SaveMessagesResult> {
   const me = await requireUser();
   const parsed = saveSchema.safeParse(input);
@@ -35,13 +36,19 @@ export async function saveMessages(input: { conversationId: string; messageIds: 
   recordHit(limitKey, LIMITS.saves);
 
   try {
-    const { savedConversationId, messages } = await saveInDb(me.id, parsed.data.conversationId, parsed.data.messageIds);
-    for (const message of messages) emitToUsers([me.id], "message:new", { message, tempId: null });
+    const [result] = await runForward(me.id, {
+      sourceConversationId: parsed.data.conversationId,
+      messageIds: parsed.data.messageIds,
+      targets: [await savedTarget(me.id)],
+      hideSender: false,
+      hideCaptions: false,
+    });
+    if (!result?.ok || !result.targetConversationId) return { ok: false, error: result?.error ?? "Couldn't save" };
     revalidatePath("/");
-    return { ok: true, count: messages.length, savedConversationId };
+    return { ok: true, count: result.messages.length, savedConversationId: result.targetConversationId };
   } catch (error) {
     unstable_rethrow(error);
-    if (error instanceof SavedError) return { ok: false, error: error.message };
+    if (error instanceof ForwardError) return { ok: false, error: error.message };
     logger.error("save-messages", "failed", error);
     return { ok: false, error: "Something went wrong, please try again" };
   }
