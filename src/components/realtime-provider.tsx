@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { toFaDigits } from "@/lib/digits";
+import { formatNumber } from "@/lib/numbers";
 import { playNotificationSound, unlockAudio } from "@/lib/pwa/notification-sound";
 import { getSettings } from "@/lib/pwa/settings";
 import { getConversation, listConversations } from "@/app/(app)/chats/actions";
@@ -145,7 +145,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
 const TITLE_PREFIX = /^\([^)]*\) /;
 
-// Total unread → «(۳) …» in the title while the tab is hidden, and the
+// Total unread → "(3) …" in the title while the tab is hidden, and the
 // installed app's icon badge where supported.
 function useUnreadIndicators() {
   const total = useRealtimeStore(selectTotalUnread);
@@ -153,7 +153,7 @@ function useUnreadIndicators() {
     const apply = () => {
       const base = document.title.replace(TITLE_PREFIX, "");
       document.title =
-        document.visibilityState === "hidden" && total > 0 ? `(${toFaDigits(total)}) ${base}` : base;
+        document.visibilityState === "hidden" && total > 0 ? `(${formatNumber(total)}) ${base}` : base;
     };
     apply();
     document.addEventListener("visibilitychange", apply);

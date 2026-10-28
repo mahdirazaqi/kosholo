@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { getConversationForMember } from "@/lib/chat/conversations";
 import { getMessages } from "@/lib/chat/messages";
 
-export const metadata: Metadata = { title: "گفتگو | کوشولو" };
+export const metadata: Metadata = { title: "Chat | Kosholo" };
 
 export default function ChatPage({ params }: PageProps<"/chats/[conversationId]">) {
   return (

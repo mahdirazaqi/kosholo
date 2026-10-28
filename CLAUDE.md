@@ -1,18 +1,20 @@
 @AGENTS.md
 
-# Kosholo (کوشولو)
+# Kosholo
 
-A small, lightweight real-time chat web app (mini WhatsApp/Telegram). Persian UI, fully RTL, mobile-first, and later an installable PWA. Next.js serves the frontend and backend together from one project.
+A small, lightweight real-time chat web app (mini WhatsApp/Telegram). English UI (LTR) for a global audience, mobile-first, and an installable PWA. Next.js serves the frontend and backend together from one project.
 
 ## Ground rules
 
 - **Self-hosted on a VPS with Docker. Never assume serverless** (Vercel, edge, lambdas). Everything runs in one long-running Node process, which Socket.IO needs.
-- **UI text is Persian. Code, identifiers and comments are English.**
+- **Everything is English:** UI text, code, identifiers, comments and docs. User content (messages, names) can be in any language, including RTL scripts.
 - **Use npm only.** Do not use pnpm, yarn or bun.
 - **No tests for now.**
 - Keep dependencies minimal. Auth will be custom (bcryptjs + jose), so no auth libraries.
 
-## RTL rule (whole project)
+## Direction rule (whole project)
+
+The app is LTR (`<html lang="en" dir="ltr">`), but layout stays direction-agnostic so an RTL locale can be added later.
 
 Use only logical utilities: `ms-/me-`, `ps-/pe-`, `start-/end-`, `text-start/text-end`, `rounded-s/rounded-e`, `border-s/border-e`, `slide-in-from-start/end`.
 Never use physical left/right variants: `ml-`, `mr-`, `pl-`, `pr-`, `left-`, `right-`, `text-left`, `text-right`, `rounded-l/r`, `border-l/r`.
@@ -20,12 +22,14 @@ Never use physical left/right variants: `ml-`, `mr-`, `pl-`, `pr-`, `left-`, `ri
 - Directional icons (chevrons, arrows) get `rtl:rotate-180`. Icons that should mirror rather than flip (e.g. the send icon) get `rtl:-scale-x-100`.
 - `SheetContent` takes `side="start" | "end" | "top" | "bottom"` (default `end`).
 - The only allowed physical classes are the `data-[side=left|right]` animations in `dropdown-menu.tsx`. Those sides are computed by Radix positioning, not by layout.
-- shadcn is configured with `"rtl": true` in `components.json`, so newly added components come out mostly logical. Still audit each one after adding it.
+- `rtl:` variants are no-ops in LTR; keep them so the layout still works if `dir` ever flips.
+- shadcn has `"rtl": false` in `components.json`. Audit newly added components and swap any physical classes for logical ones.
+- User-generated text (message bodies, quotes, captions) uses `dir="auto"` so Persian/Arabic messages render right-to-left inside the LTR UI.
 
 ## Stack
 
 - **Next.js 16** (App Router, TypeScript, `src/`, alias `@/*`). `cacheComponents` is enabled. Read the docs in `node_modules/next/dist/docs/` before using unfamiliar APIs.
-- **Tailwind CSS v4.** Config is CSS-first in `src/app/globals.css`, and there is no tailwind.config. The default sans font is Vazirmatn (`--font-vazirmatn`).
+- **Tailwind CSS v4.** Config is CSS-first in `src/app/globals.css`, and there is no tailwind.config. The UI uses the system font stack. Self-hosted Vazirmatn (`--font-vazirmatn`) is loaded with a `unicode-range` limited to Arabic script, so it's only downloaded when Persian/Arabic text appears.
 - **shadcn/ui** (radix-nova style, neutral, CSS variables) with **next-themes** for class-based dark mode, defaulting to the system theme.
 - **PostgreSQL 17** in Docker, accessed through **Prisma 7.10** (pinned to the stable line; 8.x was still a release candidate when this was set up):
   - Config lives in `prisma.config.ts`, which loads `.env` via dotenv. The database URL goes there, not in the schema.
@@ -39,7 +43,7 @@ Never use physical left/right variants: `ml-`, `mr-`, `pl-`, `pr-`, `left-`, `ri
 prisma/               schema.prisma + migrations/
 prisma.config.ts      Prisma CLI config
 src/proxy.ts          route protection (Next 16's renamed middleware)
-src/app/              root layout (providers only), globals.css, fonts/ (self-hosted Vazirmatn)
+src/app/              root layout (providers only), globals.css, fonts/ (self-hosted Vazirmatn, Arabic-script fallback)
 src/app/(auth)/       /login, /register (centered card, no bottom nav) + actions.ts (all auth Server Actions)
 src/app/(app)/(tabs)/ protected tabs, AppShell with bottom nav: / , /contacts (+ actions.ts), /profile
 src/app/(app)/chats/  protected conversation screens, AppShell without bottom nav: /chats/[conversationId]
@@ -57,10 +61,10 @@ src/app/api/media/    GET/HEAD [uploadId] and [uploadId]/thumb: access-checked, 
 src/app/(app)/photo-actions.ts  setProfilePhoto, setGroupPhoto
 src/components/auth/  login/register forms, auth card
 src/components/profile/ profile forms + logout dialog
-src/components/ui/    shadcn components (RTL-audited)
+src/components/ui/    shadcn components (logical-direction audited)
 src/generated/prisma/ generated Prisma client (do not edit)
-src/hooks/            client hooks (use-conversation-realtime, use-presence, use-now, use-form-feedback, use-media-query, use-visual-viewport-height)
-src/lib/              db.ts, session.ts, session-token.ts, auth.ts, users.ts, contacts.ts, rate-limit.ts, form.ts, validations/, format-date.ts, digits.ts, emoji.ts, client-utils.ts, utils.ts
+src/hooks/            client hooks (use-conversation-realtime, use-presence, use-now, use-time-zone, use-form-feedback, use-media-query, use-visual-viewport-height)
+src/lib/              db.ts, session.ts, session-token.ts, auth.ts, users.ts, contacts.ts, rate-limit.ts, form.ts, validations/, format-date.ts, numbers.ts, emoji.ts, client-utils.ts, utils.ts
 src/lib/pwa/          settings.ts (per-device), install.ts, notification-sound.ts, caches.ts
 src/lib/realtime/     events.ts (typed event contract + rooms), membership.ts (cached), emit.ts (from Server Actions)
 src/lib/realtime/client/ socket.ts (typed client), store.ts (zustand), merge.ts (dedupe rule)
@@ -93,7 +97,7 @@ Custom email/password auth. Do not add NextAuth or other auth libraries.
 - **Cache Components:** reading the session is request-time data. Put components that call `requireUser()`/`getCurrentUser()` inside `<Suspense>`, not at the top level of a layout (see `(app)/(tabs)/profile/page.tsx`).
   - Under Cache Components the static shell streams first, so `notFound()` from a request-time check shows the not-found page with `noindex` but an HTTP 200. That's accepted. A real 404 status would need the check in `proxy.ts`.
   - Client components in the shell that read URL data (`usePathname`, `useSearchParams`) break the build on dynamic routes unless they're behind `<Suspense>`. That's why `/chats` uses its own layout without `BottomNav`.
-- **Validation:** zod schemas in `src/lib/validations/` with Persian messages. They're shared by the client (instant feedback) and the Server Actions (the source of truth).
+- **Validation:** zod schemas in `src/lib/validations/` with English messages. They're shared by the client (instant feedback) and the Server Actions (the source of truth).
 - **Forms:**
   - Server Actions return `FormState` (`src/lib/form.ts`). Field errors, the message and echoed non-secret values go back to the form.
   - Client forms use `useActionState` and `useFormFeedback(schema, state)`, which handles client validation and toasts the `message`.
@@ -102,7 +106,7 @@ Custom email/password auth. Do not add NextAuth or other auth libraries.
   - `src/lib/rate-limit.ts` keeps an in-memory fixed window on `globalThis`, which is valid because there's a single long-running process.
   - Logins allow 5 failures per IP+identifier per 15 minutes. Registrations allow 5 per IP per hour.
   - The client IP comes from `X-Forwarded-For`, which the reverse proxy must set. The custom server fills it from the socket address when it's missing.
-- **LTR fields:** email, username and password inputs use `dir="ltr"` + `text-start`. Labels and errors stay RTL.
+- **LTR fields:** email, username and password inputs keep `dir="ltr"` + `text-start`, so they stay LTR if the UI direction ever changes.
 - **Inputs are always 16px** (`text-base`, also on desktop) so iOS Safari doesn't zoom on focus. `md:text-sm` was removed from `ui/input.tsx` and `ui/textarea.tsx` on purpose.
 
 ## Layout conventions
@@ -115,25 +119,25 @@ Custom email/password auth. Do not add NextAuth or other auth libraries.
 - `AppShell` is the app frame with a scrollable `main`. Pass `nav` to show the bottom navigation.
 - Each page renders its own sticky `PageHeader` (title, subtitle, `start`/`end` slots).
 - Use `UserAvatar` for avatars, which shows initials with a deterministic tint. Use `BottomSheetContent` for bottom sheets.
-- Display a username inside RTL text as `<bdi dir="ltr">@{username}</bdi>` so it stays aligned with the RTL line. Only inputs get `dir="ltr"` + `text-start`.
-- **Digits:** use `toFaDigits()` (`src/lib/digits.ts`) for every number shown (counts, badges, durations, sizes) and `formatBytes()` for file sizes. Never call `toLocaleString("fa-IR")` directly.
-- **Shared components:** empty states use `EmptyState` (icon, title, description, optional action). Loading states come from `src/components/skeletons.tsx`, used both by page `<Suspense>` fallbacks and by `loading.tsx`. `error.tsx` (root and `(app)`) uses `ErrorView` with «تلاش دوباره», and `not-found.tsx` uses `NotFoundView`.
-- **Accessibility:** icon-only buttons need a Persian `aria-label`. Custom interactive elements get the global `:focus-visible` outline (`globals.css`). Chrome (`header`, `nav`, buttons) is `user-select: none`; message text stays selectable. All animation respects `prefers-reduced-motion`, and JS scrolling uses `scrollBehavior()`.
+- Display a username as `<bdi dir="ltr">@{username}</bdi>` so it's isolated from surrounding (possibly RTL) names. Only inputs get `dir="ltr"` + `text-start`.
+- **Numbers:** use `formatNumber()` (`src/lib/numbers.ts`) for every number shown (counts, badges, percentages), `formatCount(n, "member")` for pluralized counts ("1 member" / "3 members"), and `formatBytes()` for file sizes. Don't call `toLocaleString()` directly.
+- **Shared components:** empty states use `EmptyState` (icon, title, description, optional action). Loading states come from `src/components/skeletons.tsx`, used both by page `<Suspense>` fallbacks and by `loading.tsx`. `error.tsx` (root and `(app)`) uses `ErrorView` with "Try again", and `not-found.tsx` uses `NotFoundView`.
+- **Accessibility:** icon-only buttons need an `aria-label`. Custom interactive elements get the global `:focus-visible` outline (`globals.css`). Chrome (`header`, `nav`, buttons) is `user-select: none`; message text stays selectable. All animation respects `prefers-reduced-motion`, and JS scrolling uses `scrollBehavior()`.
 - **Performance:**
   - Lazy-load heavy client pieces with `next/dynamic`: the emoji picker panel, lightbox, video player and voice recorder are already split.
   - Keep zod out of always-loaded client components; import limits from zod-free modules (`lib/chat/limits.ts`, `lib/media/limits.ts`).
   - `MessageBubble` and `ConversationRow` are memoized, and rows subscribe to their own typing state.
-  - The chat list page keeps its header, install banner and «گفتگوی جدید» in the static shell; only the list streams (Lighthouse LCP).
+  - The chat list page keeps its header, install banner and "New chat" in the static shell; only the list streams (Lighthouse LCP).
 
 ## PWA
 
-- **Manifest:** `src/app/manifest.ts` (Persian name, `lang: fa`, `dir: rtl`, standalone, portrait, `theme_color`/`background_color` #ffffff, maskable icon). The root layout metadata adds the Apple web-app tags (`black-translucent` status bar), icons and light/dark `theme-color`.
+- **Manifest:** `src/app/manifest.ts` (name "Kosholo", `lang: en`, `dir: ltr`, standalone, portrait, `theme_color`/`background_color` #ffffff, maskable icon). The root layout metadata adds the Apple web-app tags (`black-translucent` status bar), icons and light/dark `theme-color`.
 - **Icons:** generated from `public/logo.svg` by `npm run icons` (sharp): `public/icons/{icon-192,icon-512,maskable-512,apple-touch-icon,favicon-32}.png` and `src/app/favicon.ico`.
 - **Service worker (Serwist):**
   - The source is `src/sw/sw.ts`. `npm run build:sw` (part of `npm run build`) bundles it with esbuild and injects the precache manifest with `@serwist/build` into `public/sw.js` (gitignored).
   - **Why not `@serwist/next` / `@serwist/turbopack`:** the first is a webpack plugin, and the second doesn't support `cacheComponents`. This framework-agnostic setup keeps Turbopack builds and works with the custom server, since `sw.js` is just a static file.
   - It's registered in **production only**, after `load` (`ServiceWorkerRegistration`). In dev, leftover workers are unregistered.
-  - Updates wait; a toast «نسخه‌ی جدید آماده است» → «به‌روزرسانی» posts `SKIP_WAITING`, then the page reloads on `controllerchange`.
+  - Updates wait; a toast "A new version is available" → "Update" posts `SKIP_WAITING`, then the page reloads on `controllerchange`.
 - **Caching rules** (first match wins; only GET is routed):
 
   | Request | Strategy |
@@ -144,16 +148,16 @@ Custom email/password auth. Do not add NextAuth or other auth libraries.
   | page navigations | network-first (3s timeout) → cached page → `/~offline` |
   | Server Action POSTs, any non-GET | not routed (always network) |
 
-  - The precache is deliberately small (CSS, font, `/~offline`, logo, icons, manifest). JS chunks are runtime-cached as they're used.
-- **Offline page:** `/~offline` is a **route handler returning plain HTML** (inline CSS and a tiny script, no React). It renders from the precache alone and reloads when back online. It's public in `proxy.ts`, and its font is copied to `public/fonts/` by `build-sw.mjs`.
+  - The precache is deliberately small (CSS, `/~offline`, logo, icons, manifest). JS chunks are runtime-cached as they're used.
+- **Offline page:** `/~offline` is a **route handler returning plain HTML** (inline CSS and a tiny script, no React). It renders from the precache alone and reloads when back online. It's public in `proxy.ts` and uses the system font.
 - **Logout:** `clearAppCaches()` deletes every cache except Serwist's precache, which holds no user data and is needed for the offline page.
 - **Install:**
   - `lib/pwa/install.ts` captures `beforeinstallprompt`, detects iOS and standalone mode, and remembers a dismissal for 14 days.
   - `InstallBanner` shows at the top of the chat list (and in the sidebar) after the user's first interaction in the session (no layout shift on load). On iOS it opens step-by-step instructions.
-  - `InstallSettingsRow` is the permanent «نصب اپ» in settings. Nothing install-related shows in standalone mode.
-- **Unread total** (`selectTotalUnread`): a badge on the «گفتگوها» tab and sidebar tab, «(n) …» in `document.title` while the tab is hidden, and `navigator.setAppBadge` / `clearAppBadge` where supported (`RealtimeProvider`). The provider loads the chat list on start so this works on every page.
+  - `InstallSettingsRow` is the permanent "Install app" row in settings. Nothing install-related shows in standalone mode.
+- **Unread total** (`selectTotalUnread`): a badge on the "Chats" tab and sidebar tab, "(n) …" in `document.title` while the tab is hidden, and `navigator.setAppBadge` / `clearAppBadge` where supported (`RealtimeProvider`). The provider loads the chat list on start so this works on every page.
 - **Notification sound:** a Web Audio two-note chime (`lib/pwa/notification-sound.ts`), unlocked by the first tap or key. It plays for others' non-system messages in conversations that aren't open and visible, and only if the per-device setting is on.
-- **Settings** (profile page `SettingsSection`, per device): theme «سیستم / روشن / تیره» (next-themes), the notification-sound switch, «نصب اپ», and «درباره» with the package.json version. They're stored in localStorage through try/catch helpers (`lib/pwa/settings.ts`).
+- **Settings** (profile page `SettingsSection`, per device): theme "System / Light / Dark" (next-themes), the notification-sound switch, "Install app", and "About" with the package.json version. They're stored in localStorage through try/catch helpers (`lib/pwa/settings.ts`).
 - **Standalone feel:** no overscroll bounce on `html`/`body` (only page and message lists scroll), safe-area insets on header, bottom nav, composer and floating buttons, and `viewport-fit=cover` + `interactive-widget=resizes-content`.
 
 ## Users, contacts and conversations
@@ -191,11 +195,12 @@ Custom email/password auth. Do not add NextAuth or other auth libraries.
   - The sender name line is already wired for `GROUP` conversations.
   - Desktop vs touch is `useIsDesktop()` (`(hover: hover) and (pointer: fine)`): Enter-to-send, hover menus and an emoji popover vs a bottom sheet.
 - **Dates:** use `src/lib/format-date.ts` only.
-  - Everything is formatted in the fixed `Asia/Tehran` zone with the Persian calendar and digits, so SSR and hydration match.
+  - Dates use `en-US` and the **viewer's time zone**: client components get it from `useTimeZone()` and pass it to every formatter (`formatTime(value, timeZone)`, `dayNumber(value, timeZone)`, ...).
+  - `useTimeZone()` is a `useSyncExternalStore` that returns `UTC` for the server render and hydration (so they match), then the browser zone. Keep `suppressHydrationWarning` on rendered times.
   - Day/yesterday logic uses `dayNumber()`.
 - **Keyboard:** the viewport has `interactive-widget=resizes-content` (Android). `useVisualViewportHeight()` sets `--app-height` from `visualViewport` for iOS, and `AppShell` uses it. In the chat, the message list is the only scroll area.
-- **Emoji picker:** the frimousse-based shadcn `ui/emoji-picker.tsx`. Data is self-hosted in `public/emojibase/en`, with Persian category names in `messages.json`; search is English because emojibase has no Persian. Don't point it at a CDN (jsDelivr is often blocked in Iran).
-- **Reply deletion:** `Message.replyTo` is `onDelete: SetNull`, so a deleted original currently drops the link. `"deleted"` is rendered as «پیام در دسترس نیست» for when message deletion lands.
+- **Emoji picker:** the frimousse-based shadcn `ui/emoji-picker.tsx`. Data is self-hosted in `public/emojibase/en`, with English category names in `messages.json`. Don't point it at a CDN (jsDelivr is blocked in some regions).
+- **Reply deletion:** `Message.replyTo` is `onDelete: SetNull`, so a deleted original currently drops the link. `"deleted"` is rendered as "Message unavailable" for when message deletion lands.
 
 ## Groups
 
@@ -208,7 +213,7 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
   - Admins can rename, add members, remove **non-admin** members, promote, demote another admin, and delete the group for everyone.
   - Any member can leave. If the last admin leaves, the longest-standing member (`joinedAt`, then `userId`) becomes admin. If the last member leaves, the conversation is deleted.
 - **Where:**
-  - `src/lib/chat/groups.ts` (server-only) holds the rules. Every check runs **inside** the interactive transaction that makes the change, and violations throw `GroupError` with a Persian message.
+  - `src/lib/chat/groups.ts` (server-only) holds the rules. Every check runs **inside** the interactive transaction that makes the change, and violations throw `GroupError` with a user-facing message.
   - `src/app/(app)/chats/group-actions.ts`: `createGroup`, `renameGroup`, `addMembers`, `removeMember`, `leaveGroup`, `setMemberRole` and `deleteGroup`. Each one runs `requireUser`, zod validation (`lib/validations/groups.ts`), the transaction, then realtime events, and returns `{ ok, error? }`.
   - `run()` rethrows Next control flow (`unstable_rethrow`). **UI hiding is cosmetic; the server is the authority.**
 - **Info data:** `getGroupInfo(conversationId, userId)` returns the title, avatar, createdAt, members (`ChatMember` = public user + role + joinedAt) and my role. `getMembers()` builds `conversation:updated` payloads.
@@ -218,9 +223,9 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
 - **In chat:**
   - Others' bubbles show the sender name (`nameColor(id)`) on the first bubble of a run and a small avatar on the last.
   - Read receipts (✓✓) need **every** other current member who joined before the message to have read it.
-  - Typing shows «{name} در حال نوشتن» or «{n} نفر در حال نوشتن».
-  - The header shows «{n} عضو، {m} آنلاین»; the group chat subscribes to presence for all members.
-  - The list prefixes previews with «علی: » / «شما: ».
+  - Typing shows "{name} is typing" or "{n} people are typing".
+  - The header shows "{n} members, {m} online"; the group chat subscribes to presence for all members.
+  - The list prefixes previews with "Jane: " / "You: ".
 
 ### System messages
 
@@ -228,7 +233,7 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
   - `event` is one of `created`, `member_added`, `member_removed`, `member_left`, `renamed`, `admin_promoted`, `admin_demoted` or `photo_changed` (with `removed: true` when the photo was removed).
   - `auto: true` marks the promotion that happens when the last admin leaves.
   - `senderId` is the actor.
-- **Names live in meta** so the text still renders after people leave. `systemMessageText(meta, meId, currentNames?)` (`lib/chat/system-text.ts`) builds the Persian sentence on the client: «شما» plus second-person verbs for the viewer, and current member names when known.
+- **Names live in meta** so the text still renders after people leave. `systemMessageText(meta, meId, currentNames?)` (`lib/chat/system-text.ts`) builds the English sentence on the client: "You"/"you" for the viewer, and current member names when known.
 - **Rendering:** a centered muted pill (`SystemMessage`).
   - They break sender runs, can't be replied to (the server rejects `replyToId` pointing at one) and never count as unread (excluded in the unread SQL and in the client store).
   - They do show as the chat-list preview.
@@ -248,7 +253,7 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
 | Avatar | 5MB | image |
 
 - Up to 10 files per selection, each its own message (no albums).
-- Uploads are rate limited to 60 per user per 10 minutes. Every rejection has a Persian message (`MEDIA_ERRORS`).
+- Uploads are rate limited to 60 per user per 10 minutes. Every rejection has a user-facing message (`MEDIA_ERRORS`).
 
 **Data:**
 - `Upload` stores `{ path, thumbPath, mime, size, width, height, duration, placeholder, waveform }`.
@@ -286,7 +291,7 @@ Groups are `Conversation`s with `type: GROUP`. They use the same chat UI, messag
 - **Voice:** the mic replaces send when the composer is empty.
   - Recording (`useVoiceRecorder`): hold to record, slide toward the inline start to cancel, slide up to lock. A tap shows a hint. Recordings under 1s are discarded, and recording stops automatically at 5 minutes.
   - Playback: the waveform doubles as the seek bar, there's a 1x / 1.5x / 2x toggle, and `audioManager` makes sure only one voice plays at a time.
-- **Previews:** «📷 عکس», «🎬 ویدیو», «🎤 پیام صوتی (m:ss)», with the caption when there is one. Quotes and the reply bar show a thumbnail.
+- **Previews:** "📷 Photo", "🎬 Video", "🎤 Voice message (m:ss)", with the caption when there is one. Quotes and the reply bar show a thumbnail.
 - **Media direction:** playback controls and timelines stay LTR (play icon, waveform direction).
 
 **Avatars:**
@@ -335,7 +340,7 @@ Typing goes to user rooms rather than `conv:{id}` so the chat list can show it t
   - Call `invalidateMembership(id)` **before** emitting to the new member list (adds).
   - Use `emitRemoved(id, userIds, reason)` for people who are no longer members. It emits `conversation:removed`, runs `io.in(user rooms).socketsLeave(conv room)` and invalidates the cache.
 - **Group system messages** go out as normal `message:new` (`tempId: null`). A new member's client sees an unknown conversation and fetches its row, so the group appears in their list instantly.
-- **Client side:** `conversation:removed` removes the row from the list. An open chat shows a non-dismissable banner («شما دیگر عضو این گروه نیستید» / «این گروه حذف شده است») and hides the composer.
+- **Client side:** `conversation:removed` removes the row from the list. An open chat shows a non-dismissable banner ("You're no longer a member of this group" / "This group was deleted") and hides the composer.
 - `sendMessage` emits `message:new` plus `conversation:read` for the sender.
 - `markAsRead` emits `conversation:read`.
 
@@ -360,15 +365,15 @@ Both the Server Action response and `message:new` go through it, so either can a
 - **Presence:**
   - Server: an in-memory socket count per user. The first socket triggers `online`. After the last one disconnects there's a 5s grace period, then `User.lastSeenAt` is written and `offline` is emitted.
   - Client: `usePresence(userId)` (ref-counted subscriptions, re-subscribed on reconnect). The header uses `formatLastSeen()` and refreshes every minute.
-- **Header subtitle priority:** «در حال اتصال...» (disconnected) → «در حال نوشتن» → «آنلاین» / «آخرین بازدید …».
+- **Header subtitle priority:** "Connecting…" (disconnected) → "typing" → "online" / "last seen …".
 - **Socket transports:** websocket first with a polling fallback, and default auto-reconnect.
 
 ## Production deployment
 
-Full step-by-step guide (Persian, for the server admin): `DEPLOY.md`.
+Full step-by-step guide (for the server admin): `DEPLOY.md`.
 
 - **Files:**
-  - `Dockerfile`: multi-stage build (deps → build → runner) on Debian slim Node. Build args are `NODE_IMAGE`, `NPM_REGISTRY` and `APT_MIRROR`, so builds work through mirrors from Iran.
+  - `Dockerfile`: multi-stage build (deps → build → runner) on Debian slim Node. Build args are `NODE_IMAGE`, `NPM_REGISTRY` and `APT_MIRROR`, so builds can go through mirrors where Docker Hub, npm or Debian are blocked or slow.
   - The runner stage installs `ffmpeg`, runs as the non-root `node` user, and has a HEALTHCHECK on `/api/health`.
   - `docker-entrypoint.sh` runs `prisma migrate deploy`, then `exec node dist/server.mjs`.
   - `.dockerignore`.

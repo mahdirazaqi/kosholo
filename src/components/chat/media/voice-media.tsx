@@ -7,7 +7,7 @@ import { formatDuration } from "@/lib/format-date";
 import type { ChatMessage } from "@/lib/types/chat";
 import { cn } from "@/lib/utils";
 
-const RATE_LABEL: Record<number, string> = { 1: "۱x", 1.5: "۱٫۵x", 2: "۲x" };
+const RATE_LABEL: Record<number, string> = { 1: "1x", 1.5: "1.5x", 2: "2x" };
 
 // Voice bubble: play/pause, waveform bars that double as the seek bar,
 // current time / length and a speed toggle. Playback goes through the global
@@ -45,7 +45,7 @@ export function VoiceMedia({
         <button
           type="button"
           onClick={onCancel}
-          aria-label="لغو ارسال"
+          aria-label="Cancel sending"
           className={cn(
             "relative flex size-11 shrink-0 items-center justify-center rounded-full",
             isMine ? "bg-primary-foreground/20" : "bg-primary/10 text-primary",
@@ -58,7 +58,7 @@ export function VoiceMedia({
         <button
           type="button"
           onClick={() => (active && audio.playing ? audioManager.pause() : audioManager.play(media.url))}
-          aria-label={active && audio.playing ? "توقف" : "پخش پیام صوتی"}
+          aria-label={active && audio.playing ? "Pause" : "Play voice message"}
           className={cn(
             "flex size-11 shrink-0 items-center justify-center rounded-full transition-colors",
             isMine ? "bg-primary-foreground text-primary" : "bg-primary text-primary-foreground",
@@ -78,7 +78,7 @@ export function VoiceMedia({
           ref={barsRef}
           dir="ltr"
           role="slider"
-          aria-label="موقعیت پخش"
+          aria-label="Playback position"
           aria-valuemin={0}
           aria-valuemax={Math.round(duration)}
           aria-valuenow={Math.round(position)}
@@ -123,7 +123,7 @@ export function VoiceMedia({
             <button
               type="button"
               onClick={() => audioManager.cycleRate()}
-              aria-label="سرعت پخش"
+              aria-label="Playback speed"
               className="rounded-full bg-current/15 px-1.5 font-semibold"
             >
               {RATE_LABEL[audio.rate]}

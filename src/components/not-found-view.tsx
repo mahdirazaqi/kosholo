@@ -7,12 +7,12 @@ export function NotFoundView() {
   return (
     <EmptyState
       icon={<SearchX />}
-      title="صفحه پیدا نشد"
-      description="این صفحه وجود ندارد یا به آن دسترسی ندارید."
+      title="Page not found"
+      description="This page doesn't exist or you don't have access to it."
       className="min-h-dvh lg:min-h-full"
       action={
         <Button asChild size="lg" className="h-11 rounded-xl px-5 text-base">
-          <Link href="/">بازگشت به خانه</Link>
+          <Link href="/">Back to home</Link>
         </Button>
       }
     />

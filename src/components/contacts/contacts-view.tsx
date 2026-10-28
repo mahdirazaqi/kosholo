@@ -10,7 +10,7 @@ import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PublicUser } from "@/lib/users";
-import { toFaDigits } from "@/lib/digits";
+import { formatCount } from "@/lib/numbers";
 
 export function ContactsView({ contacts }: { contacts: PublicUser[] }) {
   const [filter, setFilter] = useState("");
@@ -39,9 +39,9 @@ export function ContactsView({ contacts }: { contacts: PublicUser[] }) {
   return (
     <>
       <PageHeader
-        title="مخاطبین"
+        title="Contacts"
         subtitle={
-          contacts.length > 0 ? `${toFaDigits(contacts.length)} مخاطب` : undefined
+          contacts.length > 0 ? formatCount(contacts.length, "contact") : undefined
         }
       />
 
@@ -55,15 +55,15 @@ export function ContactsView({ contacts }: { contacts: PublicUser[] }) {
               type="search"
               value={filter}
               onChange={(event) => setFilter(event.target.value)}
-              placeholder="جستجو در مخاطبین"
-              aria-label="جستجو در مخاطبین"
+              placeholder="Search contacts"
+              aria-label="Search contacts"
               className="h-11 rounded-xl bg-muted/50 ps-10"
             />
           </div>
 
           {filtered.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">
-              مخاطبی با این مشخصات پیدا نشد
+              No matching contacts
             </p>
           ) : (
             <ul className="-mx-2">
@@ -95,7 +95,7 @@ export function ContactsView({ contacts }: { contacts: PublicUser[] }) {
       <Button
         size="icon-lg"
         onClick={openAdd}
-        aria-label="افزودن مخاطب"
+        aria-label="Add contact"
         className="absolute end-[calc(1rem+max(env(safe-area-inset-left),env(safe-area-inset-right)))] bottom-[calc(4rem+env(safe-area-inset-bottom)+1rem)] lg:bottom-6 z-30 size-14 rounded-2xl shadow-lg shadow-primary/20"
       >
         <UserPlus className="size-6" />
@@ -115,20 +115,21 @@ function ContactsEmpty({ onAdd }: { onAdd: () => void }) {
   return (
     <EmptyState
       icon={<Users />}
-      title="هنوز مخاطبی ندارید"
-      description="دوستانتان را با نام کاربری یا ایمیل پیدا کنید و به فهرست خود اضافه کنید."
+      title="No contacts yet"
+      description="Find your friends by username or email and add them to your list."
       className="min-h-[calc(100%-3.5rem)]"
       action={
         <Button size="lg" onClick={onAdd} className="h-11 rounded-xl px-5 text-base">
           <UserPlus />
-          افزودن اولین مخاطب
+          Add your first contact
         </Button>
       }
     />
   );
 }
 
-// Lowercase and unify Arabic/Persian variants of ی and ک for matching.
+// Lowercase and unify the Arabic and Persian forms of yeh and kaf, so
+// Persian names match whichever keyboard was used.
 function normalize(value: string) {
-  return value.trim().toLowerCase().replace(/ي/g, "ی").replace(/ك/g, "ک");
+  return value.trim().toLowerCase().replace(/\u064A/g, "\u06CC").replace(/\u0643/g, "\u06A9");
 }

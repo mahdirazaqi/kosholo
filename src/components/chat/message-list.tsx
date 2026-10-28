@@ -13,9 +13,10 @@ import { Sheet, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { useIsDesktop } from "@/hooks/use-media-query";
 import { copyText, nextFrame, scrollBehavior } from "@/lib/client-utils";
 import { dayNumber, formatDaySeparator } from "@/lib/format-date";
+import { useTimeZone } from "@/hooks/use-time-zone";
 import type { ChatMessage, ConversationType, MemberReadState } from "@/lib/types/chat";
 import { cn } from "@/lib/utils";
-import { toFaDigits } from "@/lib/digits";
+import { formatCount, formatNumber } from "@/lib/numbers";
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 const LOAD_MORE_THRESHOLD = 400; // px from the top
@@ -53,6 +54,7 @@ export function MessageList({
   onRetry,
   onCancelUpload,
 }: Props) {
+  const timeZone = useTimeZone();
   const isDesktop = useIsDesktop();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
@@ -146,7 +148,7 @@ export function MessageList({
         if (page === MAX_JUMP_PAGES || !(await onLoadOlder())) break;
         await nextFrame();
       }
-      toast.error("پیام اصلی پیدا نشد");
+      toast.error("Original message not found");
     },
     [onLoadOlder],
   );
@@ -155,9 +157,9 @@ export function MessageList({
     if (!message.content) return;
     try {
       await copyText(message.content);
-      toast.success("متن کپی شد");
+      toast.success("Text copied");
     } catch {
-      toast.error("کپی انجام نشد");
+      toast.error("Couldn't copy");
     }
   }, []);
 
@@ -209,13 +211,13 @@ export function MessageList({
         className="chat-bg h-full overflow-y-auto overscroll-contain pb-3 [overflow-anchor:none]"
       >
         <div className="flex h-8 items-center justify-center">
-          {loadingOlder && <Loader2 aria-label="در حال بارگذاری" className="size-5 animate-spin text-muted-foreground" />}
+          {loadingOlder && <Loader2 aria-label="Loading" className="size-5 animate-spin text-muted-foreground" />}
         </div>
 
         {messages.length === 0 && (
           <div className="flex h-[calc(100%-2rem)] items-center justify-center px-8 text-center">
             <p className="rounded-2xl bg-background/80 px-4 py-3 text-sm leading-6 text-muted-foreground shadow-xs ring-1 ring-foreground/5">
-              هنوز پیامی رد و بدل نشده است. اولین پیام را بفرستید 👋
+              No messages yet. Send the first one 👋
             </p>
           </div>
         )}
@@ -223,9 +225,9 @@ export function MessageList({
         {messages.map((message, index) => {
           const previous = messages[index - 1];
           const next = messages[index + 1];
-          const newDay = !previous || dayNumber(previous.createdAt) !== dayNumber(message.createdAt);
+          const newDay = !previous || dayNumber(previous.createdAt, timeZone) !== dayNumber(message.createdAt, timeZone);
           const groupStart = newDay || !continues(previous, message);
-          const groupEnd = !next || !continues(message, next) || dayNumber(next.createdAt) !== dayNumber(message.createdAt);
+          const groupEnd = !next || !continues(message, next) || dayNumber(next.createdAt, timeZone) !== dayNumber(message.createdAt, timeZone);
 
           if (message.type === "SYSTEM") {
             return (
@@ -258,7 +260,7 @@ export function MessageList({
       <Button
         size="lg"
         variant="outline"
-        aria-label={unseen > 0 ? `${toFaDigits(unseen)} پیام جدید` : "رفتن به آخرین پیام"}
+        aria-label={unseen > 0 ? `${formatCount(unseen, "new message")}` : "Go to latest message"}
         onClick={() => scrollToBottom(true)}
         className={cn(
           "absolute end-3 bottom-3 h-11 min-w-11 gap-1.5 rounded-full bg-background/95 px-3 shadow-md transition-all duration-200",
@@ -269,7 +271,7 @@ export function MessageList({
       >
         {unseen > 0 && (
           <span className="text-sm font-medium text-primary">
-            {toFaDigits(unseen)} پیام جدید
+            {formatNumber(unseen)} new
           </span>
         )}
         <ChevronDown className="size-5" />
@@ -286,7 +288,7 @@ export function MessageList({
             pendingReply.current = null;
           }}
         >
-          <SheetTitle className="sr-only">گزینه‌های پیام</SheetTitle>
+          <SheetTitle className="sr-only">Message options</SheetTitle>
           {actionsFor && (
             <>
               <SheetDescription dir="auto" className="mx-4 line-clamp-2 rounded-xl bg-muted px-3 py-2 text-sm">
@@ -295,7 +297,7 @@ export function MessageList({
               <div className="grid gap-1 px-2 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
                 <ActionButton
                   icon={<Reply />}
-                  label="پاسخ"
+                  label="Reply"
                   onClick={() => {
                     pendingReply.current = actionsFor;
                     setActionsOpen(false);
@@ -304,7 +306,7 @@ export function MessageList({
                 {actionsFor.content && (
                   <ActionButton
                     icon={<Copy />}
-                    label="کپی متن"
+                    label="Copy text"
                     onClick={() => {
                       setActionsOpen(false);
                       void onCopy(actionsFor);
@@ -331,13 +333,14 @@ function continues(a: ChatMessage, b: ChatMessage) {
 }
 
 function DaySeparator({ date }: { date: string }) {
+  const timeZone = useTimeZone();
   return (
     <div className="sticky top-1 z-10 flex justify-center py-2">
       <span
         suppressHydrationWarning
         className="rounded-full bg-background/90 px-3 py-1 text-xs font-medium text-muted-foreground shadow-xs ring-1 ring-foreground/5 backdrop-blur"
       >
-        {formatDaySeparator(date)}
+        {formatDaySeparator(date, timeZone)}
       </span>
     </div>
   );

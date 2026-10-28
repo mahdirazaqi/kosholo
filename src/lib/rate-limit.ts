@@ -11,7 +11,7 @@ const globalForLimiter = globalThis as unknown as {
 const buckets = (globalForLimiter.__rateLimitBuckets ??= new Map());
 
 export const RATE_LIMIT_ERROR =
-  "تلاش‌های زیادی انجام شده، کمی بعد دوباره امتحان کنید";
+  "Too many attempts, please try again later";
 
 export const LIMITS = {
   loginFailures: { max: 5, windowMs: 15 * 60 * 1000 },

@@ -13,14 +13,15 @@ import { EmptyState } from "@/components/empty-state";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import { firstName, systemMessageText } from "@/lib/chat/system-text";
-import { toFaDigits } from "@/lib/digits";
+import { formatCount, formatNumber } from "@/lib/numbers";
 import { formatListTime } from "@/lib/format-date";
+import { useTimeZone } from "@/hooks/use-time-zone";
 import { hydrateConversations, useRealtimeStore } from "@/lib/realtime/client/store";
 import type { ConversationListItem } from "@/lib/types/chat";
 import type { PublicUser } from "@/lib/users";
 import { cn } from "@/lib/utils";
 
-// The list on the «گفتگوها» tab (mobile/tablet). On desktop the same list
+// The list on the "Chats" tab (mobile/tablet). On desktop the same list
 // lives in the sidebar (DesktopSidebar) and this page shows an empty main pane.
 export function ChatListView({
   conversations: serverConversations,
@@ -59,8 +60,8 @@ export function ConversationList({
     return (
       <EmptyState
         icon={<MessagesSquare />}
-        title="هنوز گفتگویی ندارید"
-        description="یکی از مخاطبینتان را انتخاب کنید و اولین پیام را بفرستید."
+        title="No chats yet"
+        description="Pick one of your contacts and send the first message."
         action={empty}
       />
     );
@@ -80,7 +81,7 @@ export function ConversationList({
   );
 }
 
-// «گفتگوی جدید»: choice sheet (chat or group) + contact picker. Contacts come
+// "New chat": choice sheet (chat or group) + contact picker. Contacts come
 // from props on the chat list page, or are loaded on demand (sidebar).
 export function NewConversationLauncher({
   contacts: initialContacts,
@@ -101,7 +102,7 @@ export function NewConversationLauncher({
       try {
         setContacts(await listMyContacts());
       } catch {
-        return void toast.error("دریافت مخاطبین انجام نشد");
+        return void toast.error("Couldn't load contacts");
       } finally {
         setLoading(false);
       }
@@ -117,7 +118,7 @@ export function NewConversationLauncher({
         className="absolute end-[calc(1rem+max(env(safe-area-inset-left),env(safe-area-inset-right)))] bottom-[calc(4rem+env(safe-area-inset-bottom)+1rem)] z-30 h-14 gap-2 rounded-2xl px-5 text-base shadow-lg shadow-primary/20 lg:bottom-6"
       >
         <MessageCirclePlus className="size-5" />
-        گفتگوی جدید
+        New chat
       </Button>
     ) : (
       <Button
@@ -128,7 +129,7 @@ export function NewConversationLauncher({
         className={cn("h-11 rounded-xl px-5 text-base", variant === "sidebar" && "w-full")}
       >
         {loading ? <Loader2 className="animate-spin" /> : <MessageCirclePlus />}
-        {variant === "sidebar" ? "گفتگوی جدید" : "شروع گفتگو"}
+        {variant === "sidebar" ? "New chat" : "Start a chat"}
       </Button>
     );
 
@@ -153,15 +154,16 @@ export const ConversationRow = memo(function ConversationRow({
   selected?: boolean;
 }) {
   const typing = useRealtimeStore((state) => state.typing[conversation.id]);
+  const timeZone = useTimeZone();
   const typingNames = typing ? Object.values(typing) : null;
   const { lastMessage, unreadCount } = conversation;
   const isGroup = conversation.type === "GROUP";
-  // «شما: …» for mine; «علی: …» for others in groups; system events as text.
+  // "You: …" for mine; "Jane: …" for others in groups; system events as text.
   const prefix =
     !lastMessage || lastMessage.type === "SYSTEM"
       ? null
       : lastMessage.isMine
-        ? "شما: "
+        ? "You: "
         : isGroup
           ? `${firstName(lastMessage.senderName)}: `
           : null;
@@ -195,7 +197,7 @@ export const ConversationRow = memo(function ConversationRow({
               suppressHydrationWarning
               className={cn("shrink-0 text-xs", unreadCount > 0 ? "font-medium text-primary" : "text-muted-foreground")}
             >
-              {formatListTime(conversation.lastMessageAt)}
+              {formatListTime(conversation.lastMessageAt, timeZone)}
             </time>
           )}
         </div>
@@ -212,10 +214,10 @@ export const ConversationRow = memo(function ConversationRow({
           </p>
           {unreadCount > 0 && (
             <span
-              aria-label={`${toFaDigits(unreadCount)} پیام خوانده‌نشده`}
+              aria-label={`${formatCount(unreadCount, "unread message")}`}
               className="flex h-5.5 min-w-5.5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground"
             >
-              {unreadCount > 99 ? "+۹۹" : toFaDigits(unreadCount)}
+              {unreadCount > 99 ? "99+" : formatNumber(unreadCount)}
             </span>
           )}
         </div>

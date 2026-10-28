@@ -3,15 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MessageCircle, UserRound, Users } from "lucide-react";
-import { toFaDigits } from "@/lib/digits";
+import { formatCount, formatNumber } from "@/lib/numbers";
 import { selectTotalUnread, useRealtimeStore } from "@/lib/realtime/client/store";
 import { cn } from "@/lib/utils";
 
 // Shared by the mobile bottom nav and the desktop sidebar tabs.
 export const NAV_TABS = [
-  { href: "/", label: "گفتگوها", icon: MessageCircle, unread: true },
-  { href: "/contacts", label: "مخاطبین", icon: Users, unread: false },
-  { href: "/profile", label: "پروفایل", icon: UserRound, unread: false },
+  { href: "/", label: "Chats", icon: MessageCircle, unread: true },
+  { href: "/contacts", label: "Contacts", icon: Users, unread: false },
+  { href: "/profile", label: "Profile", icon: UserRound, unread: false },
 ] as const;
 
 export function isTabActive(href: string, pathname: string) {
@@ -23,13 +23,13 @@ export function UnreadBadge({ className }: { className?: string }) {
   if (total === 0) return null;
   return (
     <span
-      aria-label={`${toFaDigits(total)} پیام خوانده‌نشده`}
+      aria-label={formatCount(total, "unread message")}
       className={cn(
         "flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground ring-2 ring-background",
         className,
       )}
     >
-      {total > 99 ? "+۹۹" : toFaDigits(total)}
+      {total > 99 ? "99+" : formatNumber(total)}
     </span>
   );
 }
@@ -40,7 +40,7 @@ export function BottomNav() {
 
   return (
     <nav
-      aria-label="بخش‌های اصلی"
+      aria-label="Main sections"
       className="shrink-0 border-t bg-background/80 pb-[env(safe-area-inset-bottom)] ps-[env(safe-area-inset-left)] pe-[env(safe-area-inset-right)] backdrop-blur lg:hidden"
     >
       <ul className="grid h-16 grid-cols-3">

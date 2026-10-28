@@ -104,7 +104,7 @@ export function useMediaSender({
       } catch (error) {
         if (error instanceof UploadAbortedError) return;
         patch(id, (m) => ({ ...m, local: undefined, status: "failed" }));
-        toast.error(error instanceof Error ? error.message : "ارسال فایل انجام نشد");
+        toast.error(error instanceof Error ? error.message : "Couldn't send the file");
         // Don't hold up later files; a retry sends without waiting.
         entry.finish();
         entry.previous = Promise.resolve();

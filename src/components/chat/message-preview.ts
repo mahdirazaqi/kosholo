@@ -13,12 +13,12 @@ export function previewText(message: {
     case "TEXT":
       return caption;
     case "IMAGE":
-      return caption ? `📷 ${caption}` : "📷 عکس";
+      return caption ? `📷 ${caption}` : "📷 Photo";
     case "VIDEO":
-      return caption ? `🎬 ${caption}` : "🎬 ویدیو";
+      return caption ? `🎬 ${caption}` : "🎬 Video";
     case "VOICE":
-      return `🎤 پیام صوتی${message.duration ? ` (${formatDuration(message.duration)})` : ""}`;
+      return `🎤 Voice message${message.duration ? ` (${formatDuration(message.duration)})` : ""}`;
     default:
-      return "رویداد گروه";
+      return "Group event";
   }
 }

@@ -25,7 +25,7 @@ export default function ImageViewer({ target, onClose }: { target: NonNullable<V
       render={{ buttonPrev: () => null, buttonNext: () => null }}
       controller={{ closeOnPullDown: true, closeOnBackdropClick: true }}
       zoom={{ maxZoomPixelRatio: 3, doubleTapDelay: 300 }}
-      labels={{ Close: "بستن", Download: "دانلود", "Zoom in": "بزرگ‌نمایی", "Zoom out": "کوچک‌نمایی" }}
+      labels={{ Close: "Close", Download: "Download", "Zoom in": "Zoom in", "Zoom out": "Zoom out" }}
     />
   );
 }

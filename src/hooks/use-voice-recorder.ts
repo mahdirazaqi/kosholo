@@ -59,7 +59,7 @@ export function useVoiceRecorder(onComplete: (recording: VoiceRecording) => void
   const start = useCallback(async () => {
     if (session.current || state !== "idle") return;
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      toast.error("ضبط صدا در این مرورگر ممکن نیست. سایت باید با HTTPS باز شود.");
+      toast.error("Voice recording isn't available in this browser. The site must be opened over HTTPS.");
       return;
     }
     cancelled.current = false;
@@ -72,8 +72,8 @@ export function useVoiceRecorder(onComplete: (recording: VoiceRecording) => void
       const denied = error instanceof DOMException && (error.name === "NotAllowedError" || error.name === "SecurityError");
       toast.error(
         denied
-          ? "دسترسی به میکروفون داده نشده است. آن را در تنظیمات مرورگر برای این سایت فعال کنید."
-          : "میکروفونی پیدا نشد یا در دسترس نیست.",
+          ? "Microphone access was denied. Allow it for this site in your browser settings."
+          : "No microphone was found, or it isn't available.",
       );
       return;
     }

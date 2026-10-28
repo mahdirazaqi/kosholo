@@ -25,10 +25,10 @@ import {
 import { logger } from "@/lib/logger";
 
 const BCRYPT_COST = 12;
-const INVALID_CREDENTIALS = "ایمیل/نام کاربری یا رمز عبور اشتباه است";
-const EMAIL_TAKEN = "این ایمیل قبلاً ثبت شده است";
-const USERNAME_TAKEN = "این نام کاربری قبلاً گرفته شده است";
-const GENERIC_ERROR = "خطایی رخ داد، لطفاً دوباره تلاش کنید";
+const INVALID_CREDENTIALS = "Incorrect email/username or password";
+const EMAIL_TAKEN = "This email is already registered";
+const USERNAME_TAKEN = "This username is already taken";
+const GENERIC_ERROR = "Something went wrong, please try again";
 
 // Compared against when the user doesn't exist, so a failed lookup takes as
 // long as a wrong password and doesn't reveal which accounts exist.
@@ -174,7 +174,7 @@ export async function updateProfile(
   }
 
   revalidatePath("/profile");
-  return { ok: true, message: "نام شما به‌روزرسانی شد", values: { name: parsed.data.name } };
+  return { ok: true, message: "Your name was updated", values: { name: parsed.data.name } };
 }
 
 type PasswordField = "currentPassword" | "newPassword" | "confirmPassword";
@@ -195,10 +195,10 @@ export async function changePassword(
     select: { passwordHash: true },
   });
   if (!record || !(await bcrypt.compare(currentPassword, record.passwordHash))) {
-    return { errors: { currentPassword: "رمز عبور فعلی اشتباه است" } };
+    return { errors: { currentPassword: "Current password is incorrect" } };
   }
 
   const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
   await db.user.update({ where: { id: user.id }, data: { passwordHash } });
-  return { ok: true, message: "رمز عبور با موفقیت تغییر کرد" };
+  return { ok: true, message: "Password changed" };
 }

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 // the page has loaded so installing the worker never competes with first
 // paint. In development, any worker left over from a production run on the
 // same origin is removed so it can't serve stale files.
-// When an update is waiting, a toast offers «به‌روزرسانی» → SKIP_WAITING → reload.
+// When an update is waiting, a toast offers "Update" → SKIP_WAITING → reload.
 export function ServiceWorkerRegistration() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
@@ -27,11 +27,11 @@ export function ServiceWorkerRegistration() {
     };
 
     const promptUpdate = (worker: ServiceWorker) => {
-      toast("نسخه‌ی جدید آماده است", {
+      toast("A new version is available", {
         id: "sw-update",
         duration: Infinity,
         action: {
-          label: "به‌روزرسانی",
+          label: "Update",
           onClick: () => {
             navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
             worker.postMessage({ type: "SKIP_WAITING" });

@@ -1,6 +1,6 @@
 // Upload limits, shared by the client (early checks) and the server (authority).
 import type { UploadKind } from "@/lib/types/chat";
-import { toFaDigits } from "@/lib/digits";
+import { formatNumber } from "@/lib/numbers";
 
 const MB = 1024 * 1024;
 
@@ -28,17 +28,17 @@ export const WAVEFORM_BARS = 48;
 // Uploads per user per window (shared limiter).
 export const UPLOAD_RATE = { max: 60, windowMs: 10 * 60 * 1000 } as const;
 
-const persianMb = (bytes: number) => toFaDigits(Math.round(bytes / MB));
+const megabytes = (bytes: number) => formatNumber(Math.round(bytes / MB));
 
 export const MEDIA_ERRORS = {
-  tooLarge: (kind: UploadKind) => `حجم فایل بیشتر از ${persianMb(UPLOAD_LIMITS[kind])} مگابایت است`,
-  unsupported: "این نوع فایل پشتیبانی نمی‌شود",
-  tooLong: "پیام صوتی حداکثر می‌تواند ۵ دقیقه باشد",
-  tooShort: "پیام صوتی خیلی کوتاه است",
-  processing: "پردازش فایل انجام نشد",
-  timeout: "پردازش فایل بیش از حد طول کشید؛ فایل کوتاه‌تر یا کم‌حجم‌تری بفرستید",
-  empty: "فایلی انتخاب نشده است",
-  tooMany: `حداکثر ${toFaDigits(MAX_FILES_PER_SELECTION)} فایل را می‌توانید یک‌جا بفرستید`,
+  tooLarge: (kind: UploadKind) => `File is larger than ${megabytes(UPLOAD_LIMITS[kind])} MB`,
+  unsupported: "This file type isn't supported",
+  tooLong: "Voice messages can be up to 5 minutes long",
+  tooShort: "Voice message is too short",
+  processing: "Couldn't process the file",
+  timeout: "Processing took too long; send a shorter or smaller file",
+  empty: "No file selected",
+  tooMany: `You can send up to ${formatNumber(MAX_FILES_PER_SELECTION)} files at once`,
 } as const;
 
 // Coarse client-side kind from the browser's MIME (the server re-detects).

@@ -5,11 +5,11 @@ import { MAX_CAPTION_LENGTH } from "@/lib/media/limits";
 // Text messages need content; media messages (uploadId) take an optional caption.
 export const sendMessageSchema = z
   .object({
-    conversationId: z.uuid({ error: "گفتگو پیدا نشد" }),
+    conversationId: z.uuid({ error: "Chat not found" }),
     content: z
       .string()
       .trim()
-      .max(MAX_MESSAGE_LENGTH, "پیام بیش از حد طولانی است")
+      .max(MAX_MESSAGE_LENGTH, "Message is too long")
       .nullish()
       .transform((value) => value || null),
     uploadId: z.uuid().nullish(),
@@ -19,10 +19,10 @@ export const sendMessageSchema = z
   })
   .superRefine((data, ctx) => {
     if (!data.uploadId && !data.content) {
-      ctx.addIssue({ code: "custom", path: ["content"], message: "پیام خالی است" });
+      ctx.addIssue({ code: "custom", path: ["content"], message: "Message is empty" });
     }
     if (data.uploadId && (data.content?.length ?? 0) > MAX_CAPTION_LENGTH) {
-      ctx.addIssue({ code: "custom", path: ["content"], message: "توضیح بیش از حد طولانی است" });
+      ctx.addIssue({ code: "custom", path: ["content"], message: "Caption is too long" });
     }
   });
 

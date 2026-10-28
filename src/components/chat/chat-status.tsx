@@ -6,9 +6,10 @@ import { TypingIndicator, typingLabel } from "@/components/chat/typing-dots";
 import { useNow } from "@/hooks/use-now";
 import { usePresence } from "@/hooks/use-presence";
 import { formatLastSeen } from "@/lib/format-date";
+import { useTimeZone } from "@/hooks/use-time-zone";
 import { subscribePresence, useRealtimeStore } from "@/lib/realtime/client/store";
 import type { ChatConversation } from "@/lib/types/chat";
-import { toFaDigits } from "@/lib/digits";
+import { formatCount, formatNumber } from "@/lib/numbers";
 
 // Chat header subtitle, by priority: connecting → typing → presence.
 export function ChatStatus({
@@ -27,7 +28,7 @@ export function ChatStatus({
     content = (
       <span className="inline-flex items-center gap-1">
         <Loader2 className="size-3 animate-spin" />
-        در حال اتصال...
+        Connecting…
       </span>
     );
   } else if (typing && Object.keys(typing).length > 0) {
@@ -48,14 +49,15 @@ export function ChatStatus({
 function DirectPresence({ conversation }: { conversation: ChatConversation }) {
   const presence = usePresence(conversation.otherUser?.id);
   const now = useNow(60_000);
-  if (presence?.online) return <span className="text-emerald-600 dark:text-emerald-400">آنلاین</span>;
-  if (presence?.lastSeenAt) return <>آخرین بازدید {formatLastSeen(presence.lastSeenAt, now)}</>;
-  if (presence) return <>آفلاین</>;
+  const timeZone = useTimeZone();
+  if (presence?.online) return <span className="text-emerald-600 dark:text-emerald-400">online</span>;
+  if (presence?.lastSeenAt) return <>last seen {formatLastSeen(presence.lastSeenAt, timeZone, now)}</>;
+  if (presence) return <>offline</>;
   if (conversation.otherUser) return <bdi dir="ltr">@{conversation.otherUser.username}</bdi>;
   return null;
 }
 
-// «۵ عضو، ۲ آنلاین» (others online), or «۵ عضو».
+// "5 members, 2 online" (others online), or "5 members".
 function GroupPresence({
   conversation,
   currentUserId,
@@ -72,6 +74,6 @@ function GroupPresence({
   const online = useRealtimeStore(
     (state) => otherIds.filter((id) => state.presence[id]?.online).length,
   );
-  const count = `${toFaDigits(conversation.memberCount)} عضو`;
-  return online > 0 ? <>{count}، {toFaDigits(online)} آنلاین</> : <>{count}</>;
+  const count = formatCount(conversation.memberCount, "member");
+  return online > 0 ? <>{count}, {formatNumber(online)} online</> : <>{count}</>;
 }

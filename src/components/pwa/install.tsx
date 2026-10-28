@@ -27,14 +27,14 @@ export function InstallBanner() {
         <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
           <Smartphone className="size-5" />
         </span>
-        <p className="min-w-0 flex-1 text-sm font-medium">اپ را روی گوشی نصب کنید</p>
+        <p className="min-w-0 flex-1 text-sm font-medium">Install the app on your phone</p>
         <Button size="sm" onClick={install} className="h-9 rounded-lg px-3">
-          نصب
+          Install
         </Button>
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="بستن پیشنهاد نصب"
+          aria-label="Dismiss install suggestion"
           onClick={dismissInstallBanner}
           className="size-9 rounded-full text-muted-foreground"
         >
@@ -58,7 +58,7 @@ export function InstallSettingsRow() {
         className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-start text-base transition-colors hover:bg-muted [&_svg]:size-5 [&_svg]:text-muted-foreground"
       >
         <Download />
-        نصب اپ
+        Install app
       </button>
       {sheet}
     </>
@@ -67,16 +67,16 @@ export function InstallSettingsRow() {
 
 function IosInstallSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const steps = [
-    { icon: <Share />, text: "در Safari، دکمه‌ی «اشتراک‌گذاری» را در نوار پایین (یا بالای صفحه در آیپد) بزنید." },
-    { icon: <PlusSquare />, text: "گزینه‌ی «Add to Home Screen» (افزودن به صفحه‌ی اصلی) را انتخاب کنید." },
-    { icon: <Smartphone />, text: "روی «Add» بزنید. کوشولو مثل یک اپ روی صفحه‌ی اصلی قرار می‌گیرد." },
+    { icon: <Share />, text: "In Safari, tap the Share button in the bottom bar (at the top on iPad)." },
+    { icon: <PlusSquare />, text: "Choose \"Add to Home Screen\"." },
+    { icon: <Smartphone />, text: "Tap \"Add\". Kosholo appears on your Home Screen like any other app." },
   ];
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <BottomSheetContent>
         <SheetHeader className="pt-3">
-          <SheetTitle className="text-lg font-bold">نصب روی آیفون</SheetTitle>
-          <SheetDescription>سه قدم ساده:</SheetDescription>
+          <SheetTitle className="text-lg font-bold">Install on iPhone</SheetTitle>
+          <SheetDescription>Three quick steps:</SheetDescription>
         </SheetHeader>
         <ol className="space-y-3 px-4 pb-[max(env(safe-area-inset-bottom),1.25rem)]">
           {steps.map((step, index) => (
@@ -85,7 +85,7 @@ function IosInstallSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
                 {step.icon}
               </span>
               <p className="pt-2 text-sm leading-6">
-                <span className="font-bold">{["۱", "۲", "۳"][index]}. </span>
+                <span className="font-bold">{index + 1}. </span>
                 {step.text}
               </p>
             </li>

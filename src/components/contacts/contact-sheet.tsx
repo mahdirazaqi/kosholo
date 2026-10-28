@@ -55,7 +55,7 @@ function ContactDetails({ contact }: { contact: PublicUser }) {
       const result = await removeContact(contact.id);
       if (result.ok) {
         setConfirmOpen(false);
-        toast.success(`${contact.name} از مخاطبین حذف شد`);
+        toast.success(`${contact.name} removed from contacts`);
       } else {
         toast.error(result.error);
       }
@@ -80,7 +80,7 @@ function ContactDetails({ contact }: { contact: PublicUser }) {
           className="h-12 w-full rounded-xl text-base"
         >
           {messagePending ? <Loader2 className="animate-spin" /> : <MessageCircle />}
-          ارسال پیام
+          Send message
         </Button>
         <Button
           variant="ghost"
@@ -89,22 +89,22 @@ function ContactDetails({ contact }: { contact: PublicUser }) {
           className="h-12 w-full rounded-xl text-base text-destructive hover:bg-destructive/10 hover:text-destructive"
         >
           <UserMinus />
-          حذف از مخاطبین
+          Remove from contacts
         </Button>
       </div>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>حذف مخاطب</DialogTitle>
+            <DialogTitle>Remove contact</DialogTitle>
             <DialogDescription>
-              {contact.name} از فهرست مخاطبین شما حذف می‌شود. گفتگوهای قبلی باقی می‌مانند.
+              {contact.name} will be removed from your contacts. Your existing chats will stay.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <DialogClose asChild>
               <Button variant="outline" size="lg" className="h-11 rounded-xl text-base">
-                انصراف
+                Cancel
               </Button>
             </DialogClose>
             <Button
@@ -115,7 +115,7 @@ function ContactDetails({ contact }: { contact: PublicUser }) {
               className="h-11 rounded-xl text-base"
             >
               {removePending && <Loader2 className="animate-spin" />}
-              حذف
+              Remove
             </Button>
           </DialogFooter>
         </DialogContent>

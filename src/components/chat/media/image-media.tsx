@@ -20,11 +20,11 @@ export function ImageMedia({
   const src = media.mime === "image/gif" ? media.url : (media.thumbUrl ?? media.url);
 
   return (
-    <MediaFrame width={media.width} height={media.height} placeholder={media.placeholder} src={src} alt="عکس">
+    <MediaFrame width={media.width} height={media.height} placeholder={media.placeholder} src={src} alt="Photo">
       {message.local ? (
         <UploadProgress upload={message.local} onCancel={onCancel} />
       ) : (
-        <button type="button" aria-label="نمایش عکس" onClick={onOpen} className="absolute inset-0" />
+        <button type="button" aria-label="View photo" onClick={onOpen} className="absolute inset-0" />
       )}
       {overlay}
     </MediaFrame>

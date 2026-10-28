@@ -26,13 +26,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { formatFullDate } from "@/lib/format-date";
+import { useTimeZone } from "@/hooks/use-time-zone";
 import { getSocket } from "@/lib/realtime/client/socket";
 import { subscribePresence } from "@/lib/realtime/client/store";
 import type { ConversationRemovedPayload, ConversationUpdatedPayload } from "@/lib/realtime/events";
 import type { ChatMember, GroupInfo } from "@/lib/types/chat";
 import type { PublicUser } from "@/lib/users";
 import { groupTitleSchema, MAX_GROUP_MEMBERS } from "@/lib/validations/groups";
-import { toFaDigits } from "@/lib/digits";
+import { formatCount, formatNumber } from "@/lib/numbers";
 
 type Confirm =
   | { kind: "promote" | "demote" | "remove"; member: ChatMember }
@@ -49,6 +50,7 @@ export function GroupInfoView({
   contacts: PublicUser[];
   currentUserId: string;
 }) {
+  const timeZone = useTimeZone();
   const router = useRouter();
   const [info, setInfo] = useState(initialInfo);
   const [editing, setEditing] = useState(false);
@@ -91,7 +93,7 @@ export function GroupInfoView({
     };
     const onRemoved = ({ conversationId, reason }: ConversationRemovedPayload) => {
       if (conversationId !== info.id) return;
-      toast.error(reason === "deleted" ? "این گروه حذف شده است" : "شما دیگر عضو این گروه نیستید");
+      toast.error(reason === "deleted" ? "This group was deleted" : "You're no longer a member of this group");
       router.replace("/");
     };
     socket.on("conversation:updated", onUpdated);
@@ -129,15 +131,15 @@ export function GroupInfoView({
     if (!confirm) return;
     switch (confirm.kind) {
       case "promote":
-        return act(() => setMemberRole(info.id, confirm.member.id, "ADMIN"), `${confirm.member.name} ادمین شد`);
+        return act(() => setMemberRole(info.id, confirm.member.id, "ADMIN"), `${confirm.member.name} is now an admin`);
       case "demote":
-        return act(() => setMemberRole(info.id, confirm.member.id, "MEMBER"), `ادمینی ${confirm.member.name} برداشته شد`);
+        return act(() => setMemberRole(info.id, confirm.member.id, "MEMBER"), `${confirm.member.name} is no longer an admin`);
       case "remove":
-        return act(() => removeMember(info.id, confirm.member.id), `${confirm.member.name} از گروه حذف شد`);
+        return act(() => removeMember(info.id, confirm.member.id), `${confirm.member.name} was removed from the group`);
       case "leave":
-        return act(() => leaveGroup(info.id), "از گروه خارج شدید", () => router.replace("/"));
+        return act(() => leaveGroup(info.id), "You left the group", () => router.replace("/"));
       case "delete":
-        return act(() => deleteGroup(info.id), "گروه حذف شد", () => router.replace("/"));
+        return act(() => deleteGroup(info.id), "Group deleted", () => router.replace("/"));
     }
   }
 
@@ -145,7 +147,7 @@ export function GroupInfoView({
 
   return (
     <>
-      <PageHeader start={<BackButton fallback={`/chats/${info.id}`} />} title="اطلاعات گروه" />
+      <PageHeader start={<BackButton fallback={`/chats/${info.id}`} />} title="Group info" />
 
       <div className="space-y-4 px-4 py-6">
         <section className="flex flex-col items-center gap-3 rounded-2xl border bg-card px-5 py-8 text-center">
@@ -153,7 +155,7 @@ export function GroupInfoView({
             <AvatarEditor
               entity={{ id: info.id, name: info.title, avatarUrl: info.avatarUrl }}
               onSave={(uploadId) => setGroupPhoto(info.id, uploadId)}
-              label="عکس گروه"
+              label="group photo"
             />
           ) : (
             <UserAvatar user={{ id: info.id, name: info.title, avatarUrl: info.avatarUrl }} size="2xl" />
@@ -171,17 +173,17 @@ export function GroupInfoView({
                 onChange={(event) => setTitleDraft(event.target.value)}
                 maxLength={50}
                 autoFocus
-                aria-label="نام گروه"
+                aria-label="Group name"
                 className="h-11 text-center"
               />
-              <Button type="submit" size="icon-lg" aria-label="ذخیره" disabled={pending} className="size-11 shrink-0 rounded-full">
+              <Button type="submit" size="icon-lg" aria-label="Save" disabled={pending} className="size-11 shrink-0 rounded-full">
                 {pending ? <Loader2 className="animate-spin" /> : <Check />}
               </Button>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon-lg"
-                aria-label="انصراف"
+                aria-label="Cancel"
                 onClick={() => setEditing(false)}
                 className="size-11 shrink-0 rounded-full"
               >
@@ -195,7 +197,7 @@ export function GroupInfoView({
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="ویرایش نام گروه"
+                  aria-label="Edit group name"
                   onClick={() => {
                     setTitleDraft(info.title);
                     setEditing(true);
@@ -208,15 +210,15 @@ export function GroupInfoView({
             </div>
           )}
           <p className="text-sm text-muted-foreground">
-            {toFaDigits(info.members.length)} عضو · ساخته‌شده در{" "}
-            <span suppressHydrationWarning>{formatFullDate(info.createdAt)}</span>
+            {formatCount(info.members.length, "member")} · Created{" "}
+            <span suppressHydrationWarning>{formatFullDate(info.createdAt, timeZone)}</span>
           </p>
         </section>
 
         <section className="rounded-2xl border bg-card py-2">
           <div className="flex items-center justify-between px-4 py-2">
             <h2 className="text-sm font-semibold text-muted-foreground">
-              {toFaDigits(info.members.length)} عضو
+              {formatCount(info.members.length, "member")}
             </h2>
           </div>
           {isAdmin && info.members.length < MAX_GROUP_MEMBERS && (
@@ -231,7 +233,7 @@ export function GroupInfoView({
               <span className="flex size-11 items-center justify-center rounded-full bg-primary/10">
                 <UserPlus className="size-5" />
               </span>
-              افزودن عضو
+              Add members
             </button>
           )}
           <ul>
@@ -249,7 +251,7 @@ export function GroupInfoView({
                   <UserAvatar user={member} />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
-                      <span className="truncate font-medium">{member.id === currentUserId ? "شما" : member.name}</span>
+                      <span className="truncate font-medium">{member.id === currentUserId ? "You" : member.name}</span>
                     </span>
                     <span className="block truncate text-sm text-muted-foreground">
                       {member.id === currentUserId ? (
@@ -265,7 +267,7 @@ export function GroupInfoView({
                   </span>
                   {member.role === "ADMIN" && (
                     <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                      ادمین
+                      admin
                     </span>
                   )}
                 </button>
@@ -282,7 +284,7 @@ export function GroupInfoView({
             className="h-12 w-full rounded-xl text-base text-destructive hover:bg-destructive/10 hover:text-destructive"
           >
             <LogOut className="rtl:rotate-180" />
-            ترک گروه
+            Leave group
           </Button>
           {isAdmin && (
             <Button
@@ -292,7 +294,7 @@ export function GroupInfoView({
               className="h-12 w-full rounded-xl text-base"
             >
               <Trash2 />
-              حذف گروه
+              Delete group
             </Button>
           )}
         </section>
@@ -313,7 +315,7 @@ export function GroupInfoView({
               <div className="grid gap-1 px-2 pb-[max(env(safe-area-inset-bottom),1rem)]">
                 <SheetAction
                   icon={<MessageCircle />}
-                  label="ارسال پیام"
+                  label="Send message"
                   onClick={() =>
                     startTransition(async () => {
                       const result = await startDirectConversation(selectedMember.id);
@@ -325,19 +327,19 @@ export function GroupInfoView({
                   (selectedMember.role === "ADMIN" ? (
                     <SheetAction
                       icon={<ShieldOff />}
-                      label="حذف ادمینی"
+                      label="Remove as admin"
                       onClick={() => setConfirm({ kind: "demote", member: selectedMember })}
                     />
                   ) : (
                     <>
                       <SheetAction
                         icon={<ShieldCheck />}
-                        label="ادمین کردن"
+                        label="Make admin"
                         onClick={() => setConfirm({ kind: "promote", member: selectedMember })}
                       />
                       <SheetAction
                         icon={<UserMinus />}
-                        label="حذف از گروه"
+                        label="Remove from group"
                         destructive
                         onClick={() => setConfirm({ kind: "remove", member: selectedMember })}
                       />
@@ -353,8 +355,8 @@ export function GroupInfoView({
       <Sheet open={addOpen} onOpenChange={setAddOpen}>
         <BottomSheetContent className="max-h-[85dvh]">
           <SheetHeader className="pt-3">
-            <SheetTitle className="text-lg font-bold">افزودن عضو</SheetTitle>
-            <SheetDescription>از میان مخاطبینی که عضو گروه نیستند انتخاب کنید.</SheetDescription>
+            <SheetTitle className="text-lg font-bold">Add members</SheetTitle>
+            <SheetDescription>Choose from contacts who aren&apos;t in the group yet.</SheetDescription>
           </SheetHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-4">
             <MemberPicker
@@ -371,12 +373,12 @@ export function GroupInfoView({
               size="lg"
               disabled={toAdd.length === 0 || pending}
               onClick={() =>
-                act(() => addMembers(info.id, toAdd), "اعضا اضافه شدند", () => setAddOpen(false))
+                act(() => addMembers(info.id, toAdd), "Members added", () => setAddOpen(false))
               }
               className="h-12 w-full rounded-xl text-base"
             >
               {pending && <Loader2 className="animate-spin" />}
-              افزودن {toAdd.length > 0 && `(${toFaDigits(toAdd.length)})`}
+              Add {toAdd.length > 0 && `(${formatNumber(toAdd.length)})`}
             </Button>
           </div>
         </BottomSheetContent>
@@ -401,18 +403,18 @@ export function GroupInfoView({
 function confirmText(confirm: Confirm, title: string) {
   switch (confirm.kind) {
     case "promote":
-      return { title: "ادمین کردن", description: `${confirm.member.name} ادمین گروه شود؟`, confirm: "ادمین کردن", destructive: false };
+      return { title: "Make admin", description: `Make ${confirm.member.name} a group admin?`, confirm: "Make admin", destructive: false };
     case "demote":
-      return { title: "حذف ادمینی", description: `ادمینی ${confirm.member.name} برداشته شود؟`, confirm: "حذف ادمینی", destructive: true };
+      return { title: "Remove as admin", description: `Remove ${confirm.member.name} as admin?`, confirm: "Remove as admin", destructive: true };
     case "remove":
-      return { title: "حذف از گروه", description: `${confirm.member.name} از گروه حذف شود؟`, confirm: "حذف", destructive: true };
+      return { title: "Remove from group", description: `Remove ${confirm.member.name} from the group?`, confirm: "Remove", destructive: true };
     case "leave":
-      return { title: "ترک گروه", description: `از گروه «${title}» خارج می‌شوید؟`, confirm: "ترک گروه", destructive: true };
+      return { title: "Leave group", description: `Leave the group “${title}”?`, confirm: "Leave group", destructive: true };
     case "delete":
       return {
-        title: "حذف گروه",
-        description: `گروه «${title}» و همهٔ پیام‌هایش برای همهٔ اعضا برای همیشه حذف می‌شود. این کار قابل بازگشت نیست.`,
-        confirm: "حذف برای همه",
+        title: "Delete group",
+        description: `“${title}” and all its messages will be permanently deleted for every member. This can't be undone.`,
+        confirm: "Delete for everyone",
         destructive: true,
       };
   }

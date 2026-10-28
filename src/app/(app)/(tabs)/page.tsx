@@ -7,14 +7,14 @@ import { ChatListRowsSkeleton } from "@/components/skeletons";
 import { requireUser } from "@/lib/auth";
 import { getConversations } from "@/lib/chat/conversations";
 
-// Header, install banner and «گفتگوی جدید» are in the static shell (instant
+// Header, install banner and "New chat" are in the static shell (instant
 // first paint); only the list itself streams in.
 export default function ChatsPage() {
   return (
     <>
       {/* Desktop shows the list in the sidebar and an empty main pane here. */}
       <div className="contents lg:hidden">
-        <PageHeader title="گفتگوها" />
+        <PageHeader title="Chats" />
         <InstallBanner />
         <Suspense fallback={<ChatListRowsSkeleton />}>
           <ChatList />

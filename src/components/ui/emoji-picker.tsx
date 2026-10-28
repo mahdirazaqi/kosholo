@@ -108,7 +108,7 @@ function EmojiPickerContent({
         className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm"
         data-slot="emoji-picker-empty"
       >
-        ایموجی‌ای پیدا نشد
+        No emoji found
       </EmojiPickerPrimitive.Empty>
       <EmojiPickerPrimitive.List
         className="select-none pb-1"
@@ -149,7 +149,7 @@ function EmojiPickerFooter({
             </>
           ) : (
             <span className="text-muted-foreground ms-1.5 flex h-7 items-center truncate text-xs">
-              یک ایموجی انتخاب کنید…
+              Select an emoji…
             </span>
           )
         }

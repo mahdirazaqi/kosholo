@@ -5,7 +5,7 @@ import { ContactsView } from "@/components/contacts/contacts-view";
 import { requireUser } from "@/lib/auth";
 import { getContacts } from "@/lib/contacts";
 
-export const metadata: Metadata = { title: "مخاطبین | کوشولو" };
+export const metadata: Metadata = { title: "Contacts | Kosholo" };
 
 export default function ContactsPage() {
   return (

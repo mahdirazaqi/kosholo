@@ -11,19 +11,19 @@ import { requireUser } from "@/lib/auth";
 import { SettingsSection } from "@/components/profile/settings-section";
 import pkg from "@/../package.json";
 
-export const metadata: Metadata = { title: "پروفایل | کوشولو" };
+export const metadata: Metadata = { title: "Profile | Kosholo" };
 
 export default function ProfilePage() {
   return (
     <>
-      <PageHeader title="پروفایل" />
+      <PageHeader title="Profile" />
       <div className="space-y-4 px-4 py-6">
         {/* Reading the session is request-time data, so it streams in. */}
         <Suspense fallback={<ProfileSkeleton />}>
           <ProfileContent />
         </Suspense>
         <SettingsSection version={pkg.version} />
-        <Section title="خروج" description="از حساب کاربری خود در این دستگاه خارج شوید.">
+        <Section title="Log out" description="Log out of your account on this device.">
           <LogoutButton />
         </Section>
       </div>
@@ -37,7 +37,7 @@ async function ProfileContent() {
   return (
     <>
         <div className="flex flex-col items-center gap-3 rounded-2xl border bg-card px-5 py-7 text-center">
-          <AvatarEditor entity={user} onSave={setProfilePhoto} label="عکس پروفایل" />
+          <AvatarEditor entity={user} onSave={setProfilePhoto} label="profile photo" />
           <div className="space-y-1">
             <h1 className="text-lg font-bold">{user.name}</h1>
             <p dir="ltr" className="text-sm text-muted-foreground">
@@ -49,11 +49,11 @@ async function ProfileContent() {
           </div>
         </div>
 
-        <Section title="ویرایش نام" description="نامی که دیگران در گفتگوها می‌بینند.">
+        <Section title="Edit name" description="The name others see in chats.">
           <EditNameForm name={user.name} />
         </Section>
 
-        <Section title="تغییر رمز عبور" description="رمز جدید باید حداقل ۸ کاراکتر باشد.">
+        <Section title="Change password" description="The new password must be at least 8 characters.">
           <ChangePasswordForm />
         </Section>
     </>

@@ -14,7 +14,7 @@ export function ChangePasswordForm() {
 
   return (
     <form action={formAction} onSubmit={onSubmit} noValidate className="space-y-4">
-      <FormField id="currentPassword" label="رمز عبور فعلی" error={errors.currentPassword}>
+      <FormField id="currentPassword" label="Current password" error={errors.currentPassword}>
         <PasswordInput
           {...fieldA11y("currentPassword", errors.currentPassword)}
           name="currentPassword"
@@ -22,7 +22,7 @@ export function ChangePasswordForm() {
           autoComplete="current-password"
         />
       </FormField>
-      <FormField id="newPassword" label="رمز عبور جدید" error={errors.newPassword}>
+      <FormField id="newPassword" label="New password" error={errors.newPassword}>
         <PasswordInput
           {...fieldA11y("newPassword", errors.newPassword)}
           name="newPassword"
@@ -30,7 +30,7 @@ export function ChangePasswordForm() {
           autoComplete="new-password"
         />
       </FormField>
-      <FormField id="confirmPassword" label="تکرار رمز عبور جدید" error={errors.confirmPassword}>
+      <FormField id="confirmPassword" label="Confirm new password" error={errors.confirmPassword}>
         <PasswordInput
           {...fieldA11y("confirmPassword", errors.confirmPassword)}
           name="confirmPassword"
@@ -38,7 +38,7 @@ export function ChangePasswordForm() {
           autoComplete="new-password"
         />
       </FormField>
-      <SubmitButton pending={pending}>تغییر رمز عبور</SubmitButton>
+      <SubmitButton pending={pending}>Change password</SubmitButton>
     </form>
   );
 }

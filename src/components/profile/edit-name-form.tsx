@@ -14,7 +14,7 @@ export function EditNameForm({ name }: { name: string }) {
 
   return (
     <form action={formAction} onSubmit={onSubmit} noValidate className="space-y-4">
-      <FormField id="name" label="نام" error={errors.name}>
+      <FormField id="name" label="Name" error={errors.name}>
         <Input
           {...fieldA11y("name", errors.name)}
           name="name"
@@ -24,7 +24,7 @@ export function EditNameForm({ name }: { name: string }) {
           defaultValue={state.values?.name ?? name}
         />
       </FormField>
-      <SubmitButton pending={pending}>ذخیره نام</SubmitButton>
+      <SubmitButton pending={pending}>Save name</SubmitButton>
     </form>
   );
 }

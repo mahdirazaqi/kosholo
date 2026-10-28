@@ -17,7 +17,7 @@ import type {
 } from "@/lib/types/chat";
 import { sendMessageSchema, type SendMessageInput } from "@/lib/validations/chat";
 
-const NOT_FOUND = "گفتگو پیدا نشد";
+const NOT_FOUND = "Chat not found";
 
 export type SendMessageResult = { ok: true; message: ChatMessage } | { ok: false; error: string };
 
@@ -37,7 +37,7 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
     const original = await db.message.count({
       where: { id: replyToId, conversationId, type: { not: "SYSTEM" } },
     });
-    if (!original) return { ok: false, error: "پیامی که به آن پاسخ می‌دهید پیدا نشد" };
+    if (!original) return { ok: false, error: "The message you're replying to wasn't found" };
   }
 
   // Media: the upload must be mine, unused, and a message kind (not an avatar).
@@ -47,7 +47,7 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
       where: { id: uploadId, ownerId: me.id, message: null },
       select: { kind: true },
     });
-    if (!upload || upload.kind === "AVATAR") return { ok: false, error: "فایل پیدا نشد، دوباره بفرستید" };
+    if (!upload || upload.kind === "AVATAR") return { ok: false, error: "File not found, please send it again" };
     type = upload.kind;
   }
 
@@ -69,7 +69,7 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
   } catch (error) {
     // uploadId is unique: a concurrent send with the same upload lost the race.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return { ok: false, error: "این فایل قبلاً ارسال شده است" };
+      return { ok: false, error: "This file has already been sent" };
     }
     throw error;
   }

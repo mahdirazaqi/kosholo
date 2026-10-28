@@ -21,7 +21,7 @@ export type ComposerHandle = { focus: () => void };
 const VoiceControl = dynamic(() => import("@/components/chat/voice-control").then((m) => m.VoiceControl), {
   ssr: false,
   loading: () => (
-    <Button type="button" size="icon-lg" disabled aria-label="ضبط پیام صوتی" className="size-11 shrink-0 rounded-full">
+    <Button type="button" size="icon-lg" disabled aria-label="Record voice message" className="size-11 shrink-0 rounded-full">
       <Mic className="size-5" />
     </Button>
   ),
@@ -104,7 +104,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             <img src={replyTo.media.thumbUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" />
           )}
           <div className="min-w-0 flex-1 border-s-2 border-primary ps-2">
-            <p className="truncate text-xs font-semibold text-primary">پاسخ به {replyTo.sender.name}</p>
+            <p className="truncate text-xs font-semibold text-primary">Reply to {replyTo.sender.name}</p>
             <p dir="auto" className="truncate text-sm text-muted-foreground">
               {previewText({ ...replyTo, duration: replyTo.media?.duration })}
             </p>
@@ -113,7 +113,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             type="button"
             variant="ghost"
             size="icon-lg"
-            aria-label="لغو پاسخ"
+            aria-label="Cancel reply"
             onClick={() => {
               onCancelReply();
               focus();
@@ -141,8 +141,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           rows={1}
           dir="auto"
           maxLength={MAX_MESSAGE_LENGTH}
-          placeholder="پیام"
-          aria-label="متن پیام"
+          placeholder="Message"
+          aria-label="Message text"
           enterKeyHint={isDesktop ? "send" : "enter"}
           onChange={(event) => {
             setValue(event.target.value);
@@ -173,7 +173,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           <Button
             type="submit"
             size="icon-lg"
-            aria-label="ارسال"
+            aria-label="Send"
             // Keep the textarea focused (and the mobile keyboard open) when tapping send.
             onPointerDown={(event) => event.preventDefault()}
             className="size-11 shrink-0 animate-in rounded-full transition-transform zoom-in-75 duration-150 active:scale-95"

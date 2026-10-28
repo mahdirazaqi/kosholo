@@ -6,18 +6,25 @@ import { DirectionProvider } from "@/components/ui/direction";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
+// UI text uses the system font. Vazirmatn only covers Arabic-script characters
+// (Persian/Arabic messages and names), so the browser downloads it only when
+// such text is on screen.
 const vazirmatn = localFont({
   src: "./fonts/Vazirmatn-Variable.woff2",
   variable: "--font-vazirmatn",
   weight: "100 900",
   display: "swap",
+  preload: false,
+  declarations: [
+    { prop: "unicode-range", value: "U+0600-06FF, U+0750-077F, U+08A0-08FF, U+200C-200F, U+FB50-FDFF, U+FE70-FEFF" },
+  ],
 });
 
-const APP_NAME = "کوشولو";
+const APP_NAME = "Kosholo";
 
 export const metadata: Metadata = {
   title: APP_NAME,
-  description: "پیام‌رسان سبک و سریع",
+  description: "A light, fast messenger",
   applicationName: APP_NAME,
   // Installed app (iOS): full screen, content under a translucent status bar
   // (safe-area insets keep the UI clear of the notch).
@@ -52,8 +59,8 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="fa"
-      dir="rtl"
+      lang="en"
+      dir="ltr"
       className={`${vazirmatn.variable} antialiased`}
       suppressHydrationWarning
     >
@@ -64,9 +71,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           enableSystem
           disableTransitionOnChange
         >
-          <DirectionProvider dir="rtl">
+          <DirectionProvider dir="ltr">
             {children}
-            <Toaster position="top-center" dir="rtl" />
+            <Toaster position="top-center" />
             <ServiceWorkerRegistration />
           </DirectionProvider>
         </ThemeProvider>

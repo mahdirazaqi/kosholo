@@ -5,15 +5,14 @@ import { Bell, Info, Monitor, Moon, Palette, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { InstallSettingsRow } from "@/components/pwa/install";
 import { Switch } from "@/components/ui/switch";
-import { toFaDigits } from "@/lib/digits";
 import { playNotificationSound, unlockAudio } from "@/lib/pwa/notification-sound";
 import { updateSettings, useDeviceSettings } from "@/lib/pwa/settings";
 import { cn } from "@/lib/utils";
 
 const THEMES = [
-  { value: "system", label: "سیستم", icon: Monitor },
-  { value: "light", label: "روشن", icon: Sun },
-  { value: "dark", label: "تیره", icon: Moon },
+  { value: "system", label: "System", icon: Monitor },
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
 ] as const;
 
 const noop = () => () => {};
@@ -28,15 +27,15 @@ export function SettingsSection({ version }: { version: string }) {
   return (
     <section className="space-y-5 rounded-2xl border bg-card p-5 text-card-foreground" aria-labelledby="settings-title">
       <h2 id="settings-title" className="text-base font-semibold">
-        تنظیمات
+        Settings
       </h2>
 
       <div className="space-y-2">
         <h3 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <Palette className="size-4" />
-          ظاهر
+          Appearance
         </h3>
-        <div role="radiogroup" aria-label="پوسته" className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1">
+        <div role="radiogroup" aria-label="Theme" className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1">
           {THEMES.map(({ value, label, icon: Icon }) => {
             const selected = mounted && theme === value;
             return (
@@ -62,10 +61,10 @@ export function SettingsSection({ version }: { version: string }) {
       <div className="space-y-2">
         <h3 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <Bell className="size-4" />
-          اعلان‌ها
+          Notifications
         </h3>
         <label className="flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-xl px-3 hover:bg-muted/60">
-          <span className="text-base">صدای پیام جدید</span>
+          <span className="text-base">Notification sound</span>
           <Switch
             checked={mounted && settings.sound}
             onCheckedChange={(checked) => {
@@ -75,7 +74,7 @@ export function SettingsSection({ version }: { version: string }) {
                 setTimeout(playNotificationSound, 50); // preview
               }
             }}
-            aria-label="صدای پیام جدید"
+            aria-label="Notification sound"
           />
         </label>
       </div>
@@ -84,8 +83,8 @@ export function SettingsSection({ version }: { version: string }) {
         <InstallSettingsRow />
         <div className="flex min-h-12 items-center gap-3 rounded-xl px-3 text-base [&_svg]:size-5 [&_svg]:text-muted-foreground">
           <Info />
-          <span className="flex-1">درباره</span>
-          <span className="text-sm text-muted-foreground">کوشولو، نسخه‌ی {toFaDigits(version)}</span>
+          <span className="flex-1">About</span>
+          <span className="text-sm text-muted-foreground">Kosholo, version {version}</span>
         </div>
       </div>
     </section>

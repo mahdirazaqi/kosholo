@@ -22,13 +22,13 @@ export function DirectInfoView({ user, initialIsContact }: { user: PublicUser; i
       const result = isContact ? await removeContact(user.id) : await addContact(user.id);
       if (!result.ok) return void toast.error(result.error);
       setIsContact(!isContact);
-      toast.success(isContact ? `${user.name} از مخاطبین حذف شد` : `${user.name} به مخاطبین اضافه شد`);
+      toast.success(isContact ? `${user.name} removed from contacts` : `${user.name} added to contacts`);
     });
   }
 
   return (
     <>
-      <PageHeader start={<BackButton />} title="اطلاعات مخاطب" />
+      <PageHeader start={<BackButton />} title="Contact info" />
       <div className="space-y-4 px-4 py-6">
         <section className="flex flex-col items-center gap-3 rounded-2xl border bg-card px-5 py-8 text-center">
           <UserAvatar user={user} size="2xl" />
@@ -54,7 +54,7 @@ export function DirectInfoView({ user, initialIsContact }: { user: PublicUser; i
           }
         >
           {pending ? <Loader2 className="animate-spin" /> : isContact ? <UserMinus /> : <UserPlus />}
-          {isContact ? "حذف از مخاطبین" : "افزودن به مخاطبین"}
+          {isContact ? "Remove from contacts" : "Add to contacts"}
         </Button>
       </div>
     </>

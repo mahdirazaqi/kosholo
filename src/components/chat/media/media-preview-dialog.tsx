@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import type { PreparedFile } from "@/lib/media/client/prepare";
 import { MAX_CAPTION_LENGTH } from "@/lib/media/limits";
-import { toFaDigits } from "@/lib/digits";
+import { formatCount, formatNumber } from "@/lib/numbers";
 
 // Full-screen preview of the selection: swipe through, remove items, add one
 // caption (applied to the first file), send all.
@@ -43,15 +43,15 @@ export function MediaPreviewDialog({
           <button
             type="button"
             onClick={close}
-            aria-label="انصراف"
+            aria-label="Cancel"
             className="flex size-11 items-center justify-center rounded-full hover:bg-white/10"
           >
             <X className="size-6" />
           </button>
           <DialogTitle className="text-base font-semibold text-white">
-            {toFaDigits(files.length)} فایل انتخاب شده
+            {formatCount(files.length, "file")} selected
           </DialogTitle>
-          <DialogDescription className="sr-only">پیش‌نمایش فایل‌ها قبل از ارسال</DialogDescription>
+          <DialogDescription className="sr-only">Preview files before sending</DialogDescription>
         </div>
 
         <div className="flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overscroll-contain">
@@ -66,14 +66,14 @@ export function MediaPreviewDialog({
               <button
                 type="button"
                 onClick={() => remove(index)}
-                aria-label="حذف از انتخاب"
+                aria-label="Remove from selection"
                 className="absolute end-6 top-6 flex size-10 items-center justify-center rounded-full bg-black/60 hover:bg-black/80"
               >
                 <X className="size-5" />
               </button>
               {files.length > 1 && (
                 <span className="absolute start-6 top-6 rounded-full bg-black/60 px-2.5 py-1 text-xs">
-                  {toFaDigits(index + 1)} / {toFaDigits(files.length)}
+                  {formatNumber(index + 1)} / {formatNumber(files.length)}
                 </span>
               )}
             </div>
@@ -93,12 +93,12 @@ export function MediaPreviewDialog({
             onChange={(event) => setCaption(event.target.value)}
             maxLength={MAX_CAPTION_LENGTH}
             dir="auto"
-            placeholder="توضیح (اختیاری)"
-            aria-label="توضیح"
+            placeholder="Add a caption (optional)"
+            aria-label="Caption"
             className="h-11 min-w-0 flex-1 rounded-full bg-white/10 px-4 text-base text-white outline-none placeholder:text-white/50 focus-visible:ring-2 focus-visible:ring-white/40"
           />
           <Button type="submit" size="lg" className="h-11 shrink-0 gap-2 rounded-full bg-white px-4 text-base text-black hover:bg-white/90">
-            ارسال
+            Send
             <SendHorizontal className="size-5 rtl:-scale-x-100" />
           </Button>
         </form>

@@ -20,7 +20,7 @@ export function LoginForm() {
     <form action={formAction} onSubmit={onSubmit} noValidate className="space-y-4">
       <input type="hidden" name="from" value={from} />
 
-      <FormField id="identifier" label="ایمیل یا نام کاربری" error={errors.identifier}>
+      <FormField id="identifier" label="Email or username" error={errors.identifier}>
         <Input
           {...fieldA11y("identifier", errors.identifier)}
           name="identifier"
@@ -34,7 +34,7 @@ export function LoginForm() {
         />
       </FormField>
 
-      <FormField id="password" label="رمز عبور" error={errors.password}>
+      <FormField id="password" label="Password" error={errors.password}>
         <PasswordInput
           {...fieldA11y("password", errors.password)}
           name="password"
@@ -45,7 +45,7 @@ export function LoginForm() {
 
       <FormMessage message={state.message} />
 
-      <SubmitButton pending={pending}>ورود</SubmitButton>
+      <SubmitButton pending={pending}>Log in</SubmitButton>
     </form>
   );
 }

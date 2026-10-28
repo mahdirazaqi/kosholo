@@ -3,35 +3,35 @@ import { z } from "zod";
 // Shared by client forms (instant feedback) and Server Actions (source of truth).
 
 export const emailSchema = z
-  .string({ error: "ایمیل را وارد کنید" })
+  .string({ error: "Enter your email" })
   .trim()
   .toLowerCase()
-  .min(1, "ایمیل را وارد کنید")
-  .pipe(z.email({ error: "ایمیل معتبر نیست" }));
+  .min(1, "Enter your email")
+  .pipe(z.email({ error: "Enter a valid email" }));
 
 export const usernameSchema = z
-  .string({ error: "نام کاربری را وارد کنید" })
+  .string({ error: "Enter a username" })
   .trim()
   .toLowerCase()
-  .min(3, "نام کاربری باید حداقل ۳ کاراکتر باشد")
-  .max(20, "نام کاربری حداکثر می‌تواند ۲۰ کاراکتر باشد")
-  .regex(/^[a-z0-9_]+$/, "فقط حروف انگلیسی، عدد و زیرخط (_) مجاز است")
-  .regex(/^[a-z]/, "نام کاربری باید با یک حرف انگلیسی شروع شود");
+  .min(3, "Username must be at least 3 characters")
+  .max(20, "Username can be at most 20 characters")
+  .regex(/^[a-z0-9_]+$/, "Only letters, numbers and underscores (_) are allowed")
+  .regex(/^[a-z]/, "Username must start with a letter");
 
 const name = z
-  .string({ error: "نام را وارد کنید" })
+  .string({ error: "Enter your name" })
   .trim()
-  .min(1, "نام را وارد کنید")
-  .max(40, "نام حداکثر می‌تواند ۴۰ کاراکتر باشد");
+  .min(1, "Enter your name")
+  .max(40, "Name can be at most 40 characters");
 
 // bcrypt only uses the first 72 bytes, so cap by UTF-8 byte length too.
 const password = z
-  .string({ error: "رمز عبور را وارد کنید" })
-  .min(8, "رمز عبور باید حداقل ۸ کاراکتر باشد")
-  .max(72, "رمز عبور حداکثر می‌تواند ۷۲ کاراکتر باشد")
+  .string({ error: "Enter your password" })
+  .min(8, "Password must be at least 8 characters")
+  .max(72, "Password can be at most 72 characters")
   .refine(
     (value) => new TextEncoder().encode(value).length <= 72,
-    "رمز عبور بیش از حد طولانی است",
+    "Password is too long",
   );
 
 export const registerSchema = z.object({
@@ -43,11 +43,11 @@ export const registerSchema = z.object({
 
 export const loginSchema = z.object({
   identifier: z
-    .string({ error: "ایمیل یا نام کاربری را وارد کنید" })
+    .string({ error: "Enter your email or username" })
     .trim()
     .toLowerCase()
-    .min(1, "ایمیل یا نام کاربری را وارد کنید"),
-  password: z.string({ error: "رمز عبور را وارد کنید" }).min(1, "رمز عبور را وارد کنید"),
+    .min(1, "Enter your email or username"),
+  password: z.string({ error: "Enter your password" }).min(1, "Enter your password"),
 });
 
 export const updateProfileSchema = z.object({ name });
@@ -55,14 +55,14 @@ export const updateProfileSchema = z.object({ name });
 export const changePasswordSchema = z
   .object({
     currentPassword: z
-      .string({ error: "رمز عبور فعلی را وارد کنید" })
-      .min(1, "رمز عبور فعلی را وارد کنید"),
+      .string({ error: "Enter your current password" })
+      .min(1, "Enter your current password"),
     newPassword: password,
-    confirmPassword: z.string({ error: "تکرار رمز عبور را وارد کنید" }),
+    confirmPassword: z.string({ error: "Confirm your new password" }),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
     path: ["confirmPassword"],
-    error: "تکرار رمز عبور با رمز جدید یکسان نیست",
+    error: "Passwords don't match",
   });
 
 export type RegisterInput = z.infer<typeof registerSchema>;

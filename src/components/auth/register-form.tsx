@@ -16,7 +16,7 @@ export function RegisterForm() {
 
   return (
     <form action={formAction} onSubmit={onSubmit} noValidate className="space-y-4">
-      <FormField id="name" label="نام" error={errors.name}>
+      <FormField id="name" label="Name" error={errors.name}>
         <Input
           {...fieldA11y("name", errors.name)}
           name="name"
@@ -27,7 +27,7 @@ export function RegisterForm() {
         />
       </FormField>
 
-      <FormField id="username" label="نام کاربری" error={errors.username}>
+      <FormField id="username" label="Username" error={errors.username}>
         <Input
           {...fieldA11y("username", errors.username)}
           name="username"
@@ -42,7 +42,7 @@ export function RegisterForm() {
         />
       </FormField>
 
-      <FormField id="email" label="ایمیل" error={errors.email}>
+      <FormField id="email" label="Email" error={errors.email}>
         <Input
           {...fieldA11y("email", errors.email)}
           name="email"
@@ -56,7 +56,7 @@ export function RegisterForm() {
         />
       </FormField>
 
-      <FormField id="password" label="رمز عبور" error={errors.password}>
+      <FormField id="password" label="Password" error={errors.password}>
         <PasswordInput
           {...fieldA11y("password", errors.password)}
           name="password"
@@ -67,7 +67,7 @@ export function RegisterForm() {
 
       <FormMessage message={state.message} />
 
-      <SubmitButton pending={pending}>ثبت‌نام</SubmitButton>
+      <SubmitButton pending={pending}>Sign up</SubmitButton>
     </form>
   );
 }

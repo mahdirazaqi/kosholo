@@ -20,7 +20,7 @@ function describe(conversation: ConversationRow, userId: string) {
       : null;
   return {
     otherUser,
-    title: otherUser?.name ?? conversation.title ?? "گفتگو",
+    title: otherUser?.name ?? conversation.title ?? "Chat",
     avatarUrl: otherUser?.avatarUrl ?? conversation.avatarUrl,
   };
 }

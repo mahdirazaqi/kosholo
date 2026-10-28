@@ -31,7 +31,7 @@ const fail = (status: number, error: string) => Response.json({ ok: false, error
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
-  if (!user) return fail(401, "ابتدا وارد حساب خود شوید");
+  if (!user) return fail(401, "Please log in first");
 
   // The kind is in the query too, so oversized bodies are rejected before reading them.
   const kind = new URL(request.url).searchParams.get("kind") as UploadKind | null;

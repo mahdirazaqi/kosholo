@@ -10,17 +10,17 @@ export function ErrorView({ reset }: { reset: () => void }) {
   return (
     <EmptyState
       icon={<TriangleAlert />}
-      title="مشکلی پیش آمد"
-      description="بارگذاری این بخش انجام نشد. دوباره تلاش کنید."
+      title="Something went wrong"
+      description="This section couldn't be loaded. Please try again."
       className="min-h-dvh lg:min-h-full"
       action={
         <div className="flex gap-2">
           <Button size="lg" onClick={reset} className="h-11 rounded-xl px-5 text-base">
             <RotateCw />
-            تلاش دوباره
+            Try again
           </Button>
           <Button asChild size="lg" variant="outline" className="h-11 rounded-xl px-5 text-base">
-            <Link href="/">صفحه‌ی اصلی</Link>
+            <Link href="/">Home</Link>
           </Button>
         </div>
       }

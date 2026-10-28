@@ -64,7 +64,7 @@ function AddContactForm() {
       const result = await addContact(user.id);
       if (result.ok) {
         setFound({ ...user, isContact: true });
-        toast.success(`${user.name} به مخاطبین اضافه شد`);
+        toast.success(`${user.name} added to contacts`);
       } else {
         toast.error(result.error);
       }
@@ -81,20 +81,20 @@ function AddContactForm() {
   return (
     <>
       <SheetHeader className="pt-3">
-        <SheetTitle className="text-lg font-bold">افزودن مخاطب</SheetTitle>
-        <SheetDescription>نام کاربری یا ایمیل دقیق فرد را وارد کنید.</SheetDescription>
+        <SheetTitle className="text-lg font-bold">Add contact</SheetTitle>
+        <SheetDescription>Enter the person&apos;s exact username or email.</SheetDescription>
       </SheetHeader>
 
       <div className="space-y-4 px-4 pb-[max(env(safe-area-inset-bottom),1.25rem)]">
         <form onSubmit={search} noValidate className="space-y-2">
-          <Label htmlFor="lookup">نام کاربری یا ایمیل</Label>
+          <Label htmlFor="lookup">Username or email</Label>
           <div className="flex gap-2">
             <Input
               {...fieldA11y("lookup", error)}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               dir="ltr"
-              placeholder="@username یا email"
+              placeholder="@username or email"
               autoComplete="off"
               autoCapitalize="none"
               autoCorrect="off"
@@ -106,11 +106,11 @@ function AddContactForm() {
               type="submit"
               size="lg"
               disabled={searching}
-              aria-label="جستجو"
+              aria-label="Search"
               className="h-11 rounded-xl px-4 text-base"
             >
               {searching ? <Loader2 className="animate-spin" /> : <Search />}
-              جستجو
+              Search
             </Button>
           </div>
           {error && (
@@ -133,13 +133,13 @@ function AddContactForm() {
             </div>
 
             {found.isSelf ? (
-              <p className="text-sm text-destructive">نمی‌توانید خودتان را اضافه کنید</p>
+              <p className="text-sm text-destructive">You can&apos;t add yourself</p>
             ) : (
               <div className="grid gap-2">
                 {found.isContact ? (
                   <Button size="lg" variant="secondary" disabled className="h-11 rounded-xl text-base">
                     <Check />
-                    در مخاطبین شماست
+                    Already in your contacts
                   </Button>
                 ) : (
                   <Button
@@ -149,7 +149,7 @@ function AddContactForm() {
                     className="h-11 rounded-xl text-base"
                   >
                     {adding ? <Loader2 className="animate-spin" /> : <UserPlus />}
-                    افزودن به مخاطبین
+                    Add to contacts
                   </Button>
                 )}
                 <Button
@@ -160,7 +160,7 @@ function AddContactForm() {
                   className="h-11 rounded-xl text-base"
                 >
                   {messaging ? <Loader2 className="animate-spin" /> : <MessageCircle />}
-                  ارسال پیام
+                  Send message
                 </Button>
               </div>
             )}

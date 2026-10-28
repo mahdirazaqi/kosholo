@@ -10,7 +10,7 @@ import { Sheet, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "
 import { prepareFile, type PreparedFile } from "@/lib/media/client/prepare";
 import { MAX_FILES_PER_SELECTION, MEDIA_ERRORS } from "@/lib/media/limits";
 
-// Paperclip → «عکس و ویدیو» (gallery, multiple) or «دوربین» (capture), then a
+// Paperclip → "Photo or video" (gallery, multiple) or "Camera" (capture), then a
 // full-screen preview with a caption before sending.
 export function AttachButton({ onSend }: { onSend: (files: PreparedFile[], caption: string | null) => void }) {
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -48,7 +48,7 @@ export function AttachButton({ onSend }: { onSend: (files: PreparedFile[], capti
             type="button"
             variant="ghost"
             size="icon-lg"
-            aria-label="پیوست"
+            aria-label="Attach"
             disabled={preparing}
             className="size-11 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
           >
@@ -57,12 +57,12 @@ export function AttachButton({ onSend }: { onSend: (files: PreparedFile[], capti
         </SheetTrigger>
         <BottomSheetContent>
           <SheetHeader className="pt-3">
-            <SheetTitle className="text-lg font-bold">ارسال فایل</SheetTitle>
-            <SheetDescription className="sr-only">انتخاب عکس یا ویدیو</SheetDescription>
+            <SheetTitle className="text-lg font-bold">Send file</SheetTitle>
+            <SheetDescription className="sr-only">Choose a photo or video</SheetDescription>
           </SheetHeader>
           <div className="grid gap-1 px-2 pb-[max(env(safe-area-inset-bottom),1rem)]">
-            <Option icon={<Images />} label="عکس و ویدیو" onClick={() => galleryRef.current?.click()} />
-            <Option icon={<Camera />} label="دوربین" onClick={() => cameraRef.current?.click()} />
+            <Option icon={<Images />} label="Photo or video" onClick={() => galleryRef.current?.click()} />
+            <Option icon={<Camera />} label="Camera" onClick={() => cameraRef.current?.click()} />
           </div>
         </BottomSheetContent>
       </Sheet>

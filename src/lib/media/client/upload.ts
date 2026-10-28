@@ -34,9 +34,9 @@ export function uploadFile(
     xhr.onload = () => {
       const body = xhr.response as { ok: boolean; media?: ChatMedia; error?: string } | null;
       if (xhr.status >= 200 && xhr.status < 300 && body?.ok && body.media) resolve(body.media);
-      else reject(new Error(body?.error ?? "ارسال فایل انجام نشد"));
+      else reject(new Error(body?.error ?? "Couldn't send the file"));
     };
-    xhr.onerror = () => reject(new Error("ارسال فایل انجام نشد؛ اتصال اینترنت را بررسی کنید"));
+    xhr.onerror = () => reject(new Error("Couldn't send the file; check your internet connection"));
     xhr.onabort = () => reject(new UploadAbortedError("aborted"));
     options.signal?.addEventListener("abort", () => xhr.abort(), { once: true });
     xhr.send(form);

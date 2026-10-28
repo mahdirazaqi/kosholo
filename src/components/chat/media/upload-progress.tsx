@@ -17,7 +17,7 @@ export function UploadProgress({ upload, onCancel }: { upload: LocalUpload; onCa
           event.stopPropagation();
           onCancel();
         }}
-        aria-label={processing ? "در حال پردازش؛ لغو" : "لغو ارسال"}
+        aria-label={processing ? "Processing; cancel" : "Cancel sending"}
         className="relative flex size-12 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm"
       >
         <svg viewBox="0 0 44 44" className={processing ? "absolute inset-0 animate-spin" : "absolute inset-0 -rotate-90"}>
@@ -39,7 +39,7 @@ export function UploadProgress({ upload, onCancel }: { upload: LocalUpload; onCa
       </button>
       {processing && (
         <span className="absolute bottom-2 rounded-full bg-black/55 px-2 py-0.5 text-[11px] text-white">
-          در حال پردازش…
+          Processing…
         </span>
       )}
     </div>

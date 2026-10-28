@@ -17,6 +17,7 @@ import {
 import { vibrate } from "@/lib/client-utils";
 import { isEmojiOnly } from "@/lib/emoji";
 import { formatTime } from "@/lib/format-date";
+import { useTimeZone } from "@/hooks/use-time-zone";
 import type { ChatMessage } from "@/lib/types/chat";
 import { nameColor } from "@/lib/colors";
 import { cn } from "@/lib/utils";
@@ -63,7 +64,7 @@ export const MessageBubble = memo(function MessageBubble({
   const visual = (message.type === "IMAGE" || message.type === "VIDEO") && message.media !== null;
   const timeOverlay = visual && !message.content;
   const isNew = message.tempId !== undefined;
-  // «پاسخ» from the dropdown is applied after it closes: the menu's focus trap
+  // "Reply" from the dropdown is applied after it closes: the menu's focus trap
   // would otherwise pull focus back from the composer.
   const replyAfterClose = useRef(false);
 
@@ -73,7 +74,7 @@ export const MessageBubble = memo(function MessageBubble({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="گزینه‌های پیام"
+          aria-label="Message options"
           className="self-center rounded-full text-muted-foreground opacity-0 transition-opacity group-hover/msg:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
         >
           <MoreHorizontal />
@@ -91,12 +92,12 @@ export const MessageBubble = memo(function MessageBubble({
       >
         <DropdownMenuItem onSelect={() => (replyAfterClose.current = true)}>
           <Reply />
-          پاسخ
+          Reply
         </DropdownMenuItem>
         {message.content && (
           <DropdownMenuItem onSelect={() => actions.onCopy(message)}>
             <Copy />
-            کپی متن
+            Copy text
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
@@ -197,9 +198,7 @@ export const MessageBubble = memo(function MessageBubble({
                       : "text-muted-foreground",
                 )}
               >
-                <time dateTime={message.createdAt} suppressHydrationWarning>
-                  {formatTime(message.createdAt)}
-                </time>
+                <MessageTime value={message.createdAt} />
                 {isMine && <StatusIcon status={message.status} read={read} />}
               </div>
             )}
@@ -215,30 +214,37 @@ export const MessageBubble = memo(function MessageBubble({
           className="mt-1 flex min-h-8 items-center gap-1 rounded-full px-2 text-xs font-medium text-destructive hover:bg-destructive/10"
         >
           <RotateCw className="size-3.5" />
-          ارسال نشد، تلاش مجدد
+          Not sent, retry
         </button>
       )}
     </div>
   );
 });
 
+function MessageTime({ value }: { value: string }) {
+  const timeZone = useTimeZone();
+  return (
+    <time dateTime={value} suppressHydrationWarning>
+      {formatTime(value, timeZone)}
+    </time>
+  );
+}
+
 function TimeOverlay({ message, isMine, read }: { message: ChatMessage; isMine: boolean; read: boolean }) {
   return (
     <span className="pointer-events-none absolute end-1.5 bottom-1.5 flex items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-[11px] leading-4 text-white">
-      <time dateTime={message.createdAt} suppressHydrationWarning>
-        {formatTime(message.createdAt)}
-      </time>
+      <MessageTime value={message.createdAt} />
       {isMine && <StatusIcon status={message.status} read={read} />}
     </span>
   );
 }
 
 function StatusIcon({ status, read }: { status: ChatMessage["status"]; read: boolean }) {
-  if (status === "sending") return <Clock3 aria-label="در حال ارسال" className="size-3.5" />;
+  if (status === "sending") return <Clock3 aria-label="Sending" className="size-3.5" />;
   if (status === "failed")
-    return <AlertCircle aria-label="ارسال نشد" className="size-3.5 text-destructive" />;
-  if (read) return <CheckCheck aria-label="خوانده شد" className="size-3.5" />;
-  return <Check aria-label="ارسال شد" className="size-3.5" />;
+    return <AlertCircle aria-label="Not sent" className="size-3.5 text-destructive" />;
+  if (read) return <CheckCheck aria-label="Read" className="size-3.5" />;
+  return <Check aria-label="Sent" className="size-3.5" />;
 }
 
 function Quote({
@@ -257,7 +263,7 @@ function Quote({
   if (replyTo === "deleted") {
     return (
       <div className={cn("mb-1 rounded-lg border-s-[3px] px-2 py-1 text-xs italic opacity-80", tone)}>
-        پیام در دسترس نیست
+        Message unavailable
       </div>
     );
   }

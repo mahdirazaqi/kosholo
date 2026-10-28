@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PublicUser } from "@/lib/users";
 import { groupTitleSchema, MAX_GROUP_MEMBERS } from "@/lib/validations/groups";
-import { toFaDigits } from "@/lib/digits";
+import { formatCount, formatNumber } from "@/lib/numbers";
 
 // Two steps: 1) pick members, 2) name the group.
 export function NewGroupFlow({ contacts }: { contacts: PublicUser[] }) {
@@ -40,7 +40,7 @@ export function NewGroupFlow({ contacts }: { contacts: PublicUser[] }) {
     });
   }
 
-  const count = toFaDigits(selected.length + 1);
+  const count = formatCount(selected.length + 1, "member");
 
   return (
     <div className="flex h-full flex-col">
@@ -49,13 +49,13 @@ export function NewGroupFlow({ contacts }: { contacts: PublicUser[] }) {
           step === 1 ? (
             <BackButton />
           ) : (
-            <Button variant="ghost" size="icon-lg" aria-label="بازگشت" className="-ms-2 rounded-full" onClick={() => setStep(1)}>
+            <Button variant="ghost" size="icon-lg" aria-label="Back" className="-ms-2 rounded-full" onClick={() => setStep(1)}>
               <ChevronLeft className="size-6 rtl:rotate-180" />
             </Button>
           )
         }
-        title="گروه جدید"
-        subtitle={step === 1 ? `انتخاب اعضا · ${toFaDigits(selected.length)} نفر` : "نام گروه"}
+        title="New group"
+        subtitle={step === 1 ? `Add members · ${formatNumber(selected.length)} selected` : "Group name"}
       />
 
       {step === 1 ? (
@@ -65,7 +65,7 @@ export function NewGroupFlow({ contacts }: { contacts: PublicUser[] }) {
           </div>
           <div className="shrink-0 border-t bg-background/95 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
             <Button size="lg" disabled={selected.length === 0} onClick={() => setStep(2)} className="h-12 w-full rounded-xl text-base">
-              بعدی
+              Next
               <ChevronRight className="rtl:rotate-180" />
             </Button>
           </div>
@@ -74,11 +74,11 @@ export function NewGroupFlow({ contacts }: { contacts: PublicUser[] }) {
         <form onSubmit={create} noValidate className="flex min-h-0 flex-1 flex-col">
           <div className="flex-1 space-y-6 overflow-y-auto px-4 py-8">
             <div className="flex flex-col items-center gap-3">
-              <UserAvatar user={{ id: "new-group", name: title.trim() || "گروه", avatarUrl: null }} size="2xl" />
-              <p className="text-sm text-muted-foreground">{count} عضو</p>
+              <UserAvatar user={{ id: "new-group", name: title.trim() || "Group", avatarUrl: null }} size="2xl" />
+              <p className="text-sm text-muted-foreground">{count}</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="group-title">نام گروه</Label>
+              <Label htmlFor="group-title">Group name</Label>
               <Input
                 id="group-title"
                 value={title}
@@ -87,7 +87,7 @@ export function NewGroupFlow({ contacts }: { contacts: PublicUser[] }) {
                 autoFocus
                 aria-invalid={error ? true : undefined}
                 aria-describedby={error ? "group-title-error" : undefined}
-                placeholder="مثلاً: خانواده"
+                placeholder="e.g. Family"
                 className="h-11"
               />
               {error && (
@@ -100,7 +100,7 @@ export function NewGroupFlow({ contacts }: { contacts: PublicUser[] }) {
           <div className="shrink-0 border-t bg-background/95 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
             <Button type="submit" size="lg" disabled={pending || !title.trim()} className="h-12 w-full rounded-xl text-base">
               {pending && <Loader2 className="animate-spin" />}
-              ساخت گروه
+              Create group
             </Button>
           </div>
         </form>

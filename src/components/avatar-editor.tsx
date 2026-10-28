@@ -10,11 +10,11 @@ import { prepareFile } from "@/lib/media/client/prepare";
 import { uploadFile } from "@/lib/media/client/upload";
 import { MEDIA_ERRORS, UPLOAD_LIMITS } from "@/lib/media/limits";
 import { setAvatarOverride, useRealtimeStore } from "@/lib/realtime/client/store";
-import { toFaDigits } from "@/lib/digits";
+import { formatNumber } from "@/lib/numbers";
 
 type SaveResult = { ok: true; avatarUrl: string | null } | { ok: false; error: string };
 
-// Big avatar that opens «تغییر عکس» / «حذف عکس». The image is downscaled in
+// Big avatar that opens "Change photo" / "Remove photo". The image is downscaled in
 // the browser, uploaded as AVATAR (server crops 512×512 + 128 thumb), then
 // saved with `onSave(uploadId | null)`. The change shows here immediately and
 // reaches everyone else through user:updated / conversation:updated.
@@ -25,7 +25,7 @@ export function AvatarEditor({
 }: {
   entity: { id: string; name: string; avatarUrl: string | null };
   onSave: (uploadId: string | null) => Promise<SaveResult>;
-  label: string; // e.g. «عکس پروفایل»
+  label: string; // e.g. "profile photo"
 }) {
   const [open, setOpen] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
@@ -37,7 +37,7 @@ export function AvatarEditor({
     const result = await onSave(uploadId);
     if (!result.ok) return void toast.error(result.error);
     setAvatarOverride(entity.id, result.avatarUrl);
-    toast.success(uploadId ? "عکس تغییر کرد" : "عکس حذف شد");
+    toast.success(uploadId ? "Photo updated" : "Photo removed");
   }
 
   async function onFile(file: File | undefined) {
@@ -52,7 +52,7 @@ export function AvatarEditor({
       const media = await uploadFile(prepared.file, "AVATAR", { onProgress: setProgress });
       await save(media.id);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تغییر عکس انجام نشد");
+      toast.error(error instanceof Error ? error.message : "Couldn't change the photo");
     } finally {
       setProgress(null);
     }
@@ -64,7 +64,7 @@ export function AvatarEditor({
         type="button"
         onClick={() => setOpen(true)}
         disabled={progress !== null}
-        aria-label={`تغییر ${label}`}
+        aria-label={`Change ${label}`}
         className="group relative rounded-full focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         <UserAvatar user={entity} size="2xl" />
@@ -73,7 +73,7 @@ export function AvatarEditor({
         </span>
         {progress !== null && (
           <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-sm font-semibold text-white">
-            {toFaDigits(Math.round(progress * 100))}٪
+            {formatNumber(Math.round(progress * 100))}%
           </span>
         )}
       </button>
@@ -93,7 +93,7 @@ export function AvatarEditor({
         <BottomSheetContent>
           <SheetHeader className="pt-3">
             <SheetTitle className="text-lg font-bold">{label}</SheetTitle>
-            <SheetDescription className="sr-only">تغییر یا حذف عکس</SheetDescription>
+            <SheetDescription className="sr-only">Change or remove the photo</SheetDescription>
           </SheetHeader>
           <div className="grid gap-1 px-2 pb-[max(env(safe-area-inset-bottom),1rem)]">
             <button
@@ -102,7 +102,7 @@ export function AvatarEditor({
               className="flex h-12 items-center gap-3 rounded-xl px-3 text-base transition-colors hover:bg-muted [&_svg]:size-5 [&_svg]:text-muted-foreground"
             >
               <ImageUp />
-              تغییر عکس
+              Change photo
             </button>
             {hasPhoto && (
               <button
@@ -114,7 +114,7 @@ export function AvatarEditor({
                 className="flex h-12 items-center gap-3 rounded-xl px-3 text-base text-destructive transition-colors hover:bg-destructive/10 [&_svg]:size-5"
               >
                 <Trash2 />
-                حذف عکس
+                Remove photo
               </button>
             )}
           </div>

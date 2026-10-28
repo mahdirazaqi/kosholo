@@ -22,7 +22,7 @@ import { logger } from "@/lib/logger";
 
 export type GroupActionResult<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
-const GENERIC_ERROR = "خطایی رخ داد، لطفاً دوباره تلاش کنید";
+const GENERIC_ERROR = "Something went wrong, please try again";
 
 async function currentActor(): Promise<Actor> {
   const user = await requireUser();
@@ -57,7 +57,7 @@ async function broadcastMembers(conversationId: string) {
 
 function parseId(value: unknown) {
   const parsed = userIdSchema.safeParse(value);
-  if (!parsed.success) throw new GroupError("درخواست نامعتبر است");
+  if (!parsed.success) throw new GroupError("Invalid request");
   return parsed.data;
 }
 
@@ -136,7 +136,7 @@ export async function setMemberRole(conversationId: string, userId: string, role
     const id = parseId(conversationId);
     const targetId = parseId(userId);
     const parsedRole = memberRoleSchema.safeParse(role);
-    if (!parsedRole.success) throw new GroupError("درخواست نامعتبر است");
+    if (!parsedRole.success) throw new GroupError("Invalid request");
     const { message } = await groups.setMemberRole(actor, id, targetId, parsedRole.data);
     if (message) {
       await broadcast(id, [message]);

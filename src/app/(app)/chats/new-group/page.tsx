@@ -6,11 +6,11 @@ import { PageHeader } from "@/components/page-header";
 import { requireUser } from "@/lib/auth";
 import { getContacts } from "@/lib/contacts";
 
-export const metadata: Metadata = { title: "گروه جدید | کوشولو" };
+export const metadata: Metadata = { title: "New group | Kosholo" };
 
 export default function NewGroupPage() {
   return (
-    <Suspense fallback={<PageHeader start={<BackButton />} title="گروه جدید" />}>
+    <Suspense fallback={<PageHeader start={<BackButton />} title="New group" />}>
       <NewGroup />
     </Suspense>
   );

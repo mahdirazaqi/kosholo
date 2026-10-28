@@ -16,7 +16,7 @@ export default function SignedInLayout({ children }: LayoutProps<"/">) {
       </Suspense>
       <div className="lg:flex lg:h-dvh lg:overflow-hidden">
         <aside
-          aria-label="فهرست گفتگوها"
+          aria-label="Chat list"
           className="hidden h-dvh w-[360px] shrink-0 flex-col border-e bg-background lg:flex"
         >
           {/* usePathname() needs a boundary on dynamic routes under Cache Components. */}

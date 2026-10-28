@@ -1,93 +1,93 @@
-# راهنمای راه‌اندازی کوشولو روی سرور (VPS)
+# Deploying Kosholo on a server (VPS)
 
-این راهنما قدم‌به‌قدم کوشولو را روی یک سرور Ubuntu 24.04 با Docker بالا می‌آورد. اگر تا حالا سرور راه نینداخته‌اید هم نگران نباشید؛ فقط دستورها را به ترتیب اجرا کنید.
+This guide walks you step by step through running Kosholo on an Ubuntu 24.04 server with Docker. Don't worry if you've never set up a server before; just run the commands in order.
 
-اپ از سه سرویس Docker تشکیل شده است:
+The app is made of three Docker services:
 
-| سرویس | کار | دسترسی از بیرون |
+| Service | Job | Reachable from outside |
 |---|---|---|
-| `caddy` | گرفتن خودکار گواهی HTTPS و رساندن درخواست‌ها به اپ | پورت‌های ۸۰ و ۴۴۳ |
-| `app` | خود کوشولو (Next.js + Socket.IO + ffmpeg) | ندارد (فقط از طریق Caddy) |
-| `db` | پایگاه داده PostgreSQL | ندارد |
+| `caddy` | Gets HTTPS certificates automatically and forwards requests to the app | ports 80 and 443 |
+| `app` | Kosholo itself (Next.js + Socket.IO + ffmpeg) | no (only through Caddy) |
+| `db` | PostgreSQL database | no |
 
-داده‌ها در «volume»های Docker نگه داشته می‌شوند و با به‌روزرسانی پاک نمی‌شوند:
-`pgdata` (پایگاه داده)، `uploads` (عکس‌ها، ویدیوها و پیام‌های صوتی)، `caddy_data` (گواهی‌ها).
+Data lives in Docker volumes and survives updates:
+`pgdata` (database), `uploads` (photos, videos and voice messages), `caddy_data` (certificates).
 
-> **نکته:** همهٔ دستورهای `docker compose` در این راهنما باید داخل پوشهٔ پروژه اجرا شوند و همیشه با
-> `--env-file .env.production -f docker-compose.prod.yml` همراه باشند. برای راحتی، در بخش ۶ یک میان‌بر (alias) می‌سازیم.
+> **Note:** every `docker compose` command in this guide must be run inside the project folder and always with
+> `--env-file .env.production -f docker-compose.prod.yml`. To keep things short, section 6 creates an alias.
 
 ---
 
-## ۱. سرور مورد نیاز
+## 1. Server requirements
 
-- **سیستم‌عامل:** Ubuntu 24.04 LTS
-- **پردازنده و حافظه:** حداقل ۲ هسته و ۲ گیگابایت RAM (۴ گیگابایت راحت‌تر است). ساخت image به حافظه نیاز دارد؛ برای همین در بخش ۳ «swap» هم اضافه می‌کنیم.
-- **دیسک:** حداقل ۲۰ گیگابایت. فایل‌های آپلودی و نسخه‌های پشتیبان به مرور جا می‌گیرند؛ هر چه بیشتر، بهتر.
-- **یک دامنه** (مثلاً `chat.example.com`) که بتوانید رکورد DNS آن را تنظیم کنید.
-- دسترسی root از طریق SSH (معمولاً شرکت میزبانی رمز یا کلید آن را به شما می‌دهد).
+- **OS:** Ubuntu 24.04 LTS
+- **CPU and memory:** at least 2 cores and 2 GB RAM (4 GB is more comfortable). Building the image needs memory, so section 3 also adds swap.
+- **Disk:** at least 20 GB. Uploaded files and backups grow over time; more is better.
+- **A domain** (e.g. `chat.example.com`) whose DNS records you can edit.
+- Root access over SSH (your hosting provider usually gives you a password or key).
 
-## ۲. تنظیم DNS
+## 2. DNS setup
 
-در پنل دامنه‌تان یک رکورد بسازید:
+In your domain's control panel, create a record:
 
-| نوع | نام | مقدار |
+| Type | Name | Value |
 |---|---|---|
-| `A` | `chat` (یا `@` برای خود دامنه) | آدرس IP سرور |
+| `A` | `chat` (or `@` for the bare domain) | the server's IP address |
 
-اگر سرور IPv6 دارد، یک رکورد `AAAA` هم با آدرس IPv6 بسازید (اگر ندارد، رکورد AAAA نسازید).
+If the server has IPv6, also create an `AAAA` record with the IPv6 address (if it doesn't, don't create an AAAA record).
 
-> اگر از Cloudflare یا سرویس مشابه استفاده می‌کنید، برای این رکورد **پروکسی را خاموش کنید** (ابر خاکستری، «DNS only»)، وگرنه Caddy نمی‌تواند گواهی بگیرد.
+> If you use Cloudflare or a similar service, **turn the proxy off** for this record (grey cloud, "DNS only"), otherwise Caddy can't get a certificate.
 
-چند دقیقه صبر کنید و روی کامپیوتر خودتان بررسی کنید:
+Wait a few minutes, then check from your own computer:
 
 ```bash
 ping chat.example.com
 ```
 
-باید IP سرورتان را نشان دهد.
+It should show your server's IP.
 
-## ۳. آماده‌سازی سرور
+## 3. Preparing the server
 
-### ورود با SSH
+### Log in with SSH
 
 ```bash
 ssh root@SERVER_IP
 ```
 
-### به‌روزرسانی سیستم
+### Update the system
 
 ```bash
 apt update && apt upgrade -y
 apt install -y git curl ufw
 ```
 
-### ساخت یک کاربر غیر root
+### Create a non-root user
 
-کار روزمره با root خطرناک است. یک کاربر جدید (اینجا `deploy`) بسازید:
+Working as root day to day is dangerous. Create a new user (here `deploy`):
 
 ```bash
-adduser deploy            # یک رمز قوی بدهید؛ بقیهٔ سؤال‌ها را می‌توانید خالی رد کنید
+adduser deploy            # pick a strong password; you can leave the other questions blank
 usermod -aG sudo deploy
 ```
 
-اگر با کلید SSH وارد می‌شوید، کلید را برای کاربر جدید هم کپی کنید:
+If you log in with an SSH key, copy it to the new user too:
 
 ```bash
 rsync --archive --chown=deploy:deploy ~/.ssh /home/deploy
 ```
 
-حالا از سرور خارج شوید و با کاربر جدید وارد شوید:
+Now log out and log back in as the new user:
 
 ```bash
 exit
 ssh deploy@SERVER_IP
 ```
 
-از این به بعد همه چیز با کاربر `deploy` انجام می‌شود.
+From here on, everything is done as the `deploy` user.
 
-### دیوار آتش (UFW)
+### Firewall (UFW)
 
-فقط SSH، HTTP و HTTPS باز می‌مانند:
+Only SSH, HTTP and HTTPS stay open:
 
 ```bash
 sudo ufw allow OpenSSH
@@ -98,12 +98,12 @@ sudo ufw enable
 sudo ufw status
 ```
 
-> **مهم:** قبل از `ufw enable` حتماً `OpenSSH` را اجازه داده باشید، وگرنه دسترسی‌تان قطع می‌شود.
-> اگر پورت SSH را عوض کرده‌اید، همان پورت را باز کنید (`sudo ufw allow 2222/tcp`).
+> **Important:** allow `OpenSSH` before running `ufw enable`, or you'll lock yourself out.
+> If you changed the SSH port, open that port instead (`sudo ufw allow 2222/tcp`).
 
-### فایل swap دو گیگابایتی
+### A 2 GB swap file
 
-جلوی کمبود حافظه در زمان ساخت image و پردازش ویدیو را می‌گیرد:
+Prevents running out of memory while building the image or processing videos:
 
 ```bash
 sudo fallocate -l 2G /swapfile
@@ -111,32 +111,32 @@ sudo chmod 600 /swapfile
 sudo mkswap /swapfile
 sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-free -h     # باید سطر Swap حدود 2.0Gi نشان دهد
+free -h     # the Swap row should show about 2.0Gi
 ```
 
-## ۴. نصب Docker
+## 4. Installing Docker
 
-اسکریپت رسمی Docker را اجرا کنید:
+Run Docker's official install script:
 
 ```bash
 curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker deploy
 ```
 
-یک بار خارج و دوباره وارد شوید (`exit` و `ssh deploy@SERVER_IP`) تا عضویت در گروه docker اعمال شود، سپس بررسی کنید:
+Log out and back in once (`exit`, then `ssh deploy@SERVER_IP`) so the docker group membership applies, then check:
 
 ```bash
 docker version
 docker compose version
 ```
 
-### اگر Docker Hub یا npm از سرور در دسترس نیست (سرورهای داخل ایران)
+### Optional mirrors (if Docker Hub / npm are blocked or slow in your region)
 
-اگر `get.docker.com` باز نمی‌شود، Docker را از مخزن آینهٔ شرکت میزبانی‌تان نصب کنید (بیشتر دیتاسنترهای ایرانی راهنمای آن را دارند) یا `sudo apt install -y docker.io docker-compose-v2` را امتحان کنید.
+If `get.docker.com` doesn't load, install Docker from your hosting provider's mirror (many providers document this) or try `sudo apt install -y docker.io docker-compose-v2`.
 
-سه جا را می‌توان به آینه (mirror) وصل کرد:
+There are three places you can point at a mirror:
 
-**الف) آینهٔ Docker Hub برای کل سرور** — فایل `/etc/docker/daemon.json` را بسازید (آدرس را با آینه‌ای که در دسترس دارید عوض کنید):
+**A) A Docker Hub mirror for the whole server** — create `/etc/docker/daemon.json` (replace the address with a mirror you can reach):
 
 ```bash
 sudo nano /etc/docker/daemon.json
@@ -144,37 +144,37 @@ sudo nano /etc/docker/daemon.json
 
 ```json
 {
-  "registry-mirrors": ["https://docker.example-mirror.ir"]
+  "registry-mirrors": ["https://docker.example-mirror.com"]
 }
 ```
 
 ```bash
 sudo systemctl restart docker
-docker pull hello-world     # آزمایش
+docker pull hello-world     # test
 ```
 
-این روش برای imageهای رسمی (`node`، `postgres`، `caddy`) کافی است و نیازی به تغییر دیگری نیست.
+This is enough for the official images (`node`, `postgres`, `caddy`); nothing else needs to change.
 
-**ب) نام کامل image در `.env.production`** — اگر آینه به‌صورت registry جدا کار می‌کند، نام imageها را با پیشوند آن بنویسید:
+**B) Full image names in `.env.production`** — if the mirror works as a separate registry, prefix the image names with it:
 
 ```bash
-NODE_IMAGE=docker.example-mirror.ir/library/node:24.11-trixie-slim
-POSTGRES_IMAGE=docker.example-mirror.ir/library/postgres:17.6
-CADDY_IMAGE=docker.example-mirror.ir/library/caddy:2.10.2
+NODE_IMAGE=docker.example-mirror.com/library/node:24.11-trixie-slim
+POSTGRES_IMAGE=docker.example-mirror.com/library/postgres:17.6
+CADDY_IMAGE=docker.example-mirror.com/library/caddy:2.10.2
 ```
 
-> نسخه‌ها را عوض نکنید؛ فقط پیشوند آینه را اضافه کنید.
+> Don't change the versions; only add the mirror prefix.
 
-**ج) آینهٔ npm و Debian برای ساخت image** — در `.env.production`:
+**C) npm and Debian mirrors for the image build** — in `.env.production`:
 
 ```bash
-NPM_REGISTRY=https://npm.example-mirror.ir/
-APT_MIRROR=http://debian.example-mirror.ir/debian
+NPM_REGISTRY=https://npm.example-mirror.com/
+APT_MIRROR=http://debian.example-mirror.com/debian
 ```
 
-`NPM_REGISTRY` برای نصب بسته‌های JavaScript و `APT_MIRROR` برای نصب ffmpeg استفاده می‌شود. اگر خالی یا پیش‌فرض بمانند، از منابع رسمی دانلود می‌شود.
+`NPM_REGISTRY` is used to install JavaScript packages and `APT_MIRROR` to install ffmpeg. If they're empty or left at their defaults, the official sources are used.
 
-## ۵. دریافت کد و تنظیم `.env.production`
+## 5. Getting the code and configuring `.env.production`
 
 ```bash
 cd ~
@@ -184,50 +184,50 @@ cp .env.production.example .env.production
 chmod 600 .env.production
 ```
 
-دو مقدار تصادفی بسازید:
+Generate two random values:
 
 ```bash
-openssl rand -hex 24      # برای رمز پایگاه داده
-openssl rand -base64 48   # برای JWT_SECRET
+openssl rand -hex 24      # for the database password
+openssl rand -base64 48   # for JWT_SECRET
 ```
 
-فایل را باز کنید:
+Open the file:
 
 ```bash
 nano .env.production
 ```
 
-و این‌ها را پر کنید (توضیح هر متغیر داخل خود فایل هم آمده است):
+and fill in the following (each variable is also explained inside the file):
 
-| متغیر | توضیح |
+| Variable | Description |
 |---|---|
-| `DOMAIN` | دامنه‌ای که در بخش ۲ تنظیم کردید، مثلاً `chat.example.com` (بدون `https://`) |
-| `ACME_EMAIL` | ایمیل شما؛ Let's Encrypt هشدارهای گواهی را به آن می‌فرستد |
-| `POSTGRES_USER` / `POSTGRES_DB` | می‌توانند همان `kosholo` بمانند |
-| `POSTGRES_PASSWORD` | خروجی `openssl rand -hex 24` |
-| `DATABASE_URL` | همان رمز را اینجا هم بگذارید: `postgresql://kosholo:رمز@db:5432/kosholo` |
-| `JWT_SECRET` | خروجی `openssl rand -base64 48` (حداقل ۳۲ نویسه). تغییر آن همهٔ کاربران را از حساب خارج می‌کند |
-| `UPLOAD_DIR` | دست نزنید (`/app/uploads`) |
-| `FFMPEG_PATH` / `FFPROBE_PATH` | دست نزنید |
-| `FFMPEG_TIMEOUT_SECONDS` | حداکثر زمان پردازش هر ویدیو/صدا (پیش‌فرض ۱۲۰ ثانیه) |
-| `NODE_IMAGE` / `POSTGRES_IMAGE` / `CADDY_IMAGE` | imageها؛ فقط برای آینه تغییر دهید (بخش ۴) |
-| `NPM_REGISTRY` / `APT_MIRROR` | آینهٔ npm و Debian (بخش ۴) |
-| `HTTP_PORT` / `HTTPS_PORT` | روی سرور واقعی همان ۸۰ و ۴۴۳ بمانند |
+| `DOMAIN` | The domain you set up in section 2, e.g. `chat.example.com` (without `https://`) |
+| `ACME_EMAIL` | Your email; Let's Encrypt sends certificate warnings to it |
+| `POSTGRES_USER` / `POSTGRES_DB` | Can stay `kosholo` |
+| `POSTGRES_PASSWORD` | Output of `openssl rand -hex 24` |
+| `DATABASE_URL` | Put the same password here too: `postgresql://kosholo:PASSWORD@db:5432/kosholo` |
+| `JWT_SECRET` | Output of `openssl rand -base64 48` (at least 32 characters). Changing it signs every user out |
+| `UPLOAD_DIR` | Leave as is (`/app/uploads`) |
+| `FFMPEG_PATH` / `FFPROBE_PATH` | Leave as is |
+| `FFMPEG_TIMEOUT_SECONDS` | Maximum processing time per video/audio file (default 120 seconds) |
+| `NODE_IMAGE` / `POSTGRES_IMAGE` / `CADDY_IMAGE` | Images; change only for a mirror (section 4) |
+| `NPM_REGISTRY` / `APT_MIRROR` | npm and Debian mirrors (section 4) |
+| `HTTP_PORT` / `HTTPS_PORT` | Keep 80 and 443 on a real server |
 
-> رمز پایگاه داده بهتر است فقط حروف و عدد باشد (خروجی `openssl rand -hex` همین‌طور است)؛ نویسه‌هایی مثل `@` و `/` آدرس `DATABASE_URL` را خراب می‌کنند.
+> The database password should contain only letters and digits (the output of `openssl rand -hex` does); characters like `@` and `/` break the `DATABASE_URL`.
 
-> `.env.production` رمزها را دارد؛ هرگز آن را commit یا برای کسی ارسال نکنید.
+> `.env.production` contains secrets; never commit it or send it to anyone.
 
-## ۶. اولین راه‌اندازی
+## 6. First launch
 
-یک میان‌بر بسازید تا دستورها کوتاه شوند:
+Create an alias to keep commands short:
 
 ```bash
 echo "alias dc='docker compose --env-file .env.production -f docker-compose.prod.yml'" >> ~/.bashrc
 source ~/.bashrc
 ```
 
-ساخت و اجرا (اولین ساخت ممکن است ۵ تا ۱۵ دقیقه طول بکشد):
+Build and run (the first build can take 5 to 15 minutes):
 
 ```bash
 dc build
@@ -235,145 +235,145 @@ dc up -d
 scripts/wait-healthy.sh
 ```
 
-وقتی «✓ App is healthy» را دیدید، `https://chat.example.com` را در مرورگر باز کنید. اولین بار گرفتن گواهی چند ثانیه طول می‌کشد. اولین حساب کاربری را از صفحهٔ ثبت‌نام بسازید.
+When you see "✓ App is healthy", open `https://chat.example.com` in your browser. Getting the certificate takes a few seconds the first time. Create the first account from the sign-up page.
 
-مایگریشن‌های پایگاه داده هر بار که اپ بالا می‌آید خودکار اجرا می‌شوند؛ کار دستی لازم نیست.
+Database migrations run automatically every time the app starts; no manual step is needed.
 
-دستورهای مفید:
+Useful commands:
 
 ```bash
-dc ps                    # وضعیت سرویس‌ها (app باید healthy باشد)
-dc logs -f app           # گزارش زندهٔ اپ (خروج با Ctrl+C)
-dc logs --tail=100 caddy # گزارش Caddy (مشکلات گواهی اینجا دیده می‌شوند)
-dc restart app           # راه‌اندازی دوبارهٔ اپ
-dc down                  # خاموش کردن همه (داده‌ها حفظ می‌شوند)
+dc ps                    # service status (app should be healthy)
+dc logs -f app           # live app logs (exit with Ctrl+C)
+dc logs --tail=100 caddy # Caddy logs (certificate problems show up here)
+dc restart app           # restart the app
+dc down                  # stop everything (data is kept)
 ```
 
-> **هرگز** `dc down -v` اجرا نکنید مگر بخواهید همهٔ داده‌ها (پیام‌ها، فایل‌ها، گواهی‌ها) پاک شوند.
+> **Never** run `dc down -v` unless you want to delete all data (messages, files, certificates).
 
-> روی سرور همیشه از `dc` (یا دستور کامل با `-f docker-compose.prod.yml`) استفاده کنید. `docker compose` خالی، فایل `docker-compose.yml` را اجرا می‌کند که فقط برای توسعه روی کامپیوتر خودتان است.
+> On the server, always use `dc` (or the full command with `-f docker-compose.prod.yml`). A bare `docker compose` runs `docker-compose.yml`, which is only for development on your own computer.
 
-> اگر `Caddyfile` را روی سرور دستی ویرایش کردید، بعدش `dc restart caddy` بزنید. (`deploy.sh` اگر Caddyfile در به‌روزرسانی عوض شده باشد این کار را خودش می‌کند.)
+> If you edit the `Caddyfile` on the server by hand, run `dc restart caddy` afterwards. (`deploy.sh` does this itself when an update changed the Caddyfile.)
 
-## ۷. به‌روزرسانی
+## 7. Updating
 
-هر وقت نسخهٔ جدید آماده شد:
+Whenever a new version is ready:
 
 ```bash
 cd ~/kosholo
-scripts/backup.sh     # احتیاطاً قبل از به‌روزرسانی
+scripts/backup.sh     # just in case, before updating
 scripts/deploy.sh
 ```
 
-`deploy.sh` این کارها را انجام می‌دهد: دریافت آخرین کد (`git pull`)، ساخت image جدید، جایگزینی اپ، پاک کردن imageهای قدیمی و صبر تا سالم شدن اپ. اگر اپ سالم بالا نیاید، آخرین گزارش‌هایش را نشان می‌دهد.
+`deploy.sh` does the following: pulls the latest code (`git pull`), builds the new image, replaces the app, removes old images and waits until the app is healthy. If the app doesn't come up healthy, it prints its latest logs.
 
-در هنگام جایگزینی، اپ چند ثانیه در دسترس نیست؛ کاربران خودکار دوباره وصل می‌شوند.
+During the switch the app is unavailable for a few seconds; users reconnect automatically.
 
-## ۸. پشتیبان‌گیری
+## 8. Backups
 
 ```bash
 scripts/backup.sh
 ```
 
-یک پوشه مثل `backups/2026-01-31_0400/` می‌سازد با:
+This creates a folder like `backups/2026-01-31_0400/` containing:
 
-- `db.dump` — نسخهٔ کامل پایگاه داده
-- `uploads.tar.gz` — همهٔ فایل‌های آپلودی
-- `SHA256SUMS` — برای بررسی سالم بودن فایل‌ها
+- `db.dump` — a full copy of the database
+- `uploads.tar.gz` — all uploaded files
+- `SHA256SUMS` — to verify the files are intact
 
-فقط ۷ نسخهٔ آخر نگه داشته می‌شوند (برای تعداد بیشتر: `KEEP_BACKUPS=14 scripts/backup.sh`).
+Only the last 7 backups are kept (for more: `KEEP_BACKUPS=14 scripts/backup.sh`).
 
-### پشتیبان‌گیری خودکار هر شب ساعت ۴ صبح
+### Automatic nightly backup at 4 AM
 
 ```bash
 crontab -e
 ```
 
-این خط را به آخر فایل اضافه کنید:
+Add this line at the end of the file:
 
 ```cron
 0 4 * * * cd /home/deploy/kosholo && scripts/backup.sh >> backups/cron.log 2>&1
 ```
 
-> ساعت بر اساس منطقهٔ زمانی سرور است. با `timedatectl` ببینید و اگر خواستید تنظیمش کنید: `sudo timedatectl set-timezone Asia/Tehran`
+> The time follows the server's time zone. Check it with `timedatectl` and change it if you like, e.g. `sudo timedatectl set-timezone Europe/Berlin`. (This only affects cron and logs; the app shows dates in each viewer's own time zone.)
 
-### کپی پشتیبان بیرون از سرور
+### Copying backups off the server
 
-پشتیبانی که فقط روی همان سرور باشد، با از دست رفتن سرور از دست می‌رود. روی **کامپیوتر خودتان** (نه سرور) اجرا کنید:
+A backup that lives only on the server is lost along with the server. Run this on **your own computer** (not the server):
 
 ```bash
-# همهٔ پشتیبان‌ها (فقط تغییرات منتقل می‌شوند)
+# all backups (only changes are transferred)
 rsync -avz deploy@SERVER_IP:kosholo/backups/ ~/kosholo-backups/
 
-# یا فقط یک نسخه
+# or a single one
 scp -r deploy@SERVER_IP:kosholo/backups/2026-01-31_0400 ~/kosholo-backups/
 ```
 
-بهتر است هفته‌ای یک بار این کار را انجام دهید.
+Doing this once a week is a good idea.
 
-## ۹. بازگردانی از پشتیبان
+## 9. Restoring from a backup
 
-> بازگردانی، پایگاه داده و فایل‌های فعلی را **کاملاً جایگزین** می‌کند.
+> Restoring **completely replaces** the current database and files.
 
 ```bash
 cd ~/kosholo
-ls backups/                              # فهرست نسخه‌ها
+ls backups/                              # list backups
 scripts/restore.sh backups/2026-01-31_0400
 ```
 
-اسکریپت تأیید می‌خواهد (`yes` را تایپ کنید)، اپ را متوقف می‌کند، پایگاه داده و فایل‌ها را برمی‌گرداند و اپ را دوباره بالا می‌آورد.
+The script asks for confirmation (type `yes`), stops the app, restores the database and files, and starts the app again.
 
-### بازگردانی روی یک سرور جدید
+### Restoring on a new server
 
-1. بخش‌های ۳ تا ۵ را روی سرور جدید انجام دهید و **همان** `.env.production` قبلی را استفاده کنید (به‌خصوص `JWT_SECRET`؛ وگرنه کاربران باید دوباره وارد شوند).
-2. پوشهٔ پشتیبان را به سرور جدید بفرستید (از کامپیوتر خودتان):
+1. Follow sections 3 to 5 on the new server and use the **same** `.env.production` as before (especially `JWT_SECRET`; otherwise users have to sign in again).
+2. Send the backup folder to the new server (from your own computer):
    ```bash
    scp -r ~/kosholo-backups/2026-01-31_0400 deploy@NEW_SERVER_IP:kosholo/backups/
    ```
-3. روی سرور جدید:
+3. On the new server:
    ```bash
    cd ~/kosholo
    dc build && dc up -d
    scripts/restore.sh backups/2026-01-31_0400
    ```
-4. رکورد DNS را به IP سرور جدید تغییر دهید.
+4. Point the DNS record at the new server's IP.
 
-## ۱۰. رفع اشکال
+## 10. Troubleshooting
 
-**سایت باز نمی‌شود یا خطای گواهی می‌دهد**
-- `dc logs --tail=100 caddy` را ببینید.
-- بررسی کنید دامنه به IP درست اشاره می‌کند (`ping chat.example.com`) و پروکسی Cloudflare خاموش است.
-- پورت‌های ۸۰ و ۴۴۳ باید باز باشند (`sudo ufw status`) و برنامهٔ دیگری (مثل nginx یا apache) آن‌ها را نگرفته باشد: `sudo ss -tlnp | grep -E ':80|:443'`.
-- Let's Encrypt برای تلاش‌های ناموفق مکرر محدودیت دارد؛ پس از رفع مشکل، یک ساعت صبر کنید.
+**The site doesn't load or shows a certificate error**
+- Check `dc logs --tail=100 caddy`.
+- Make sure the domain points to the right IP (`ping chat.example.com`) and the Cloudflare proxy is off.
+- Ports 80 and 443 must be open (`sudo ufw status`) and not taken by another program (such as nginx or apache): `sudo ss -tlnp | grep -E ':80|:443'`.
+- Let's Encrypt rate-limits repeated failed attempts; after fixing the problem, wait an hour.
 
-**اپ healthy نمی‌شود**
-- `dc logs --tail=100 app` را ببینید. خطاهای رایج:
-  - `JWT_SECRET must be at least 32 characters` → مقدار را با `openssl rand -base64 48` بسازید.
-  - خطای اتصال یا رمز پایگاه داده → رمز در `POSTGRES_PASSWORD` و `DATABASE_URL` باید یکی باشد. اگر رمز را **بعد از** اولین اجرا عوض کرده‌اید، Postgres هنوز رمز قبلی را دارد؛ رمز قبلی را برگردانید.
-- بعد از تغییر `.env.production`: `dc up -d` (اپ با تنظیمات جدید دوباره ساخته می‌شود).
+**The app never becomes healthy**
+- Check `dc logs --tail=100 app`. Common errors:
+  - `JWT_SECRET must be at least 32 characters` → generate it with `openssl rand -base64 48`.
+  - Database connection or password error → the password in `POSTGRES_PASSWORD` and `DATABASE_URL` must match. If you changed the password **after** the first run, Postgres still has the old one; put the old password back.
+- After changing `.env.production`: `dc up -d` (the app is recreated with the new settings).
 
-**ساخت image شکست می‌خورد**
-- خطای دانلود (`timeout`، `ECONNRESET`، `pull access denied`) → آینه‌ها را تنظیم کنید (بخش ۴).
-- خطای حافظه (`Killed` یا `JavaScript heap out of memory`) → swap را بررسی کنید (`free -h`).
-- دیسک پر است → `df -h` و سپس `docker system prune` (imageهای بلااستفاده را پاک می‌کند؛ داده‌ها حفظ می‌شوند).
+**The image build fails**
+- Download errors (`timeout`, `ECONNRESET`, `pull access denied`) → set up mirrors (section 4).
+- Memory errors (`Killed` or `JavaScript heap out of memory`) → check swap (`free -h`).
+- Disk full → `df -h`, then `docker system prune` (removes unused images; data is kept).
 
-**پیام‌ها لحظه‌ای نمی‌رسند (باید صفحه را تازه کرد)**
-- اگر جلوی Caddy پروکسی یا CDN دیگری گذاشته‌اید، باید از WebSocket پشتیبانی کند.
-- `dc logs app | grep -i socket` را ببینید.
+**Messages don't arrive in real time (you have to refresh the page)**
+- If you put another proxy or CDN in front of Caddy, it must support WebSockets.
+- Check `dc logs app | grep -i socket`.
 
-**آپلود ویدیو خطای «پردازش فایل بیش از حد طول کشید» می‌دهد**
-- ویدیو برای سرور سنگین است. `FFMPEG_TIMEOUT_SECONDS` را در `.env.production` بیشتر کنید (مثلاً ۲۴۰) و `dc up -d` بزنید، یا سرور قوی‌تری بگیرید.
+**Video uploads fail with a "processing took too long" error**
+- The video is too heavy for the server. Raise `FFMPEG_TIMEOUT_SECONDS` in `.env.production` (e.g. 240) and run `dc up -d`, or get a more powerful server.
 
-**دیسک پر شده است**
+**The disk is full**
 ```bash
 df -h
-docker system df              # حجم imageها و volumeها
-du -sh backups/*              # حجم پشتیبان‌ها
-docker system prune           # پاک کردن imageها و cache بلااستفاده
+docker system df              # size of images and volumes
+du -sh backups/*              # size of backups
+docker system prune           # remove unused images and cache
 ```
 
-**می‌خواهم ببینم داخل پایگاه داده چه خبر است**
+**I want to look inside the database**
 ```bash
 dc exec db psql -U kosholo -d kosholo
-# \dt برای فهرست جدول‌ها، \q برای خروج
+# \dt lists tables, \q quits
 ```

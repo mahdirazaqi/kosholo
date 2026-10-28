@@ -41,7 +41,7 @@ export function ConfirmDialog({
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline" size="lg" className="h-11 rounded-xl text-base">
-              انصراف
+              Cancel
             </Button>
           </DialogClose>
           <Button

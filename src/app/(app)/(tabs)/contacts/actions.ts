@@ -11,8 +11,8 @@ import { isRateLimited, LIMITS, RATE_LIMIT_ERROR, recordHit } from "@/lib/rate-l
 import { publicUserSelect, type PublicUser } from "@/lib/users";
 import { userIdSchema, userLookupSchema } from "@/lib/validations/contacts";
 
-const NOT_FOUND = "کاربری با این مشخصات پیدا نشد";
-const SELF_ERROR = "نمی‌توانید خودتان را اضافه کنید";
+const NOT_FOUND = "No user found with those details";
+const SELF_ERROR = "You can't add yourself";
 
 export type LookupResult =
   | { ok: true; user: PublicUser & { isContact: boolean; isSelf: boolean } }
@@ -87,7 +87,7 @@ export async function startDirectConversation(otherUserId: string): Promise<Acti
   const parsed = userIdSchema.safeParse(otherUserId);
   if (!parsed.success) return { ok: false, error: NOT_FOUND };
   const otherId = parsed.data;
-  if (otherId === me.id) return { ok: false, error: "نمی‌توانید با خودتان گفتگو کنید" };
+  if (otherId === me.id) return { ok: false, error: "You can't start a chat with yourself" };
 
   const exists = await db.user.count({ where: { id: otherId } });
   if (!exists) return { ok: false, error: NOT_FOUND };

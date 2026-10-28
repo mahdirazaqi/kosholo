@@ -26,7 +26,7 @@ export function VideoMedia({
       height={media.height}
       placeholder={media.placeholder}
       src={local ? null : media.thumbUrl}
-      alt="ویدیو"
+      alt="Video"
     >
       {local && (
         // Optimistic bubble: the local file's first frame as the poster.
@@ -42,7 +42,7 @@ export function VideoMedia({
       ) : (
         <button
           type="button"
-          aria-label="پخش ویدیو"
+          aria-label="Play video"
           onClick={onOpen}
           className="absolute inset-0 flex items-center justify-center"
         >

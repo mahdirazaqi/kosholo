@@ -10,5 +10,5 @@ export async function getContacts(userId: string): Promise<PublicUser[]> {
   });
   return rows
     .map((row) => row.contact)
-    .sort((a, b) => a.name.localeCompare(b.name, "fa"));
+    .sort((a, b) => a.name.localeCompare(b.name, "en"));
 }

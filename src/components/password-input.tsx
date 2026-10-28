@@ -24,7 +24,7 @@ export function PasswordInput({
       <button
         type="button"
         onClick={() => setVisible((value) => !value)}
-        aria-label={visible ? "پنهان کردن رمز عبور" : "نمایش رمز عبور"}
+        aria-label={visible ? "Hide password" : "Show password"}
         className="absolute inset-y-0 end-0 flex w-11 items-center justify-center rounded-e-lg text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-none"
       >
         {visible ? <EyeOff className="size-4.5" /> : <Eye className="size-4.5" />}

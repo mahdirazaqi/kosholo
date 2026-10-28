@@ -25,20 +25,20 @@ export function NewChatSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <BottomSheetContent>
         <SheetHeader className="pt-3">
-          <SheetTitle className="text-lg font-bold">گفتگوی جدید</SheetTitle>
-          <SheetDescription>یکی از مخاطبین خود را انتخاب کنید.</SheetDescription>
+          <SheetTitle className="text-lg font-bold">New chat</SheetTitle>
+          <SheetDescription>Choose one of your contacts.</SheetDescription>
         </SheetHeader>
         <div className="px-2 pb-[max(env(safe-area-inset-bottom),1rem)]">
           {contacts.length === 0 ? (
             <EmptyState
               icon={<Users />}
-              title="هنوز مخاطبی ندارید"
-              description="ابتدا دوستانتان را به مخاطبین اضافه کنید."
+              title="No contacts yet"
+              description="Add your friends to your contacts first."
               className="py-8"
               action={
                 <Button asChild size="lg" className="h-11 rounded-xl px-5 text-base">
                   <Link href="/contacts" onClick={() => onOpenChange(false)}>
-                    افزودن مخاطب
+                    Add contact
                   </Link>
                 </Button>
               }

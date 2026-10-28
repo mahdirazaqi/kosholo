@@ -16,7 +16,7 @@ const TAP_MS = 300;
 
 // Mic button for the composer (shown when the textarea is empty):
 // press and hold to record, release to send, slide towards the inline start
-// to cancel, slide up to lock (hands-free, with «لغو» / «ارسال»).
+// to cancel, slide up to lock (hands-free, with "Cancel" / "Send").
 // Renders the recording bar over the composer row (its parent is `relative`).
 export function VoiceControl({ onSend }: { onSend: (recording: VoiceRecording) => void }) {
   const recorder = useVoiceRecorder(onSend);
@@ -53,7 +53,7 @@ export function VoiceControl({ onSend }: { onSend: (recording: VoiceRecording) =
               className="h-11 shrink-0 gap-1.5 rounded-full px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
             >
               <Trash2 className="size-4" />
-              لغو
+              Cancel
             </Button>
           ) : (
             <span
@@ -61,7 +61,7 @@ export function VoiceControl({ onSend }: { onSend: (recording: VoiceRecording) =
               style={{ opacity: 1 - drag.towardStart / CANCEL_DISTANCE }}
             >
               <ChevronLeft className="size-4 rtl:rotate-180" />
-              برای لغو بکشید
+              Slide to cancel
             </span>
           )}
         </div>
@@ -82,7 +82,7 @@ export function VoiceControl({ onSend }: { onSend: (recording: VoiceRecording) =
         <Button
           type="button"
           size="icon-lg"
-          aria-label="ارسال پیام صوتی"
+          aria-label="Send voice message"
           onClick={() => finish(true)}
           className="relative z-10 size-11 shrink-0 rounded-full"
         >
@@ -92,7 +92,7 @@ export function VoiceControl({ onSend }: { onSend: (recording: VoiceRecording) =
         <Button
           type="button"
           size="icon-lg"
-          aria-label="ضبط پیام صوتی (نگه دارید)"
+          aria-label="Record voice message (hold)"
           className={cn(
             "relative z-10 size-11 shrink-0 touch-none rounded-full transition-transform select-none",
             active && "scale-125 bg-red-500 text-white hover:bg-red-500",
@@ -127,7 +127,7 @@ export function VoiceControl({ onSend }: { onSend: (recording: VoiceRecording) =
             if (!current || current.done) return;
             if (performance.now() - current.at < TAP_MS) {
               finish(false);
-              toast.info("برای ضبط، دکمه را نگه دارید");
+              toast.info("Hold the button to record");
               return;
             }
             finish(true);

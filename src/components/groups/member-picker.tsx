@@ -9,7 +9,7 @@ import type { PublicUser } from "@/lib/users";
 import { cn } from "@/lib/utils";
 
 // Contacts with checkboxes, a local filter and removable chips for the
-// selection. Used by the new-group flow and «افزودن عضو».
+// selection. Used by the new-group flow and "Add members".
 export function MemberPicker({
   contacts,
   selected,
@@ -38,13 +38,13 @@ export function MemberPicker({
   return (
     <div className="space-y-3">
       {selectedUsers.length > 0 && (
-        <ul className="flex flex-wrap gap-2" aria-label="انتخاب‌شده‌ها">
+        <ul className="flex flex-wrap gap-2" aria-label="Selected">
           {selectedUsers.map((user) => (
             <li key={user.id}>
               <button
                 type="button"
                 onClick={() => onToggle(user.id)}
-                aria-label={`حذف ${user.name}`}
+                aria-label={`Remove ${user.name}`}
                 className="flex h-9 animate-in items-center gap-1.5 rounded-full bg-primary/10 ps-1 pe-2.5 text-sm font-medium text-primary zoom-in-95 duration-150 hover:bg-primary/15"
               >
                 <UserAvatar user={user} size="xs" />
@@ -62,16 +62,16 @@ export function MemberPicker({
           type="search"
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
-          placeholder="جستجو در مخاطبین"
-          aria-label="جستجو در مخاطبین"
+          placeholder="Search contacts"
+          aria-label="Search contacts"
           className="h-11 rounded-xl bg-muted/50 ps-10"
         />
       </div>
 
       {contacts.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">مخاطبی برای افزودن ندارید</p>
+        <p className="py-8 text-center text-sm text-muted-foreground">No contacts to add</p>
       ) : visible.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">مخاطبی با این مشخصات پیدا نشد</p>
+        <p className="py-8 text-center text-sm text-muted-foreground">No matching contacts</p>
       ) : (
         <ul className="-mx-2">
           {visible.map((contact) => {

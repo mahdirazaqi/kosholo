@@ -3,11 +3,11 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "کوشولو",
-    short_name: "کوشولو",
-    description: "پیام‌رسان سبک و سریع",
-    lang: "fa",
-    dir: "rtl",
+    name: "Kosholo",
+    short_name: "Kosholo",
+    description: "A light, fast messenger",
+    lang: "en",
+    dir: "ltr",
     start_url: "/",
     scope: "/",
     display: "standalone",

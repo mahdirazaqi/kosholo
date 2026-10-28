@@ -24,8 +24,8 @@ export function DesktopSidebar() {
       <div className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.svg" alt="" width={28} height={28} className="rounded-lg" />
-        <span className="flex-1 text-lg font-bold">کوشولو</span>
-        <nav aria-label="بخش‌های اصلی" className="flex items-center gap-1">
+        <span className="flex-1 text-lg font-bold">Kosholo</span>
+        <nav aria-label="Main sections" className="flex items-center gap-1">
           {NAV_TABS.map(({ href, label, icon: Icon, unread }) => {
             const active = isTabActive(href, pathname);
             return (

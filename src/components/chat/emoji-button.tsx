@@ -36,7 +36,7 @@ export function EmojiButton({
       type="button"
       variant="ghost"
       size="icon-lg"
-      aria-label="ایموجی"
+      aria-label="Emoji"
       className="size-11 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
     >
       <Smile className="size-6" />
@@ -83,7 +83,7 @@ export function EmojiButton({
           onClose();
         }}
       >
-        <SheetTitle className="sr-only">انتخاب ایموجی</SheetTitle>
+        <SheetTitle className="sr-only">Choose emoji</SheetTitle>
         <div className="px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)]">
           <Picker
             className="mx-auto h-[min(380px,55dvh)]"

@@ -12,7 +12,7 @@ export function BackButton({ fallback = "/" }: { fallback?: string }) {
     <Button
       variant="ghost"
       size="icon-lg"
-      aria-label="بازگشت"
+      aria-label="Back"
       className="-ms-2 rounded-full"
       onClick={() => (window.history.length > 1 ? router.back() : router.push(fallback))}
     >

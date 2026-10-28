@@ -122,7 +122,7 @@ export function ChatView({
         return page.messages.length > 0;
       })
       .catch(() => {
-        toast.error("بارگذاری پیام‌های قبلی انجام نشد");
+        toast.error("Couldn't load older messages");
         return false;
       })
       .finally(() => {
@@ -318,7 +318,7 @@ export function ChatView({
           className="flex shrink-0 items-center justify-center gap-2 border-t bg-muted/60 px-4 pt-4 pb-[max(env(safe-area-inset-bottom),1rem)] text-sm font-medium text-muted-foreground"
         >
           <UserX className="size-4.5" />
-          {removed === "deleted" ? "این گروه حذف شده است" : "شما دیگر عضو این گروه نیستید"}
+          {removed === "deleted" ? "This group was deleted" : "You're no longer a member of this group"}
         </div>
       ) : (
         <Composer

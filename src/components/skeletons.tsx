@@ -29,7 +29,7 @@ export function ChatListSkeleton() {
   return (
     <>
       <div className="lg:hidden">
-        <PageHeader title="گفتگوها" />
+        <PageHeader title="Chats" />
         <RowSkeletons count={7} />
       </div>
       <div className="hidden h-full bg-muted/30 lg:block" />
@@ -40,7 +40,7 @@ export function ChatListSkeleton() {
 export function ContactsSkeleton() {
   return (
     <>
-      <PageHeader title="مخاطبین" />
+      <PageHeader title="Contacts" />
       <div className="px-4 pt-4">
         <Skeleton className="h-11 w-full rounded-xl" />
       </div>
@@ -63,7 +63,7 @@ export function ProfileSkeleton() {
 export function ProfilePageSkeleton() {
   return (
     <>
-      <PageHeader title="پروفایل" />
+      <PageHeader title="Profile" />
       <div className="space-y-4 px-4 py-6">
         <ProfileSkeleton />
         <Skeleton className="h-48 w-full rounded-2xl" />
@@ -118,7 +118,7 @@ export function ChatSkeleton() {
 export function InfoSkeleton() {
   return (
     <>
-      <PageHeader start={<BackButton />} title="اطلاعات" />
+      <PageHeader start={<BackButton />} title="Info" />
       <div className="space-y-4 px-4 py-6">
         <div className="flex flex-col items-center gap-3 rounded-2xl border bg-card px-5 py-8">
           <Skeleton className="size-24 rounded-full" />

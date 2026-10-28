@@ -85,7 +85,7 @@ export type LastMessagePreview = {
   duration: number | null; // voice
   content: string | null; // first 100 chars
   isMine: boolean;
-  senderName: string; // shown as "علی: …" in group rows
+  senderName: string; // shown as "Jane: …" in group rows
   meta: SystemMeta | null;
 };
 

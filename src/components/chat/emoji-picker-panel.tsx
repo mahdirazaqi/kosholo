@@ -7,8 +7,8 @@ import {
   EmojiPickerSearch,
 } from "@/components/ui/emoji-picker";
 
-// Emoji data is self-hosted in public/emojibase (no CDN). emojibase has no
-// Persian locale, so search uses English keywords; category names are Persian.
+// Emoji data is self-hosted in public/emojibase/en (no CDN; jsDelivr is often
+// blocked in some regions).
 const EMOJIBASE_URL = "/emojibase";
 
 // Loaded lazily by EmojiButton.
@@ -29,7 +29,7 @@ export default function EmojiPickerPanel({
       emojibaseUrl={EMOJIBASE_URL}
       onEmojiSelect={({ emoji }) => onPick(emoji)}
     >
-      <EmojiPickerSearch placeholder="جستجوی ایموجی" aria-label="جستجوی ایموجی" />
+      <EmojiPickerSearch placeholder="Search emoji" aria-label="Search emoji" />
       <EmojiPickerContent />
       <EmojiPickerFooter />
     </EmojiPicker>

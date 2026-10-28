@@ -8,7 +8,7 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
           <div className="flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/10">
             <MessageCircle className="size-7" strokeWidth={1.75} />
           </div>
-          <span className="text-2xl font-extrabold tracking-tight">کوشولو</span>
+          <span className="text-2xl font-extrabold tracking-tight">Kosholo</span>
         </div>
         {children}
       </div>

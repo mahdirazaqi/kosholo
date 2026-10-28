@@ -27,13 +27,13 @@ export function LogoutButton() {
           className="h-11 w-full rounded-xl text-base text-destructive hover:bg-destructive/10 hover:text-destructive"
         >
           <LogOut className="rtl:rotate-180" />
-          خروج
+          Log out
         </Button>
       </DialogTrigger>
       <DialogContent showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>خروج از حساب</DialogTitle>
-          <DialogDescription>آیا مطمئن هستید که می‌خواهید خارج شوید؟</DialogDescription>
+          <DialogTitle>Log out</DialogTitle>
+          <DialogDescription>Are you sure you want to log out?</DialogDescription>
         </DialogHeader>
         <form
           action={async () => {
@@ -45,7 +45,7 @@ export function LogoutButton() {
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline" size="lg" className="h-11 rounded-xl text-base">
-                انصراف
+                Cancel
               </Button>
             </DialogClose>
             <LogoutSubmit />
@@ -60,7 +60,7 @@ function LogoutSubmit() {
   const { pending } = useFormStatus();
   return (
     <SubmitButton pending={pending} variant="destructive" className="sm:w-auto">
-      خروج
+      Log out
     </SubmitButton>
   );
 }

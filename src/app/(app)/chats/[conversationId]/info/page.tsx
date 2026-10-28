@@ -10,7 +10,7 @@ import { getGroupInfo } from "@/lib/chat/groups";
 import { getContacts } from "@/lib/contacts";
 import { db } from "@/lib/db";
 
-export const metadata: Metadata = { title: "اطلاعات گفتگو | کوشولو" };
+export const metadata: Metadata = { title: "Chat info | Kosholo" };
 
 export default function InfoPage({ params }: PageProps<"/chats/[conversationId]/info">) {
   return (

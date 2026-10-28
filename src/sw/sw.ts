@@ -27,7 +27,7 @@ const MEDIA_THUMB = /^\/api\/media\/[0-9a-f-]{36}\/thumb$/i;
 const serwist = new Serwist({
   // /_next/static (hashed, immutable), the offline page, icons and the logo.
   precacheEntries: self.__SW_MANIFEST,
-  // Updates wait until the user taps «به‌روزرسانی» (SKIP_WAITING below).
+  // Updates wait until the user taps "Update" (SKIP_WAITING below).
   skipWaiting: false,
   clientsClaim: true,
   navigationPreload: true,
@@ -84,7 +84,7 @@ const serwist = new Serwist({
   },
 });
 
-// «به‌روزرسانی» in the update toast: activate the waiting worker now.
+// "Update" in the update toast: activate the waiting worker now.
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") void self.skipWaiting();
 });

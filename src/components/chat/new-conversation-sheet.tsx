@@ -5,7 +5,7 @@ import { ChevronRight, MessageCircle, Users } from "lucide-react";
 import { BottomSheetContent } from "@/components/bottom-sheet";
 import { Sheet, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
-// «گفتگوی جدید» (contact picker) or «گروه جدید» (/chats/new-group).
+// "New chat" (contact picker) or "New group" (/chats/new-group).
 export function NewConversationSheet({
   open,
   onOpenChange,
@@ -19,20 +19,20 @@ export function NewConversationSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <BottomSheetContent>
         <SheetHeader className="pt-3">
-          <SheetTitle className="text-lg font-bold">شروع گفتگو</SheetTitle>
-          <SheetDescription className="sr-only">نوع گفتگو را انتخاب کنید</SheetDescription>
+          <SheetTitle className="text-lg font-bold">Start a chat</SheetTitle>
+          <SheetDescription className="sr-only">Choose the type of chat</SheetDescription>
         </SheetHeader>
         <div className="grid gap-1 px-2 pb-[max(env(safe-area-inset-bottom),1rem)]">
           <Option
             icon={<MessageCircle />}
-            title="گفتگوی جدید"
-            description="پیام خصوصی به یکی از مخاطبین"
+            title="New chat"
+            description="Private message to a contact"
             onClick={onNewChat}
           />
           <Option
             icon={<Users />}
-            title="گروه جدید"
-            description="گفتگو با چند نفر از مخاطبین"
+            title="New group"
+            description="Chat with several contacts"
             href="/chats/new-group"
             onClick={() => onOpenChange(false)}
           />

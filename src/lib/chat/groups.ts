@@ -3,7 +3,7 @@ import "server-only";
 import type { MemberRole, Prisma } from "@/generated/prisma/client";
 import { messageSelect, toChatMember, toChatMessage, conversationSelect } from "@/lib/chat/queries";
 import { db } from "@/lib/db";
-import { toFaDigits } from "@/lib/digits";
+import { formatNumber } from "@/lib/numbers";
 import type { ChatMember, ChatMessage, GroupInfo, SystemMeta } from "@/lib/types/chat";
 import { MAX_GROUP_MEMBERS } from "@/lib/validations/groups";
 import { userIdSchema } from "@/lib/validations/contacts";
@@ -16,8 +16,8 @@ export class GroupError extends Error {}
 export type Actor = { id: string; name: string };
 type Tx = Prisma.TransactionClient;
 
-const NOT_FOUND = "گروه پیدا نشد";
-const ADMINS_ONLY = "فقط ادمین‌های گروه می‌توانند این کار را انجام دهند";
+const NOT_FOUND = "Group not found";
+const ADMINS_ONLY = "Only group admins can do this";
 
 async function membershipOf(tx: Tx, conversationId: string, userId: string) {
   if (!userIdSchema.safeParse(conversationId).success) throw new GroupError(NOT_FOUND);
@@ -59,9 +59,9 @@ async function namesOf(tx: Tx, userIds: string[]) {
 
 // Only the actor's contacts can be added.
 async function assertContacts(tx: Tx, actorId: string, userIds: string[]) {
-  if (userIds.includes(actorId)) throw new GroupError("نمی‌توانید خودتان را اضافه کنید");
+  if (userIds.includes(actorId)) throw new GroupError("You can't add yourself");
   const count = await tx.contact.count({ where: { ownerId: actorId, contactId: { in: userIds } } });
-  if (count !== userIds.length) throw new GroupError("فقط مخاطبین شما را می‌توان به گروه اضافه کرد");
+  if (count !== userIds.length) throw new GroupError("Only your contacts can be added to the group");
 }
 
 export async function createGroup(actor: Actor, title: string, memberIds: string[]) {
@@ -107,9 +107,9 @@ export async function addMembers(actor: Actor, conversationId: string, userIds: 
     });
     const existingIds = new Set(existing.map((m) => m.userId));
     const newIds = userIds.filter((id) => !existingIds.has(id));
-    if (newIds.length === 0) throw new GroupError("این افراد از قبل عضو گروه هستند");
+    if (newIds.length === 0) throw new GroupError("These people are already members of the group");
     if (existing.length + newIds.length > MAX_GROUP_MEMBERS) {
-      throw new GroupError(`گروه حداکثر ${toFaDigits(MAX_GROUP_MEMBERS)} عضو دارد`);
+      throw new GroupError(`A group can have up to ${formatNumber(MAX_GROUP_MEMBERS)} members`);
     }
     await tx.conversationMember.createMany({
       data: newIds.map((userId) => ({ conversationId, userId, role: "MEMBER" as const })),
@@ -126,13 +126,13 @@ export async function addMembers(actor: Actor, conversationId: string, userIds: 
 export async function removeMember(actor: Actor, conversationId: string, userId: string) {
   return db.$transaction(async (tx) => {
     await requireAdmin(tx, conversationId, actor.id);
-    if (userId === actor.id) throw new GroupError("برای خروج از «ترک گروه» استفاده کنید");
+    if (userId === actor.id) throw new GroupError("Use \"Leave group\" to leave");
     const target = await tx.conversationMember.findUnique({
       where: { conversationId_userId: { conversationId, userId } },
       select: { role: true },
     });
-    if (!target) throw new GroupError("این کاربر عضو گروه نیست");
-    if (target.role === "ADMIN") throw new GroupError("ابتدا ادمینی این کاربر را بردارید");
+    if (!target) throw new GroupError("This user isn't a member of the group");
+    if (target.role === "ADMIN") throw new GroupError("Remove this user as admin first");
     await tx.conversationMember.delete({ where: { conversationId_userId: { conversationId, userId } } });
     const message = await recordEvent(tx, conversationId, actor, {
       event: "member_removed",
@@ -188,12 +188,12 @@ export async function leaveGroup(actor: Actor, conversationId: string) {
 export async function setMemberRole(actor: Actor, conversationId: string, userId: string, role: MemberRole) {
   return db.$transaction(async (tx) => {
     await requireAdmin(tx, conversationId, actor.id);
-    if (userId === actor.id) throw new GroupError("نمی‌توانید نقش خودتان را تغییر دهید");
+    if (userId === actor.id) throw new GroupError("You can't change your own role");
     const target = await tx.conversationMember.findUnique({
       where: { conversationId_userId: { conversationId, userId } },
       select: { role: true },
     });
-    if (!target) throw new GroupError("این کاربر عضو گروه نیست");
+    if (!target) throw new GroupError("This user isn't a member of the group");
     if (target.role === role) return { message: null };
     await tx.conversationMember.update({
       where: { conversationId_userId: { conversationId, userId } },
@@ -251,7 +251,7 @@ export async function getGroupInfo(conversationId: string, userId: string): Prom
   const me = conversation.members.find((member) => member.userId === userId);
   return {
     id: conversation.id,
-    title: conversation.title ?? "گروه",
+    title: conversation.title ?? "Group",
     avatarUrl: conversation.avatarUrl,
     createdAt: conversation.createdAt.toISOString(),
     members: conversation.members.map(toChatMember),
