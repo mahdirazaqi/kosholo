@@ -5,8 +5,8 @@ import { ChangePasswordForm } from "@/components/profile/change-password-form";
 import { EditNameForm } from "@/components/profile/edit-name-form";
 import { LogoutButton } from "@/components/profile/logout-button";
 import { PageHeader } from "@/components/page-header";
-import { setProfilePhoto } from "@/app/(app)/photo-actions";
-import { AvatarEditor } from "@/components/avatar-editor";
+import { ProfilePhotosSection } from "@/components/profile/profile-photos-section";
+import { getProfilePhotos } from "@/lib/profile-photos";
 import { requireUser } from "@/lib/auth";
 import Link from "next/link";
 import { Bookmark, ChevronRight } from "lucide-react";
@@ -19,11 +19,11 @@ export default function ProfilePage() {
   return (
     <>
       <PageHeader title="Profile" />
-      <div className="space-y-4 px-4 py-6">
-        {/* Reading the session is request-time data, so it streams in. */}
-        <Suspense fallback={<ProfileSkeleton />}>
-          <ProfileContent />
-        </Suspense>
+      {/* Reading the session is request-time data, so it streams in. */}
+      <Suspense fallback={<ProfileSkeleton />}>
+        <ProfileContent />
+      </Suspense>
+      <div className="space-y-4 px-4 pb-6">
         {/* No prefetch: opening it creates the conversation the first time. */}
         <Link
           href="/saved"
@@ -47,30 +47,22 @@ export default function ProfilePage() {
 
 async function ProfileContent() {
   const user = await requireUser();
+  const photos = (await getProfilePhotos(user.id, user.id)) ?? [];
 
   return (
-    <>
-        <div className="flex flex-col items-center gap-3 rounded-2xl border bg-card px-5 py-7 text-center">
-          <AvatarEditor entity={user} onSave={setProfilePhoto} label="profile photo" />
-          <div className="space-y-1">
-            <h1 className="text-lg font-bold">{user.name}</h1>
-            <p dir="ltr" className="text-sm text-muted-foreground">
-              @{user.username}
-            </p>
-            <p dir="ltr" className="text-sm text-muted-foreground">
-              {user.email}
-            </p>
-          </div>
-        </div>
+    <ProfilePhotosSection user={user} initialPhotos={photos}>
+      <p dir="ltr" className="text-center text-sm text-muted-foreground">
+        {user.email}
+      </p>
 
-        <Section title="Edit name" description="The name others see in chats.">
-          <EditNameForm name={user.name} />
-        </Section>
+      <Section title="Edit name" description="The name others see in chats.">
+        <EditNameForm name={user.name} />
+      </Section>
 
-        <Section title="Change password" description="The new password must be at least 8 characters.">
-          <ChangePasswordForm />
-        </Section>
-    </>
+      <Section title="Change password" description="The new password must be at least 8 characters.">
+        <ChangePasswordForm />
+      </Section>
+    </ProfilePhotosSection>
   );
 }
 

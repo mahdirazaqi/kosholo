@@ -41,6 +41,8 @@ type RealtimeState = {
   // Forwards waiting in a conversation's composer (single-target forwarding),
   // per target conversation. Kept across navigation; lost on reload.
   pendingForwards: Record<string, PendingForward>;
+  // Bumped when a user's profile photo gallery changed (open galleries refetch).
+  photosVersions: Record<string, number>;
   // Live photo changes, keyed by user id or group conversation id.
   avatars: Record<string, string | null>;
 };
@@ -54,6 +56,7 @@ export const useRealtimeStore = create<RealtimeState>(() => ({
   typing: {},
   presence: {},
   pendingForwards: {},
+  photosVersions: {},
   avatars: {},
 }));
 
@@ -321,6 +324,10 @@ export function setTyping(conversationId: string, userId: string, name: string |
 }
 
 // ---- Avatars (user and group photos) ----
+
+export function bumpPhotosVersion(userId: string, version: number) {
+  set({ photosVersions: { ...get().photosVersions, [userId]: version } });
+}
 
 export function setAvatarOverride(id: string, avatarUrl: string | null) {
   set({ avatars: { ...get().avatars, [id]: avatarUrl } });

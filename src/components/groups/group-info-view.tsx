@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, MessageCircle, Pencil, ShieldCheck, ShieldOff, UserMinus, UserPlus, X } from "lucide-react";
+import { Check, Image as ImageIcon, Loader2, MessageCircle, Pencil, ShieldCheck, ShieldOff, UserMinus, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { startDirectConversation } from "@/app/(app)/(tabs)/contacts/actions";
 import {
@@ -21,6 +21,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MemberPicker } from "@/components/groups/member-picker";
 import { PresenceText } from "@/components/groups/presence-text";
 import { PageHeader } from "@/components/page-header";
+import { useMemberPhotos } from "@/components/profile/member-photos";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +63,7 @@ export function GroupInfoView({
   const [toAdd, setToAdd] = useState<string[]>([]);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [pending, startTransition] = useTransition();
+  const memberPhotos = useMemberPhotos();
 
   const me = info.members.find((m) => m.id === currentUserId);
   const isAdmin = me?.role === "ADMIN";
@@ -295,6 +297,11 @@ export function GroupInfoView({
               </SheetHeader>
               <div className="grid gap-1 px-2 pb-[max(env(safe-area-inset-bottom),1rem)]">
                 <SheetAction
+                  icon={<ImageIcon />}
+                  label="View photos"
+                  onClick={() => void memberPhotos.open(selectedMember.id)}
+                />
+                <SheetAction
                   icon={<MessageCircle />}
                   label="Send message"
                   onClick={() =>
@@ -364,6 +371,8 @@ export function GroupInfoView({
           </div>
         </BottomSheetContent>
       </Sheet>
+
+      {memberPhotos.element}
 
       {confirmCopy && (
         <ConfirmDialog

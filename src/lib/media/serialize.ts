@@ -15,6 +15,13 @@ export function avatarThumbUrl(avatarUrl: string | null | undefined) {
   return id ? mediaThumbUrl(id) : (avatarUrl ?? null);
 }
 
+// The 640px profile-photo size (profile header, big avatars). Group photos have
+// no medium size: /medium falls back to their original.
+export function avatarMediumUrl(avatarUrl: string | null | undefined) {
+  const id = uploadIdFromUrl(avatarUrl);
+  return id ? `/api/media/${id}/medium` : (avatarUrl ?? null);
+}
+
 type UploadRow = {
   id: string;
   kind: UploadKind;

@@ -4,7 +4,7 @@ import { copyFile, rm, stat } from "node:fs/promises";
 import { fileTypeFromFile } from "file-type";
 import sharp from "sharp";
 import { ffmpeg, FfmpegTimeoutError, ffprobe } from "@/lib/media/ffmpeg";
-import { ACCEPTED_MIME, FILE_THUMB_MAX_SOURCE, MAX_VOICE_SECONDS, MEDIA_ERRORS, WAVEFORM_BARS } from "@/lib/media/limits";
+import { ACCEPTED_MIME, FILE_THUMB_MAX_SOURCE, PROFILE_PHOTO_FULL, PROFILE_PHOTO_MEDIUM, PROFILE_PHOTO_THUMB, MAX_VOICE_SECONDS, MEDIA_ERRORS, WAVEFORM_BARS } from "@/lib/media/limits";
 import { newFilePath, removeFiles, tempFilePath } from "@/lib/media/storage";
 import type { UploadKind } from "@/lib/types/chat";
 import { logger } from "@/lib/logger";
@@ -14,6 +14,7 @@ export class MediaError extends Error {}
 export type ProcessedUpload = {
   path: string;
   thumbPath: string | null;
+  mediumPath?: string | null; // profile photos only
   mime: string;
   size: number;
   width: number | null;
@@ -195,6 +196,41 @@ export async function processAvatar(tmp: string, id: string): Promise<ProcessedU
     height: info.height,
     duration: null,
     placeholder: await placeholderFrom(out.absolute),
+    waveform: null,
+  };
+}
+
+// Profile photo: square (the client crops, this centers if it didn't), EXIF
+// auto-rotated and stripped, three WebP sizes (1280 full / 640 header / 160
+// thumb) and a tiny blur placeholder. JPEG/PNG/WebP only (no animated GIFs).
+export async function processProfilePhoto(tmp: string, id: string): Promise<ProcessedUpload> {
+  const type = await detectType(tmp, "AVATAR");
+  if (type.mime === "image/gif") throw new MediaError(MEDIA_ERRORS.unsupported);
+  const meta = await sharp(tmp).rotate().metadata();
+  const shortSide = Math.min(meta.width ?? PROFILE_PHOTO_FULL, meta.height ?? PROFILE_PHOTO_FULL);
+  const full = Math.min(PROFILE_PHOTO_FULL, shortSide);
+  const make = async (side: number, suffix: string, quality: number) => {
+    const out = await newFilePath("webp", id, suffix);
+    const info = await sharp(tmp)
+      .rotate() // applies EXIF orientation; metadata is dropped on output
+      .resize(side, side, { fit: "cover", position: "centre" })
+      .webp({ quality })
+      .toFile(out.absolute);
+    return { out, info };
+  };
+  const main = await make(full, "", 84);
+  const medium = await make(Math.min(PROFILE_PHOTO_MEDIUM, full), ".medium", 80);
+  const thumb = await make(Math.min(PROFILE_PHOTO_THUMB, full), ".thumb", 75);
+  return {
+    path: main.out.relative,
+    mediumPath: medium.out.relative,
+    thumbPath: thumb.out.relative,
+    mime: "image/webp",
+    size: main.info.size,
+    width: main.info.width,
+    height: main.info.height,
+    duration: null,
+    placeholder: await placeholderFrom(thumb.out.absolute),
     waveform: null,
   };
 }

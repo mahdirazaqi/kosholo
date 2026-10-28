@@ -56,6 +56,8 @@ export type UserUpdatedPayload = {
   userId: string;
   name?: string;
   avatarUrl?: string | null;
+  // Profile photos changed: clients showing that user's gallery refetch it.
+  photosVersion?: number;
 };
 
 // To a user who is no longer a member (removed, left, or the group was deleted).

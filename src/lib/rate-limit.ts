@@ -18,6 +18,7 @@ export const LIMITS = {
   registrations: { max: 5, windowMs: 60 * 60 * 1000 },
   userLookups: { max: 30, windowMs: 10 * 60 * 1000 },
   messages: { max: 60, windowMs: 60 * 1000 },
+  profilePhotos: { max: 60, windowMs: 10 * 60 * 1000 },
   forwards: { max: 30, windowMs: 10 * 60 * 1000 },
   saves: { max: 30, windowMs: 60 * 1000 },
   edits: { max: 60, windowMs: 10 * 60 * 1000 },

@@ -6,6 +6,7 @@ import {
   Check,
   Copy,
   Crown,
+  Image as ImageIcon,
   Link2,
   Loader2,
   Megaphone,
@@ -40,6 +41,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MemberPicker } from "@/components/groups/member-picker";
 import { LinkifiedText } from "@/components/linkified-text";
 import { PageHeader } from "@/components/page-header";
+import { useMemberPhotos } from "@/components/profile/member-photos";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -83,6 +85,7 @@ export function ChannelInfoView({ initialInfo, contacts }: { initialInfo: Channe
   const timeZone = useTimeZone();
   const [info, setInfo] = useState(initialInfo);
   const [pending, startTransition] = useTransition();
+  const memberPhotos = useMemberPhotos();
   const isAdmin = info.myRole === "ADMIN";
 
   // ---- Subscribers (admins): searchable, paged ----
@@ -508,6 +511,7 @@ export function ChannelInfoView({ initialInfo, contacts }: { initialInfo: Channe
                 </SheetDescription>
               </SheetHeader>
               <div className="grid gap-1 px-2 pb-[max(env(safe-area-inset-bottom),1rem)]">
+                <SheetAction icon={<ImageIcon />} label="View photos" onClick={() => void memberPhotos.open(selected.id)} />
                 {selectedActions.includes("promote") && (
                   <SheetAction icon={<ShieldCheck />} label="Make admin" onClick={() => setConfirm({ kind: "promote", member: selected })} />
                 )}
@@ -555,6 +559,8 @@ export function ChannelInfoView({ initialInfo, contacts }: { initialInfo: Channe
           </div>
         </BottomSheetContent>
       </Sheet>
+
+      {memberPhotos.element}
 
       {confirmCopy && (
         <ConfirmDialog

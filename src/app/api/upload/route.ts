@@ -5,10 +5,11 @@ import { Readable } from "node:stream";
 import busboy from "busboy";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { MEDIA_ERRORS, UPLOAD_LIMITS, UPLOAD_RATE } from "@/lib/media/limits";
+import { MEDIA_ERRORS, PROFILE_PHOTO_MAX_BYTES, UPLOAD_LIMITS, UPLOAD_RATE } from "@/lib/media/limits";
 import {
   MediaError,
   processAvatar,
+  processProfilePhoto,
   processImage,
   processVideo,
   processVoice,
@@ -38,7 +39,9 @@ export async function POST(request: Request) {
   // The kind is in the query too, so oversized bodies are rejected before reading them.
   const kind = new URL(request.url).searchParams.get("kind") as UploadKind | null;
   if (!kind || !KINDS.includes(kind)) return fail(400, MEDIA_ERRORS.unsupported);
-  const limit = UPLOAD_LIMITS[kind];
+  // AVATAR + profile=1: a profile photo (three sizes, up to 10MB, for the gallery).
+  const profile = kind === "AVATAR" && new URL(request.url).searchParams.get("profile") === "1";
+  const limit = profile ? PROFILE_PHOTO_MAX_BYTES : UPLOAD_LIMITS[kind];
   const length = Number(request.headers.get("content-length") ?? 0);
   if (length > limit + MULTIPART_OVERHEAD) return fail(413, MEDIA_ERRORS.tooLarge(kind));
 
@@ -63,7 +66,9 @@ export async function POST(request: Request) {
           ? await processVideo(tmp, id)
           : kind === "VOICE"
             ? await processVoice(tmp, id, fields.get("waveform") ?? null)
-            : await processAvatar(tmp, id);
+            : profile
+              ? await processProfilePhoto(tmp, id)
+              : await processAvatar(tmp, id);
 
     const upload = await db.upload.create({
       data: { id, ownerId: user.id, kind, ...processed, waveform: processed.waveform ?? undefined },
@@ -71,7 +76,7 @@ export async function POST(request: Request) {
     });
     return Response.json({ ok: true, media: toChatMedia(upload) }, { status: 201 });
   } catch (error) {
-    if (processed) await removeFiles(processed.path, processed.thumbPath);
+    if (processed) await removeFiles(processed.path, processed.thumbPath, processed.mediumPath);
     if (error instanceof MediaError) return fail(422, error.message);
     logger.error("upload", "failed", error);
     return fail(500, MEDIA_ERRORS.processing);

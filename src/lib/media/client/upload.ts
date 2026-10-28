@@ -16,6 +16,7 @@ export function uploadFile(
     onUploaded?: () => void;
     extra?: Record<string, string>;
     filename?: string;
+    profile?: boolean; // AVATAR uploads: a profile photo (gallery sizes, up to 10MB)
   } = {},
 ): Promise<ChatMedia> {
   return new Promise((resolve, reject) => {
@@ -25,7 +26,7 @@ export function uploadFile(
     for (const [key, value] of Object.entries(options.extra ?? {})) form.append(key, value);
     form.append("file", file, options.filename ?? (file instanceof File ? file.name : "file"));
 
-    xhr.open("POST", `/api/upload?kind=${kind}`);
+    xhr.open("POST", `/api/upload?kind=${kind}${options.profile ? "&profile=1" : ""}`);
     xhr.responseType = "json";
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) options.onProgress?.(event.loaded / event.total);

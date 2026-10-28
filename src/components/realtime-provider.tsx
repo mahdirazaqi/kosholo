@@ -22,6 +22,7 @@ import type {
 } from "@/lib/realtime/events";
 import {
   applyEditToList,
+  bumpPhotosVersion,
   applyMessageToList,
   countIncomingUnread,
   refreshUnreadSummary,
@@ -114,8 +115,9 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     // Chat-list preview only: no reordering, no unread change, no sound.
     const onEdited = ({ conversationId, messageId, content }: MessageEditedPayload) =>
       applyEditToList(conversationId, messageId, content);
-    const onUserUpdated = ({ userId, avatarUrl }: UserUpdatedPayload) => {
+    const onUserUpdated = ({ userId, avatarUrl, photosVersion }: UserUpdatedPayload) => {
       if (avatarUrl !== undefined) setAvatarOverride(userId, avatarUrl);
+      if (photosVersion !== undefined) bumpPhotosVersion(userId, photosVersion);
     };
     const onRemoved = ({ conversationId }: ConversationRemovedPayload) => removeConversation(conversationId);
     // Deletions change the row's preview/time/unread, or remove it.
@@ -185,7 +187,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("keydown", unlockAudio);
       socket.disconnect();
       clearBadges();
-      useRealtimeStore.setState({ connected: false, conversations: null, unread: null, pendingForwards: {}, typing: {}, presence: {}, avatars: {}, me: null });
+      useRealtimeStore.setState({ connected: false, conversations: null, unread: null, pendingForwards: {}, photosVersions: {}, typing: {}, presence: {}, avatars: {}, me: null });
     };
   }, []);
 

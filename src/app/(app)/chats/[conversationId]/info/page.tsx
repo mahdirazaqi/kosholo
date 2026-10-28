@@ -10,6 +10,7 @@ import { getConversationForMember } from "@/lib/chat/conversations";
 import { getChannelInfo } from "@/lib/chat/channels";
 import { getGroupInfo } from "@/lib/chat/groups";
 import { getContacts } from "@/lib/contacts";
+import { getProfilePhotos } from "@/lib/profile-photos";
 import { db } from "@/lib/db";
 
 export const metadata: Metadata = { title: "Chat info | Kosholo" };
@@ -45,5 +46,6 @@ async function Info({ params }: Pick<PageProps<"/chats/[conversationId]/info">, 
   const other = conversation.otherUser;
   if (!other) notFound();
   const isContact = (await db.contact.count({ where: { ownerId: user.id, contactId: other.id } })) > 0;
-  return <DirectInfoView conversationId={conversation.id} user={other} initialIsContact={isContact} muted={conversation.muted} />;
+  const photos = (await getProfilePhotos(user.id, other.id)) ?? [];
+  return <DirectInfoView conversationId={conversation.id} user={other} initialIsContact={isContact} muted={conversation.muted} initialPhotos={photos} />;
 }

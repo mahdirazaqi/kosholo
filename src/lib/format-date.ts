@@ -105,3 +105,24 @@ export function formatDuration(seconds: number | null | undefined) {
   const s = String(total % 60).padStart(2, "0");
   return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 }
+
+// "just now", "5 minutes ago", "3 days ago", "2 months ago", "1 year ago"
+// (profile photo ages).
+export function formatAge(value: DateInput, now: Date = new Date()) {
+  const seconds = Math.max(0, Math.floor((now.getTime() - toDate(value).getTime()) / 1000));
+  const units: [number, string][] = [
+    [365 * 86400, "year"],
+    [30 * 86400, "month"],
+    [7 * 86400, "week"],
+    [86400, "day"],
+    [3600, "hour"],
+    [60, "minute"],
+  ];
+  for (const [size, unit] of units) {
+    if (seconds >= size) {
+      const count = Math.floor(seconds / size);
+      return `${count} ${unit}${count === 1 ? "" : "s"} ago`;
+    }
+  }
+  return "just now";
+}

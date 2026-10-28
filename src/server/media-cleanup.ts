@@ -27,12 +27,12 @@ export async function cleanupUploads() {
   let deleted = 0;
   for (;;) {
     const batch = await db.upload.findMany({
-      where: { createdAt: { lt: cutoff }, messages: { none: {} }, id: { notIn: [...avatarIds] as string[] } },
-      select: { id: true, path: true, thumbPath: true },
+      where: { createdAt: { lt: cutoff }, messages: { none: {} }, profilePhoto: null, id: { notIn: [...avatarIds] as string[] } },
+      select: { id: true, path: true, thumbPath: true, mediumPath: true },
       take: 200,
     });
     if (batch.length === 0) break;
-    await Promise.all(batch.map((upload) => removeFiles(upload.path, upload.thumbPath)));
+    await Promise.all(batch.map((upload) => removeFiles(upload.path, upload.thumbPath, upload.mediumPath)));
     await db.upload.deleteMany({ where: { id: { in: batch.map((upload) => upload.id) } } });
     deleted += batch.length;
     if (batch.length < 200) break;

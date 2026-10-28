@@ -36,6 +36,13 @@ export const ACCEPTED_MIME: Record<UploadKind, string[]> = {
   FILE: [], // anything
 };
 
+// Profile photos (AVATAR uploads with `profile=1`): JPEG/PNG/WebP, square.
+export const MAX_PROFILE_PHOTOS = 30; // per user
+export const PROFILE_PHOTO_MAX_BYTES = 10 * MB;
+export const PROFILE_PHOTO_FULL = 1280; // viewer
+export const PROFILE_PHOTO_MEDIUM = 640; // profile header
+export const PROFILE_PHOTO_THUMB = 160; // avatars everywhere
+
 export const MAX_FILES_PER_SELECTION = 10;
 export const MAX_VOICE_SECONDS = 5 * 60;
 export const MIN_VOICE_SECONDS = 1;

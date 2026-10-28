@@ -3,7 +3,7 @@
 import { Bookmark } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { avatarTint } from "@/lib/colors";
-import { avatarThumbUrl } from "@/lib/media/serialize";
+import { avatarMediumUrl, avatarThumbUrl } from "@/lib/media/serialize";
 import { useRealtimeStore } from "@/lib/realtime/client/store";
 import { cn } from "@/lib/utils";
 
@@ -30,8 +30,8 @@ export function UserAvatar({
   // A photo changed live (user:updated / conversation:updated) wins over props.
   const override = useRealtimeStore((state) => state.avatars[user.id]);
   const avatarUrl = override !== undefined ? override : user.avatarUrl;
-  // 128px thumb for list/bubble sizes; the 512px original for big ones.
-  const src = size === "xl" || size === "2xl" ? avatarUrl : avatarThumbUrl(avatarUrl);
+  // Thumb (160px) for list/bubble sizes; the 640px medium size for big ones.
+  const src = size === "xl" || size === "2xl" ? avatarMediumUrl(avatarUrl) : avatarThumbUrl(avatarUrl);
 
   if (saved) {
     return (

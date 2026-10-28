@@ -57,6 +57,7 @@ model User {
   uploads              Upload[]
   uploadSessions       UploadSession[]
   messageHides         MessageHide[]
+  profilePhotos        ProfilePhoto[]
 
   @@map("users")
 }
@@ -193,6 +194,8 @@ model Upload {
   kind         UploadKind
   path         String // relative to UPLOAD_DIR: yyyy/mm/{uuid}.{ext} (FILE: yyyy/mm/{uuid}, no extension)
   thumbPath    String?    @map("thumb_path")
+  // Profile photos only: the 640px size (full = path 1280, thumb = 160).
+  mediumPath   String?    @map("medium_path")
   // FILE only: the sanitized original name (never used on disk).
   originalName String?    @map("original_name")
   mime         String
@@ -205,7 +208,8 @@ model Upload {
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
 
   owner   User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  messages Message[]
+  messages     Message[]
+  profilePhoto ProfilePhoto?
 
   @@index([createdAt])
   @@map("uploads")
@@ -231,4 +235,21 @@ model UploadSession {
   @@index([ownerId])
   @@index([updatedAt])
   @@map("upload_sessions")
+}
+
+// A user's ordered profile photo gallery. Higher sortKey = earlier; the first
+// is the main photo. User.avatarUrl is a denormalized pointer to the main
+// photo (/api/media/{uploadId}), updated in the same transaction as any change.
+model ProfilePhoto {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  uploadId  String   @unique @map("upload_id") @db.Uuid
+  sortKey   DateTime @map("sort_key") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  upload Upload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@index([userId, sortKey(sort: Desc)])
+  @@map("profile_photos")
 }
