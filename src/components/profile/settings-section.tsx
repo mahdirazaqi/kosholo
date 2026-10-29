@@ -1,26 +1,21 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { Bell, Info, Monitor, Moon, Palette, Sun } from "lucide-react";
-import { useTheme } from "next-themes";
+import Link from "next/link";
+import { Bell, ChevronRight, Info, Palette } from "lucide-react";
 import { AppBadgeSetting } from "@/components/pwa/app-badge-setting";
 import { InstallSettingsRow } from "@/components/pwa/install";
 import { Switch } from "@/components/ui/switch";
+import { useAppearance } from "@/lib/appearance/runtime";
+import { THEMES } from "@/lib/appearance/themes";
 import { playNotificationSound, unlockAudio } from "@/lib/pwa/notification-sound";
 import { updateSettings, useDeviceSettings } from "@/lib/pwa/settings";
-import { cn } from "@/lib/utils";
-
-const THEMES = [
-  { value: "system", label: "System", icon: Monitor },
-  { value: "light", label: "Light", icon: Sun },
-  { value: "dark", label: "Dark", icon: Moon },
-] as const;
 
 const noop = () => () => {};
 
-// Per-device settings (theme via next-themes, the rest in localStorage).
+// Per-device settings (in localStorage) and the link to the appearance page.
 export function SettingsSection({ version }: { version: string }) {
-  const { theme, setTheme } = useTheme();
+  const appearance = useAppearance();
   // The stored theme is only known after mount.
   const mounted = useSyncExternalStore(noop, () => true, () => false);
   const settings = useDeviceSettings();
@@ -31,33 +26,15 @@ export function SettingsSection({ version }: { version: string }) {
         Settings
       </h2>
 
-      <div className="space-y-2">
-        <h3 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <Palette className="size-4" />
-          Appearance
-        </h3>
-        <div role="radiogroup" aria-label="Theme" className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1">
-          {THEMES.map(({ value, label, icon: Icon }) => {
-            const selected = mounted && theme === value;
-            return (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                onClick={() => setTheme(value)}
-                className={cn(
-                  "flex h-11 items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                  selected ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Icon className="size-4" />
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <Link
+        href="/settings/appearance"
+        className="flex min-h-12 items-center gap-3 rounded-xl px-3 text-base hover:bg-muted/60 [&_svg]:size-5 [&_svg]:text-muted-foreground"
+      >
+        <Palette />
+        <span className="flex-1">Appearance</span>
+        <span className="text-sm text-muted-foreground">{THEMES.find((t) => t.id === appearance.theme)?.name}</span>
+        <ChevronRight className="rtl:rotate-180" />
+      </Link>
 
       <div className="space-y-2">
         <h3 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">

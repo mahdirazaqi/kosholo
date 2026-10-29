@@ -65,4 +65,4 @@ export function MediaViewer({
 }
 
 const VIEWER_BUTTON =
-  "flex h-11 items-center gap-2 rounded-full bg-black/60 px-4 text-sm font-medium text-white backdrop-blur hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white";
+  "flex h-11 items-center gap-2 rounded-full bg-viewer/60 px-4 text-sm font-medium text-overlay-foreground backdrop-blur hover:bg-viewer/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-overlay-foreground";

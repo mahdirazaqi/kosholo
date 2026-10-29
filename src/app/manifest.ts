@@ -1,4 +1,8 @@
 import type { MetadataRoute } from "next";
+import { themeColorHex } from "@/lib/appearance/themes";
+
+// A manifest can't follow the chosen theme: it uses the default theme's header colour.
+const DEFAULT_COLOR = themeColorHex("firoozeh", "light");
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -12,8 +16,8 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    theme_color: "#ffffff",
-    background_color: "#ffffff",
+    theme_color: DEFAULT_COLOR,
+    background_color: DEFAULT_COLOR,
     categories: ["social", "communication"],
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },

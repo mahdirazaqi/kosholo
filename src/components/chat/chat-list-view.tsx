@@ -273,7 +273,7 @@ export const ConversationRow = memo(function ConversationRow({
               <time
                 dateTime={conversation.lastMessageAt}
                 suppressHydrationWarning
-                className={cn("shrink-0 text-xs", unreadCount > 0 ? "font-medium text-primary" : "text-muted-foreground")}
+                className={cn("shrink-0 text-xs", unreadCount > 0 ? "font-medium text-link" : "text-muted-foreground")}
               >
                 {formatListTime(conversation.lastMessageAt, timeZone)}
               </time>

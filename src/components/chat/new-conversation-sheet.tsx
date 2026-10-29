@@ -67,7 +67,7 @@ function Option({
     "flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-start transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none active:bg-muted";
   const content = (
     <>
-      <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary [&_svg]:size-5">
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-link [&_svg]:size-5">
         {icon}
       </span>
       <span className="min-w-0 flex-1">

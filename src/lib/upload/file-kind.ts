@@ -29,14 +29,14 @@ export function fileKind(mime: string | null | undefined, name: string | null | 
 }
 
 export const FILE_KIND_STYLE: Record<FileKind, { icon: LucideIcon; className: string }> = {
-  pdf: { icon: FileText, className: "bg-red-500 text-white" },
-  doc: { icon: FileText, className: "bg-blue-500 text-white" },
-  xls: { icon: FileSpreadsheet, className: "bg-emerald-600 text-white" },
-  zip: { icon: FileArchive, className: "bg-amber-500 text-white" },
-  audio: { icon: FileMusic, className: "bg-violet-500 text-white" },
-  video: { icon: FileVideoCamera, className: "bg-pink-500 text-white" },
-  image: { icon: FileImage, className: "bg-sky-500 text-white" },
-  generic: { icon: File, className: "bg-slate-500 text-white" },
+  pdf: { icon: FileText, className: "bg-sender-1 text-card" },
+  doc: { icon: FileText, className: "bg-sender-5 text-card" },
+  xls: { icon: FileSpreadsheet, className: "bg-sender-3 text-card" },
+  zip: { icon: FileArchive, className: "bg-sender-2 text-card" },
+  audio: { icon: FileMusic, className: "bg-sender-6 text-card" },
+  video: { icon: FileVideoCamera, className: "bg-sender-7 text-card" },
+  image: { icon: FileImage, className: "bg-sender-4 text-card" },
+  generic: { icon: File, className: "bg-muted-foreground text-card" },
 };
 
 // Audio the browser can play inline (FILE uploads keep their original format).

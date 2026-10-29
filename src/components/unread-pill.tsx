@@ -21,7 +21,9 @@ export function UnreadPill({
       aria-label={formatCount(count, "unread message")}
       className={cn(
         "flex h-5.5 min-w-5.5 shrink-0 items-center justify-center rounded-full px-1.5 text-xs font-bold motion-safe:animate-in motion-safe:zoom-in-75 motion-safe:duration-150",
-        muted ? "bg-muted-foreground/40 text-background" : "bg-primary text-primary-foreground",
+        muted
+          ? "bg-unread-badge-muted text-unread-badge-muted-foreground"
+          : "bg-unread-badge text-unread-badge-foreground",
         className,
       )}
     >

@@ -33,7 +33,7 @@ export function VideoMedia({
         <video src={`${media.url}#t=0.1`} muted playsInline preload="metadata" className="absolute inset-0 size-full object-cover" />
       )}
       {media.duration !== null && (
-        <span className="absolute start-2 top-2 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white tabular-nums">
+        <span className="absolute start-2 top-2 rounded-full bg-viewer/55 px-2 py-0.5 text-[11px] font-medium text-overlay-foreground tabular-nums">
           {formatDuration(media.duration)}
         </span>
       )}
@@ -46,7 +46,7 @@ export function VideoMedia({
           onClick={onOpen}
           className="absolute inset-0 flex items-center justify-center"
         >
-          <span className="flex size-12 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm">
+          <span className="flex size-12 items-center justify-center rounded-full bg-viewer/55 text-overlay-foreground">
             {/* Playback icons keep their LTR direction (universal media convention). */}
             <Play className="size-6 translate-x-px fill-current" />
           </span>

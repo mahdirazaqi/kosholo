@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { formatNumber } from "@/lib/numbers";
+import { applyRemoteAppearance } from "@/lib/appearance/runtime";
 import { clearBadges, updateAppBadge, updateFavicon } from "@/lib/pwa/badges";
 import { playNotificationSound, unlockAudio } from "@/lib/pwa/notification-sound";
 import { getSettings } from "@/lib/pwa/settings";
@@ -116,7 +117,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     // Chat-list preview only: no reordering, no unread change, no sound.
     const onEdited = ({ conversationId, messageId, content }: MessageEditedPayload) =>
       applyEditToList(conversationId, messageId, content);
-    const onUserUpdated = ({ userId, avatarUrl, photosVersion }: UserUpdatedPayload) => {
+    const onUserUpdated = ({ userId, avatarUrl, photosVersion, appearance }: UserUpdatedPayload) => {
+      if (appearance) applyRemoteAppearance(appearance); // only ever sent to my own rooms
       if (avatarUrl !== undefined) setAvatarOverride(userId, avatarUrl);
       if (photosVersion !== undefined) bumpPhotosVersion(userId, photosVersion);
     };

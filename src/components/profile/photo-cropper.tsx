@@ -56,12 +56,12 @@ export function PhotoCropper({
       <DialogContent
         showCloseButton={false}
         data-allow-zoom
-        className="inset-0 top-0 start-0 flex h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none bg-black p-0 text-white ring-0 rtl:translate-x-0 sm:max-w-none"
+        className="inset-0 top-0 start-0 flex h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none bg-viewer p-0 text-overlay-foreground ring-0 rtl:translate-x-0 sm:max-w-none"
       >
         <DialogTitle className="sr-only">Crop photo</DialogTitle>
         <DialogDescription className="sr-only">Drag and pinch to position the photo inside the circle</DialogDescription>
         <div className="flex items-center justify-between px-3 pt-[max(env(safe-area-inset-top),0.75rem)] pb-2">
-          <Button type="button" variant="ghost" size="icon-lg" aria-label="Cancel" onClick={onCancel} className="size-11 rounded-full text-white hover:bg-white/15">
+          <Button type="button" variant="ghost" size="icon-lg" aria-label="Cancel" onClick={onCancel} className="size-11 rounded-full text-overlay-foreground hover:bg-overlay-foreground/15">
             <X className="size-5" />
           </Button>
           {files.length > 1 && (
@@ -115,7 +115,7 @@ function CropStep({ file, last, onResult }: { file: File; last: boolean; onResul
         />
       </div>
       <div className="grid grid-cols-2 gap-2 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),1rem)]">
-        <Button type="button" variant="outline" size="lg" disabled={busy} onClick={() => void advance(false)} className="h-12 rounded-xl border-white/30 bg-transparent text-base text-white hover:bg-white/10">
+        <Button type="button" variant="outline" size="lg" disabled={busy} onClick={() => void advance(false)} className="h-12 rounded-xl border-overlay-foreground/30 bg-transparent text-base text-overlay-foreground hover:bg-overlay-foreground/10">
           Skip
         </Button>
         <Button type="button" size="lg" disabled={busy || !area} onClick={() => void advance(true)} className="h-12 rounded-xl text-base">

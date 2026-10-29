@@ -46,7 +46,7 @@ export function EdgeSwipeBack() {
         if (dx < 8) return;
         gesture.dragging = true;
         shell.style.transition = "none";
-        shell.style.boxShadow = "0 0 24px rgb(0 0 0 / 0.25)";
+        shell.style.boxShadow = "0 0 24px color-mix(in oklch, var(--viewer) 25%, transparent)";
       }
       shell.style.transform = `translateX(${Math.max(0, dx) * sign}px)`;
     };

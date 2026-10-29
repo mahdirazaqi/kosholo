@@ -10,7 +10,7 @@ export function PresenceText({ userId }: { userId: string }) {
   const presence = useRealtimeStore((state) => state.presence[userId]);
   const now = useNow(60_000);
   const timeZone = useTimeZone();
-  if (presence?.online) return <span className="text-emerald-600 dark:text-emerald-400">online</span>;
+  if (presence?.online) return <span className="text-success">online</span>;
   if (presence?.lastSeenAt) return <>last seen {formatLastSeen(presence.lastSeenAt, timeZone, now)}</>;
   if (presence) return <>offline</>;
   return null;

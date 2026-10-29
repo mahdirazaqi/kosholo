@@ -447,7 +447,7 @@ export function ChannelInfoView({ initialInfo, contacts }: { initialInfo: Channe
                   setToAdd([]);
                   setAddOpen(true);
                 }}
-                className="flex w-full items-center gap-3 px-4 py-2.5 text-start font-medium text-primary transition-colors hover:bg-muted/60"
+                className="flex w-full items-center gap-3 px-4 py-2.5 text-start font-medium text-link transition-colors hover:bg-muted/60"
               >
                 <span className="flex size-11 items-center justify-center rounded-full bg-primary/10">
                   <UserPlus className="size-5" />
@@ -609,13 +609,13 @@ function MemberRow({ member, onOpen, disabled = false }: { member: ChannelMember
           </span>
         </span>
         {member.isOwner ? (
-          <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+          <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-link">
             <Crown className="size-3" />
             owner
           </span>
         ) : (
           member.role === "ADMIN" && (
-            <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">admin</span>
+            <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-link">admin</span>
           )
         )}
       </button>
@@ -717,7 +717,7 @@ function TransferDialog({
                     >
                       <UserAvatar user={admin} size="sm" />
                       <span className="min-w-0 flex-1 truncate font-medium">{admin.name}</span>
-                      {target === admin.id && <Check className="size-5 text-primary" />}
+                      {target === admin.id && <Check className="size-5 text-link" />}
                     </button>
                   </li>
                 ))}

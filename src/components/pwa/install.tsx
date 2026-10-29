@@ -81,7 +81,7 @@ function IosInstallSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
         <ol className="space-y-3 px-4 pb-[max(env(safe-area-inset-bottom),1.25rem)]">
           {steps.map((step, index) => (
             <li key={index} className="flex items-start gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary [&_svg]:size-5">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-link [&_svg]:size-5">
                 {step.icon}
               </span>
               <p className="pt-2 text-sm leading-6">

@@ -30,7 +30,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Main sections"
-      className="shrink-0 border-t bg-background/80 pb-[env(safe-area-inset-bottom)] ps-[env(safe-area-inset-left)] pe-[env(safe-area-inset-right)] backdrop-blur lg:hidden"
+      className="shrink-0 border-t bg-header-bg pb-[env(safe-area-inset-bottom)] ps-[env(safe-area-inset-left)] pe-[env(safe-area-inset-right)] lg:hidden"
     >
       <ul className="grid h-16 grid-cols-3">
         {NAV_TABS.map(({ href, label, icon: Icon, unread }) => {

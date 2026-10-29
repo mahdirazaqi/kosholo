@@ -38,7 +38,7 @@ export function SystemMessage({
       {selecting && onToggleSelect && (
         <SelectToggle selected={selected} onToggle={() => onToggleSelect(message)} />
       )}
-      <p className="max-w-full rounded-full bg-background/85 px-3 py-1 text-center text-xs leading-5 text-muted-foreground shadow-xs ring-1 ring-foreground/5 backdrop-blur">
+      <p className="max-w-full rounded-full bg-service-pill px-3 py-1 text-center text-xs leading-5 text-service-pill-foreground shadow-xs ring-1 ring-foreground/5">
         {systemMessageText(message.meta, currentUserId, memberNames, conversationType)}
       </p>
     </div>

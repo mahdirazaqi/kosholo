@@ -14,6 +14,7 @@
     "db:seed:chat": "tsx scripts/seed-chat.ts",
     "postinstall": "prisma generate",
     "icons": "node scripts/generate-icons.mjs",
+    "check:contrast": "tsx scripts/check-contrast.ts",
     "build:sw": "node scripts/build-sw.mjs",
     "typecheck": "tsc --noEmit && tsc -p src/sw"
   },

@@ -48,7 +48,7 @@ export function VoiceMedia({
           aria-label="Cancel sending"
           className={cn(
             "relative flex size-11 shrink-0 items-center justify-center rounded-full",
-            isMine ? "bg-primary-foreground/20" : "bg-primary/10 text-primary",
+            isMine ? "bg-bubble-out-foreground/20" : "bg-primary/10 text-link",
           )}
         >
           <Loader2 className="absolute size-11 animate-spin opacity-60" strokeWidth={1.5} />
@@ -61,7 +61,7 @@ export function VoiceMedia({
           aria-label={active && audio.playing ? "Pause" : "Play voice message"}
           className={cn(
             "flex size-11 shrink-0 items-center justify-center rounded-full transition-colors",
-            isMine ? "bg-primary-foreground text-primary" : "bg-primary text-primary-foreground",
+            isMine ? "bg-bubble-out-foreground text-bubble-out" : "bg-primary text-primary-foreground",
           )}
         >
           {active && audio.playing ? (
@@ -105,10 +105,10 @@ export function VoiceMedia({
                 "w-[3px] shrink-0 rounded-full transition-colors",
                 index / bars.length < progress
                   ? isMine
-                    ? "bg-primary-foreground"
+                    ? "bg-bubble-out-foreground"
                     : "bg-primary"
                   : isMine
-                    ? "bg-primary-foreground/40"
+                    ? "bg-bubble-out-foreground/40"
                     : "bg-foreground/25",
               )}
               style={{ height: `${Math.max(12, value * 100)}%` }}

@@ -1,12 +1,17 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { AppearanceWatcher } from "@/components/appearance/appearance-watcher";
 import { NativeBehaviors } from "@/components/native-behaviors";
 import { ServiceWorkerRegistration } from "@/components/pwa/service-worker";
 import { ThemeProvider } from "@/components/theme-provider";
+import { bootScript } from "@/lib/appearance/boot";
+import { themeColorHex, themesCss } from "@/lib/appearance/themes";
+import { wallpapersCss } from "@/lib/appearance/wallpapers";
 import { DirectionProvider } from "@/components/ui/direction";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 import "./native.css";
+import "./appearance.css";
 
 // UI text uses the system font. Vazirmatn only covers Arabic-script characters
 // (Persian/Arabic messages and names), so the browser downloads it only when
@@ -55,11 +60,14 @@ export const viewport: Viewport = {
   // Android/Chrome shrink the layout when the keyboard opens, so the chat
   // composer stays visible. iOS is handled by useVisualViewportHeight().
   interactiveWidget: "resizes-content",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
-  ],
 };
+
+// Theme colours and wallpapers are generated from src/lib/appearance and inlined, so
+// they work offline and never wait for a stylesheet. The boot script sets
+// data-theme / data-wallpaper / data-text-size and the theme-color meta before the
+// first paint (see lib/appearance/boot.ts).
+const APPEARANCE_CSS = `${themesCss()}\n${wallpapersCss()}`;
+const BOOT_SCRIPT = bootScript();
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
@@ -69,6 +77,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${vazirmatn.variable} antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        {/* Not the viewport's themeColor: the colour follows the chosen theme and mode, so it is set (and kept in step) by script. */}
+        <meta name="theme-color" content={themeColorHex("firoozeh", "light")} suppressHydrationWarning />
+        <style dangerouslySetInnerHTML={{ __html: APPEARANCE_CSS }} />
+        <script dangerouslySetInnerHTML={{ __html: BOOT_SCRIPT }} />
+      </head>
       <body>
         <ThemeProvider
           attribute="class"
@@ -80,6 +94,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             {/* Pages outside AppShell scroll here, never on the body. */}
             <div id="root-scroll">{children}</div>
             <NativeBehaviors />
+            <AppearanceWatcher />
             <Toaster position="top-center" />
             <ServiceWorkerRegistration />
           </DirectionProvider>

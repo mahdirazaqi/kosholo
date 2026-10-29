@@ -58,6 +58,8 @@ export type UserUpdatedPayload = {
   avatarUrl?: string | null;
   // Profile photos changed: clients showing that user's gallery refetch it.
   photosVersion?: number;
+  // Appearance settings changed: only ever sent to the user's own rooms (other devices).
+  appearance?: { theme: string; wallpaper: string; textSize: number };
 };
 
 // To a user who is no longer a member (removed, left, or the group was deleted).

@@ -192,7 +192,7 @@ function Option({ icon, label, onClick }: { icon: React.ReactNode; label: string
       onClick={onClick}
       className="flex h-14 items-center gap-3 rounded-2xl px-3 text-start text-base transition-colors hover:bg-muted/60 active:bg-muted"
     >
-      <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary [&_svg]:size-5">
+      <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-link [&_svg]:size-5">
         {icon}
       </span>
       {label}

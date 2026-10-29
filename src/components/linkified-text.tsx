@@ -19,7 +19,7 @@ export function LinkifiedText({ text, className }: { text: string; className?: s
               target="_blank"
               rel="noopener noreferrer"
               dir="ltr"
-              className="text-primary underline underline-offset-2 break-all"
+              className="text-link underline underline-offset-2 break-all"
             >
               {url}
             </a>

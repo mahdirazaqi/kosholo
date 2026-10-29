@@ -18,7 +18,7 @@ export function TypingIndicator({
   className?: string;
 }) {
   return (
-    <span className={cn("inline-flex min-w-0 items-center gap-1 text-primary", className)}>
+    <span className={cn("inline-flex min-w-0 items-center gap-1 text-link", className)}>
       <span className="truncate">{label}</span>
       <span aria-hidden className="inline-flex shrink-0 items-end gap-0.5 pb-0.5">
         {[0, 150, 300].map((delay) => (

@@ -188,18 +188,18 @@ export function ProfilePhotoHeader({
           style={{ opacity: "calc(1 - var(--p) * 3)" }}
         >
           {Array.from({ length: segments }, (_, i) => (
-            <span key={i} className={cn("h-0.5 flex-1 rounded-full", i === activeSegment ? "bg-white" : "bg-white/40")} />
+            <span key={i} className={cn("h-0.5 flex-1 rounded-full", i === activeSegment ? "bg-overlay-foreground" : "bg-overlay-foreground/40")} />
           ))}
         </div>
       )}
 
       {/* Name and status over a gradient that turns into a solid bar when collapsed. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0" style={{ height: BAR_HEIGHT * 2 }}>
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" style={{ opacity: "calc(1 - var(--p))" }} />
+        <div className="absolute inset-0 bg-gradient-to-t from-viewer/70 to-transparent" style={{ opacity: "calc(1 - var(--p))" }} />
         <div className="absolute inset-x-0 bottom-0 bg-background" style={{ height: BAR_HEIGHT, opacity: "var(--p)" }} />
         <div
           className="absolute inset-x-0 bottom-0 flex flex-col justify-center px-4"
-          style={{ height: BAR_HEIGHT, color: "color-mix(in oklab, white calc((1 - var(--p)) * 100%), var(--foreground))" }}
+          style={{ height: BAR_HEIGHT, color: "color-mix(in oklab, var(--overlay-foreground) calc((1 - var(--p)) * 100%), var(--foreground))" }}
         >
           <p dir="auto" className="truncate text-xl leading-tight font-bold">
             {user.name}

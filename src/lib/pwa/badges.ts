@@ -95,9 +95,10 @@ async function applyFavicon(total: number) {
     const cy = radius;
     context.beginPath();
     context.arc(cx, cy, radius, 0, Math.PI * 2);
-    context.fillStyle = "#ef4444";
+    const styles = getComputedStyle(document.documentElement);
+    context.fillStyle = styles.getPropertyValue("--destructive").trim() || context.fillStyle;
     context.fill();
-    context.fillStyle = "#ffffff";
+    context.fillStyle = styles.getPropertyValue("--destructive-foreground").trim() || context.fillStyle;
     context.font = `bold ${text.length > 2 ? 22 : 30}px sans-serif`;
     context.textAlign = "center";
     context.textBaseline = "middle";

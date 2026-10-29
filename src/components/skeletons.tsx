@@ -1,3 +1,4 @@
+import { Wallpaper } from "@/lib/appearance/wallpapers";
 import { BackButton } from "@/components/back-button";
 import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -99,11 +100,12 @@ export function ChatSkeleton() {
           </span>
         }
       />
-      <div className="chat-bg flex min-h-0 flex-1 flex-col justify-end gap-2 overflow-hidden px-3 pb-3" aria-hidden>
+      <div className="relative flex min-h-0 flex-1 flex-col justify-end gap-2 overflow-hidden px-3 pb-3" aria-hidden>
+        <Wallpaper />
         {BUBBLES.map((bubble, index) => (
           <Skeleton
             key={index}
-            className={cn("h-10 rounded-2xl", bubble.width, bubble.mine ? "self-end" : "self-start")}
+            className={cn("relative h-10 rounded-2xl", bubble.width, bubble.mine ? "self-end" : "self-start")}
           />
         ))}
       </div>

@@ -45,7 +45,7 @@ export function MemberPicker({
                 type="button"
                 onClick={() => onToggle(user.id)}
                 aria-label={`Remove ${user.name}`}
-                className="flex h-9 animate-in items-center gap-1.5 rounded-full bg-primary/10 ps-1 pe-2.5 text-sm font-medium text-primary zoom-in-95 duration-150 hover:bg-primary/15"
+                className="flex h-9 animate-in items-center gap-1.5 rounded-full bg-primary/10 ps-1 pe-2.5 text-sm font-medium text-link zoom-in-95 duration-150 hover:bg-primary/15"
               >
                 <UserAvatar user={user} size="xs" />
                 {firstName(user.name)}

@@ -153,16 +153,16 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   }
 
   return (
-    <div className="shrink-0 border-t bg-background/95 pb-[max(env(safe-area-inset-bottom),0.5rem)] backdrop-blur">
+    <div className="shrink-0 border-t bg-header-bg pb-[max(env(safe-area-inset-bottom),0.5rem)]">
       {editing && (
         <div className="flex animate-in items-center gap-3 px-3 pt-2 fade-in-0 slide-in-from-bottom-1 duration-150">
-          <Pencil className="size-5 shrink-0 text-primary" />
+          <Pencil className="size-5 shrink-0 text-link" />
           {editing.media?.thumbUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img draggable={false} src={editing.media.thumbUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" />
           )}
           <div className="min-w-0 flex-1 border-s-2 border-primary ps-2">
-            <p className="truncate text-xs font-semibold text-primary">{isCaption ? "Edit caption" : "Edit message"}</p>
+            <p className="truncate text-xs font-semibold text-link">{isCaption ? "Edit caption" : "Edit message"}</p>
             <p dir="auto" className="truncate text-sm text-muted-foreground">
               {previewText({
                 ...editing,
@@ -192,14 +192,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
       {replyTo && (
         <div className="flex animate-in items-center gap-3 px-3 pt-2 fade-in-0 slide-in-from-bottom-1 duration-150">
-          <Reply className="size-5 shrink-0 text-primary" />
+          <Reply className="size-5 shrink-0 text-link" />
           {replyTo.location && <LocationThumb location={replyTo.location} className="size-10 shrink-0 rounded-md" />}
           {replyTo.media?.thumbUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img draggable={false} src={replyTo.media.thumbUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" />
           )}
           <div className="min-w-0 flex-1 border-s-2 border-primary ps-2">
-            <p className="truncate text-xs font-semibold text-primary">Reply to {replyTo.sender.name}</p>
+            <p className="truncate text-xs font-semibold text-link">Reply to {replyTo.sender.name}</p>
             <p dir="auto" className="truncate text-sm text-muted-foreground">
               {previewText({
                 ...replyTo,
@@ -278,7 +278,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               submit();
             }
           }}
-          className="max-h-[140px] min-h-11 flex-1 resize-none overflow-y-hidden rounded-3xl border border-input bg-muted/40 px-4 py-2.5 text-base leading-6 outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 dark:bg-input/30"
+          data-message-text
+          className="max-h-[140px] min-h-11 flex-1 resize-none overflow-y-hidden rounded-3xl border border-input bg-background px-4 py-2.5 outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
         />
 
         {editing ? (
@@ -347,13 +348,13 @@ function ForwardBar({
             aria-label="Forward options"
             className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
-            <Forward className="size-5 shrink-0 text-primary" />
+            <Forward className="size-5 shrink-0 text-link" />
             {messages.length === 1 && first.media?.thumbUrl && (
               // eslint-disable-next-line @next/next/no-img-element
               <img draggable={false} src={first.media.thumbUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" />
             )}
             <span className="min-w-0 flex-1 border-s-2 border-primary ps-2">
-              <span className="block truncate text-xs font-semibold text-primary">
+              <span className="block truncate text-xs font-semibold text-link">
                 {messages.length === 1 ? "Forward message" : `Forward ${formatCount(messages.length, "message")}`}
               </span>
               <span dir="auto" className="block truncate text-sm text-muted-foreground">

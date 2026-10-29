@@ -119,7 +119,7 @@ export function NewChannelFlow({ contacts }: { contacts: PublicUser[] }) {
                 onClick={() => inputRef.current?.click()}
                 disabled={photoProgress !== null}
                 aria-label="Choose a channel photo"
-                className="relative flex size-24 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                className="relative flex size-24 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-link focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
               >
                 {photo ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -127,7 +127,7 @@ export function NewChannelFlow({ contacts }: { contacts: PublicUser[] }) {
                 ) : (
                   <Megaphone className="size-10" />
                 )}
-                <span className="absolute inset-x-0 bottom-0 flex h-8 items-center justify-center bg-black/40 text-white">
+                <span className="absolute inset-x-0 bottom-0 flex h-8 items-center justify-center bg-viewer/40 text-overlay-foreground">
                   {photoProgress !== null ? (
                     <span className="text-xs font-semibold">{formatNumber(Math.round(photoProgress * 100))}%</span>
                   ) : (

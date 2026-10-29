@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { AppearanceSync } from "@/components/appearance/appearance-sync";
 import { CurrentUserBootstrap } from "@/components/current-user-bootstrap";
 import { DesktopSidebar, SidebarListSkeleton } from "@/components/desktop-sidebar";
 import { RealtimeProvider } from "@/components/realtime-provider";
@@ -32,5 +33,10 @@ export default function SignedInLayout({ children }: LayoutProps<"/">) {
 
 async function CurrentUser() {
   const user = await getCurrentUser();
-  return user ? <CurrentUserBootstrap userId={user.id} /> : null;
+  return user ? (
+    <>
+      <CurrentUserBootstrap userId={user.id} />
+      <AppearanceSync userId={user.id} />
+    </>
+  ) : null;
 }

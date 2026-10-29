@@ -47,6 +47,8 @@ model User {
   avatarUrl    String?   @map("avatar_url")
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
   lastSeenAt   DateTime? @map("last_seen_at") @db.Timestamptz
+  // { theme, wallpaper, textSize } (see lib/appearance); null = defaults.
+  appearance   Json?
 
   contacts             Contact[]            @relation("ContactOwner")
   contactOf            Contact[]            @relation("ContactTarget")

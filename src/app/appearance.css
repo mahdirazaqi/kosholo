@@ -1,0 +1,67 @@
+/* Message text size: html[data-text-size] (set by the boot script and the runtime)
+   picks --msg-size; everything else derives from it. UI chrome keeps its size. */
+html {
+  --msg-size: 16px;
+}
+html[data-text-size="1"] { --msg-size: 14px; }
+html[data-text-size="2"] { --msg-size: 16px; }
+html[data-text-size="3"] { --msg-size: 18px; }
+html[data-text-size="4"] { --msg-size: 20px; }
+html {
+  --msg-line: calc(var(--msg-size) * 1.5);
+  --msg-pad-x: calc(var(--msg-size) * 0.75);
+  --msg-pad-y: calc(var(--msg-size) * 0.375);
+  --msg-meta: max(11px, calc(var(--msg-size) * 0.7));
+  --msg-quote: calc(var(--msg-size) * 0.8);
+  --msg-emoji: calc(var(--msg-size) * 3);
+}
+
+/* The composer follows the message size, but never goes below 16px (iOS zoom). */
+textarea[data-message-text] {
+  font-size: max(16px, var(--msg-size));
+  line-height: var(--msg-line);
+}
+
+/* Avatar tints: a soft wash of one of the eight sender colours. */
+.tint-1 { --tint: var(--sender-1); }
+.tint-2 { --tint: var(--sender-2); }
+.tint-3 { --tint: var(--sender-3); }
+.tint-4 { --tint: var(--sender-4); }
+.tint-5 { --tint: var(--sender-5); }
+.tint-6 { --tint: var(--sender-6); }
+.tint-7 { --tint: var(--sender-7); }
+.tint-8 { --tint: var(--sender-8); }
+[class*="tint-"] {
+  background-color: color-mix(in oklch, var(--tint) 16%, transparent);
+  color: var(--tint);
+}
+
+/* Leaflet shapes (colours come from tokens, not from JS). */
+.map-accuracy {
+  stroke: var(--primary);
+  fill: var(--primary);
+  fill-opacity: 0.12;
+  stroke-width: 1;
+}
+.map-dot {
+  stroke: var(--overlay-foreground);
+  stroke-width: 2;
+  fill: var(--primary);
+  fill-opacity: 1;
+}
+.map-pin-body { fill: var(--destructive); stroke: var(--overlay-foreground); stroke-width: 2; }
+.map-pin-dot { fill: var(--overlay-foreground); }
+
+/* Theme swatch (settings): a circle in four parts, primary / outgoing bubble in
+   light (left) and dark (right). The colours come from themesCss(). */
+.swatch {
+  display: grid;
+  grid-template: 1fr 1fr / 1fr 1fr;
+  grid-auto-flow: column;
+  overflow: hidden;
+  border-radius: 9999px;
+}
+.swatch > i:nth-child(1) { background: var(--sw-pl); }
+.swatch > i:nth-child(2) { background: var(--sw-bl); }
+.swatch > i:nth-child(3) { background: var(--sw-pd); }
+.swatch > i:nth-child(4) { background: var(--sw-bd); }

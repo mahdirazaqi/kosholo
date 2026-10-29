@@ -58,7 +58,7 @@ export function FileMedia({
             type="button"
             onClick={onResume}
             aria-label="Resume upload"
-            className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/45 text-white"
+            className="absolute inset-0 flex items-center justify-center rounded-xl bg-viewer/45 text-overlay-foreground"
           >
             <RotateCw className="size-5" />
           </button>
@@ -68,7 +68,7 @@ export function FileMedia({
             type="button"
             onClick={() => (playing ? audioManager.pause() : void audioManager.play(media.url))}
             aria-label={playing ? "Pause" : "Play"}
-            className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/25 text-white"
+            className="absolute inset-0 flex items-center justify-center rounded-xl bg-viewer/25 text-overlay-foreground"
           >
             {playing ? <Pause className="size-5 fill-current" /> : <Play className="size-5 fill-current" />}
           </button>
@@ -79,7 +79,7 @@ export function FileMedia({
         <p dir="auto" title={name} className="truncate text-sm font-medium">
           {shortFileName(name, 32)}
         </p>
-        <p className={cn("truncate text-xs", isMine ? "text-primary-foreground/75" : "text-muted-foreground")}>
+        <p className={cn("truncate text-xs", isMine ? "text-bubble-out-meta" : "text-bubble-in-meta")}>
           <Status local={local} size={media.size} onCancel={onCancel} />
         </p>
       </div>
@@ -94,7 +94,7 @@ export function FileMedia({
           aria-label={`Download ${name}`}
           className={cn(
             "flex size-11 shrink-0 items-center justify-center rounded-full transition-colors",
-            isMine ? "hover:bg-primary-foreground/15" : "text-primary hover:bg-primary/10",
+            isMine ? "hover:bg-bubble-out-foreground/15" : "text-link hover:bg-primary/10",
           )}
         >
           <Download className="size-5" />
@@ -140,7 +140,7 @@ function ProgressRing({ local, onCancel }: { local: LocalUpload; onCancel: () =>
       type="button"
       onClick={onCancel}
       aria-label="Cancel upload"
-      className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/45 text-white"
+      className="absolute inset-0 flex items-center justify-center rounded-xl bg-viewer/45 text-overlay-foreground"
     >
       <svg viewBox="0 0 44 44" className={cn("absolute inset-0.5", spinning ? "animate-spin" : "-rotate-90")}>
         <circle cx="22" cy="22" r={radius} fill="none" stroke="currentColor" strokeOpacity="0.3" strokeWidth="3" />

@@ -1,5 +1,6 @@
 "use client";
 
+import { Wallpaper } from "@/lib/appearance/wallpapers";
 import { forwardRef, Fragment, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { CheckCircle2, ChevronDown, Copy, Bookmark, Download, Forward, Loader2, Pencil, Reply, TextSelect, Trash2 } from "lucide-react";
@@ -121,7 +122,7 @@ function ListHeader({ context }: { context?: ListContext }) {
       ) : context.loadingOlder ? (
         <Loader2 aria-label="Loading" className="size-5 animate-spin text-muted-foreground" />
       ) : !context.hasOlder ? (
-        <span className="rounded-full bg-background/80 px-3 py-1 text-xs text-muted-foreground shadow-xs ring-1 ring-foreground/5">
+        <span className="rounded-full bg-service-pill px-3 py-1 text-xs text-service-pill-foreground shadow-xs ring-1 ring-foreground/5">
           Start of the conversation
         </span>
       ) : null}
@@ -422,9 +423,10 @@ export const MessageList = forwardRef<MessageListHandle, Props>(function Message
 
   return (
     <div ref={frame} className="relative min-h-0 flex-1">
+      <Wallpaper />
       {messages.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center px-8 text-center">
-          <p className="rounded-2xl bg-background/80 px-4 py-3 text-sm leading-6 text-muted-foreground shadow-xs ring-1 ring-foreground/5">
+          <p className="rounded-2xl bg-service-pill px-4 py-3 text-sm leading-6 text-service-pill-foreground shadow-xs ring-1 ring-foreground/5">
             {isChannel ? (isAdmin ? "No posts yet. Publish the first one 📣" : "No posts yet") : "No messages yet. Send the first one 👋"}
           </p>
         </div>
@@ -466,8 +468,7 @@ export const MessageList = forwardRef<MessageListHandle, Props>(function Message
           const active = document.activeElement;
           if (active instanceof HTMLElement && (active.tagName === "TEXTAREA" || active.tagName === "INPUT")) active.blur();
         }}
-        className="chat-bg"
-        style={{ height: "100%", visibility: readyKey === windowKey ? "visible" : "hidden" }}
+        style={{ height: "100%", position: "relative", zIndex: 1, visibility: readyKey === windowKey ? "visible" : "hidden" }}
       />
 
       <Button
@@ -496,14 +497,14 @@ export const MessageList = forwardRef<MessageListHandle, Props>(function Message
         onPointerUp={() => press.current && clearTimeout(press.current)}
         onPointerLeave={() => press.current && clearTimeout(press.current)}
         className={cn(
-          "absolute end-3 bottom-3 h-11 min-w-11 gap-1.5 rounded-full bg-background/95 px-3 shadow-md transition-all duration-200",
+          "absolute end-3 bottom-3 h-11 min-w-11 gap-1.5 rounded-full bg-background px-3 shadow-md transition-all duration-200",
           showJumpButton || unseen > 0
             ? "scale-100 opacity-100"
             : "pointer-events-none scale-75 opacity-0",
         )}
       >
         {jumpCount > 0 && (
-          <span className="text-sm font-medium text-primary">
+          <span className="text-sm font-medium text-link">
             {formatNumber(jumpCount)} new
           </span>
         )}
@@ -683,7 +684,7 @@ function UnreadDivider() {
   return (
     <div data-unread-divider role="separator" className="flex items-center gap-3 px-3 py-2">
       <span className="h-px flex-1 bg-primary/30" />
-      <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Unread messages</span>
+      <span className="rounded-full bg-service-pill px-3 py-1 text-xs font-semibold text-link shadow-xs ring-1 ring-foreground/5">Unread messages</span>
       <span className="h-px flex-1 bg-primary/30" />
     </div>
   );
@@ -695,7 +696,7 @@ function DaySeparator({ date }: { date: string }) {
     <div className="sticky top-1 z-10 flex justify-center py-2">
       <span
         suppressHydrationWarning
-        className="rounded-full bg-background/90 px-3 py-1 text-xs font-medium text-muted-foreground shadow-xs ring-1 ring-foreground/5 backdrop-blur"
+        className="rounded-full bg-service-pill px-3 py-1 text-xs font-medium text-service-pill-foreground shadow-xs ring-1 ring-foreground/5"
       >
         {formatDaySeparator(date, timeZone)}
       </span>

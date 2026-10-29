@@ -36,13 +36,13 @@ export function VoiceControl({ onSend }: { onSend: (recording: VoiceRecording) =
     <>
       {active && (
         <div className="absolute inset-y-0 start-0 end-14 z-10 flex animate-in items-center gap-3 overflow-hidden bg-background ps-3 fade-in-0 duration-150">
-          <span className="size-2.5 shrink-0 animate-pulse rounded-full bg-red-500" aria-hidden />
+          <span className="size-2.5 shrink-0 animate-pulse rounded-full bg-destructive" aria-hidden />
           <span className="w-12 shrink-0 text-sm font-medium tabular-nums" aria-live="off">
             {formatDuration(recorder.elapsed)}
           </span>
           <span dir="ltr" aria-hidden className="flex h-6 min-w-0 flex-1 items-center gap-[2px] overflow-hidden">
             {recorder.levels.map((level, index) => (
-              <span key={index} className="w-[3px] shrink-0 rounded-full bg-red-500/70" style={{ height: `${Math.max(10, level * 100)}%` }} />
+              <span key={index} className="w-[3px] shrink-0 rounded-full bg-destructive/70" style={{ height: `${Math.max(10, level * 100)}%` }} />
             ))}
           </span>
           {locked ? (
@@ -95,7 +95,7 @@ export function VoiceControl({ onSend }: { onSend: (recording: VoiceRecording) =
           aria-label="Record voice message (hold)"
           className={cn(
             "relative z-10 size-11 shrink-0 touch-none rounded-full transition-transform select-none",
-            active && "scale-125 bg-red-500 text-white hover:bg-red-500",
+            active && "scale-125 bg-destructive text-destructive-foreground hover:bg-destructive",
           )}
           onContextMenu={(event) => event.preventDefault()}
           onPointerDown={(event) => {

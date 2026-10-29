@@ -72,7 +72,7 @@ export function AvatarEditor({
           <Camera className="size-4" />
         </span>
         {progress !== null && (
-          <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-sm font-semibold text-white">
+          <span className="absolute inset-0 flex items-center justify-center rounded-full bg-viewer/45 text-sm font-semibold text-overlay-foreground">
             {formatNumber(Math.round(progress * 100))}%
           </span>
         )}

@@ -229,7 +229,7 @@ export function GroupInfoView({
                 setToAdd([]);
                 setAddOpen(true);
               }}
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-start font-medium text-primary transition-colors hover:bg-muted/60"
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-start font-medium text-link transition-colors hover:bg-muted/60"
             >
               <span className="flex size-11 items-center justify-center rounded-full bg-primary/10">
                 <UserPlus className="size-5" />
@@ -267,7 +267,7 @@ export function GroupInfoView({
                     </span>
                   </span>
                   {member.role === "ADMIN" && (
-                    <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                    <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-link">
                       admin
                     </span>
                   )}

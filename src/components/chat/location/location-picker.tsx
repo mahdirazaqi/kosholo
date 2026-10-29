@@ -107,13 +107,13 @@ export default function LocationPicker({
                 <Circle
                   center={[geo.latitude, geo.longitude]}
                   radius={geo.accuracy}
-                  pathOptions={{ color: "#3b82f6", weight: 1, fillOpacity: 0.12 }}
+                  className="map-accuracy"
                   interactive={false}
                 />
                 <CircleMarker
                   center={[geo.latitude, geo.longitude]}
                   radius={7}
-                  pathOptions={{ color: "#fff", weight: 2, fillColor: "#3b82f6", fillOpacity: 1 }}
+                  className="map-dot"
                   interactive={false}
                 />
               </>

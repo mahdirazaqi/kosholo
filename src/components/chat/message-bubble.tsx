@@ -243,15 +243,15 @@ export const MessageBubble = memo(function MessageBubble({
               emojiOnly
                 ? "px-1"
                 : isMine
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "bg-muted text-foreground shadow-xs ring-1 ring-foreground/5",
-              !emojiOnly && (visual ? "p-1" : "px-3 py-1.5"),
+                  ? "bg-bubble-out text-bubble-out-foreground shadow-xs"
+                  : "bg-bubble-in text-bubble-in-foreground shadow-xs ring-1 ring-foreground/5",
+              !emojiOnly && (visual ? "p-1" : "px-[var(--msg-pad-x)] py-[var(--msg-pad-y)]"),
               !emojiOnly && groupEnd && (isMine ? "rounded-ee-md" : "rounded-es-md"),
               !isDesktop && "select-none [-webkit-touch-callout:none]",
             )}
           >
             {isChannel && groupStart && (
-              <p dir="auto" className={cn("mb-0.5 truncate text-sm font-semibold text-primary", visual && "px-2 pt-1")}>
+              <p dir="auto" className={cn("mb-0.5 truncate text-sm font-semibold text-link", visual && "px-2 pt-1")}>
                 {channelTitle}
               </p>
             )}
@@ -270,7 +270,7 @@ export const MessageBubble = memo(function MessageBubble({
                 }}
                 className={cn(
                   "mb-0.5 flex max-w-full items-center gap-1 text-start text-xs font-semibold",
-                  isMine ? "text-primary-foreground" : "text-primary",
+                  isMine ? "text-bubble-out-foreground" : "text-link",
                   visual && "px-2 pt-1",
                 )}
               >
@@ -326,7 +326,7 @@ export const MessageBubble = memo(function MessageBubble({
                 dir="auto"
                 className={cn(
                   "selectable-text break-words whitespace-pre-wrap",
-                  emojiOnly ? "text-5xl leading-tight" : "text-[15px] leading-6",
+                  emojiOnly ? "text-[length:var(--msg-emoji)] leading-tight" : "text-[length:var(--msg-size)] leading-[var(--msg-line)]",
                   visual && "px-2 pt-1",
                 )}
               >
@@ -337,13 +337,13 @@ export const MessageBubble = memo(function MessageBubble({
             {!timeOverlay && (
               <div
                 className={cn(
-                  "flex items-center justify-end gap-1 text-[11px] leading-4",
+                  "flex items-center justify-end gap-1 text-[length:var(--msg-meta)] leading-4",
                   visual && "px-2 pb-0.5",
                   emojiOnly
                     ? "ms-auto mt-0.5 w-fit rounded-full bg-background/80 px-1.5 text-muted-foreground"
                     : isMine
-                      ? "text-primary-foreground/70"
-                      : "text-muted-foreground",
+                      ? "text-bubble-out-meta"
+                      : "text-bubble-in-meta",
                 )}
               >
                 {isChannel && (
@@ -455,7 +455,7 @@ function Stamp({ message }: { message: ChatMessage }) {
 
 function TimeOverlay({ message, isMine, read }: { message: ChatMessage; isMine: boolean; read: boolean }) {
   return (
-    <span className="pointer-events-none absolute end-1.5 bottom-1.5 flex items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-[11px] leading-4 text-white">
+    <span className="pointer-events-none absolute end-1.5 bottom-1.5 flex items-center gap-1 rounded-full bg-viewer/45 px-1.5 py-0.5 text-[11px] leading-4 text-overlay-foreground">
       <Stamp message={message} />
       {isMine && <StatusIcon status={message.status} read={read} />}
     </span>
@@ -480,12 +480,12 @@ function Quote({
   onClick: (messageId: string) => void;
 }) {
   const tone = isMine
-    ? "border-primary-foreground/60 bg-primary-foreground/12"
-    : "border-primary bg-primary/8";
+    ? "border-bubble-out-foreground/60 bg-bubble-out-foreground/10"
+    : "border-link bg-link/8";
 
   if (replyTo === "deleted") {
     return (
-      <div className={cn("mb-1 rounded-lg border-s-[3px] px-2 py-1 text-xs italic opacity-80", tone)}>
+      <div className={cn("mb-1 rounded-lg border-s-[3px] px-2 py-1 text-[length:var(--msg-quote)] italic opacity-80", tone)}>
         Message unavailable
       </div>
     );
@@ -499,7 +499,7 @@ function Quote({
         onClick(replyTo.id);
       }}
       className={cn(
-        "mb-1 flex w-full min-w-0 items-center gap-2 rounded-lg border-s-[3px] px-2 py-1 text-start text-xs transition-opacity hover:opacity-90",
+        "mb-1 flex w-full min-w-0 items-center gap-2 rounded-lg border-s-[3px] px-2 py-1 text-start text-[length:var(--msg-quote)] transition-opacity hover:opacity-90",
         tone,
       )}
     >
@@ -512,7 +512,7 @@ function Quote({
         )
       )}
       <span className="flex min-w-0 flex-1 flex-col items-start">
-        <span className={cn("max-w-full truncate font-semibold", !isMine && "text-primary")}>
+        <span className={cn("max-w-full truncate font-semibold", !isMine && "text-link")}>
           {replyTo.senderName}
         </span>
         <span dir="auto" className="w-full truncate opacity-80">

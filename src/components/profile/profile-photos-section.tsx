@@ -102,7 +102,7 @@ export function ProfilePhotosSection({
                     <button
                       type="button"
                       aria-label={`Options for photo ${index + 1}`}
-                      className="absolute end-0.5 top-0.5 flex size-6 items-center justify-center rounded-full bg-black/55 text-white"
+                      className="absolute end-0.5 top-0.5 flex size-6 items-center justify-center rounded-full bg-viewer/55 text-overlay-foreground"
                     >
                       <EllipsisVertical className="size-3.5" />
                     </button>

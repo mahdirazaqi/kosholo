@@ -10,7 +10,7 @@ export default function VideoPlayer({ target, onClose }: { target: Extract<Viewe
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         showCloseButton={false}
-        className="inset-0 top-0 start-0 flex h-dvh w-full max-w-none translate-x-0 translate-y-0 items-center justify-center rounded-none bg-black p-0 ring-0 rtl:translate-x-0 sm:max-w-none"
+        className="inset-0 top-0 start-0 flex h-dvh w-full max-w-none translate-x-0 translate-y-0 items-center justify-center rounded-none bg-viewer p-0 ring-0 rtl:translate-x-0 sm:max-w-none"
       >
         <DialogTitle className="sr-only">Play video</DialogTitle>
         <video src={target.url} controls autoPlay playsInline className="max-h-full max-w-full" />
@@ -19,7 +19,7 @@ export default function VideoPlayer({ target, onClose }: { target: Extract<Viewe
             href={target.url}
             download="kosholo-video.mp4"
             aria-label="Download"
-            className="flex size-11 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur hover:bg-white/25"
+            className="flex size-11 items-center justify-center rounded-full bg-overlay-foreground/15 text-overlay-foreground backdrop-blur hover:bg-overlay-foreground/25"
           >
             <Download className="size-5" />
           </a>
@@ -27,7 +27,7 @@ export default function VideoPlayer({ target, onClose }: { target: Extract<Viewe
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex size-11 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur hover:bg-white/25"
+            className="flex size-11 items-center justify-center rounded-full bg-overlay-foreground/15 text-overlay-foreground backdrop-blur hover:bg-overlay-foreground/25"
           >
             <X className="size-5" />
           </button>

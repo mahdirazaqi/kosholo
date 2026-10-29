@@ -46,7 +46,7 @@ export function LocationMedia({
           dir="ltr"
           className={cn(
             "flex items-center gap-1 text-xs tabular-nums",
-            isMine ? "text-primary-foreground/75" : "text-muted-foreground",
+            isMine ? "text-bubble-out-meta" : "text-bubble-in-meta",
           )}
         >
           <MapPin className="size-3.5 shrink-0" />
@@ -62,7 +62,7 @@ export function LocationThumb({ location, className }: { location: ChatLocation;
   return (
     <span className={cn("relative block overflow-hidden", className)} aria-hidden>
       <StaticTiles location={location} zoom={Math.max(1, PREVIEW_ZOOM - 1)} scale={0.25} />
-      <span className="absolute start-1/2 top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-500 ring-2 ring-white rtl:translate-x-1/2" />
+      <span className="absolute start-1/2 top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-destructive ring-2 ring-overlay-foreground rtl:translate-x-1/2" />
     </span>
   );
 }

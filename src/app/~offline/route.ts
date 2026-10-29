@@ -1,6 +1,11 @@
 // /~offline: what the service worker shows when a navigation fails offline.
 // Deliberately plain HTML (inline CSS + a tiny script, no React): it must
 // render from the precache alone, without any JS chunk. Public (see proxy.ts).
+// It injects the same theme CSS and boot script as the app, so it shows the
+// chosen theme.
+
+import { bootScript } from "@/lib/appearance/boot";
+import { themesCss } from "@/lib/appearance/themes";
 
 const HTML = `<!doctype html>
 <html lang="en" dir="ltr">
@@ -11,8 +16,9 @@ const HTML = `<!doctype html>
 <title>Offline | Kosholo</title>
 <link rel="icon" href="/favicon.ico">
 <style>
-  :root { --bg: #fff; --fg: #171717; --muted: #737373; --tile: #f5f5f5; --btn: #171717; --btn-fg: #fafafa; color-scheme: light; }
-  :root.dark { --bg: #0a0a0a; --fg: #fafafa; --muted: #a3a3a3; --tile: #262626; --btn: #e5e5e5; --btn-fg: #171717; color-scheme: dark; }
+  ${themesCss()}
+  :root { --bg: var(--background); --fg: var(--foreground); --muted: var(--muted-foreground); --btn: var(--primary); --btn-fg: var(--primary-foreground); color-scheme: light; }
+  :root.dark { color-scheme: dark; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--fg); display: flex; align-items: center; justify-content: center; padding: max(env(safe-area-inset-top), 24px) 24px max(env(safe-area-inset-bottom), 24px); }
@@ -23,8 +29,10 @@ const HTML = `<!doctype html>
   a { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 20px; border-radius: 12px; background: var(--btn); color: var(--btn-fg); font-size: 1rem; font-weight: 500; text-decoration: none; }
   a:focus-visible { outline: 2px solid var(--muted); outline-offset: 2px; }
 </style>
+<meta name="theme-color" content="">
+<script>${bootScript()}</script>
 <script>
-  // Same theme as the app (next-themes stores the choice in localStorage).
+  // The display mode (next-themes stores the choice in localStorage).
   try {
     var t = localStorage.getItem("theme");
     if (t === "dark" || ((!t || t === "system") && matchMedia("(prefers-color-scheme: dark)").matches)) document.documentElement.classList.add("dark");

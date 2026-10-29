@@ -57,21 +57,21 @@ export function ProfilePhotoViewer({
           buttonPrev: () => null,
           buttonNext: () => null,
           controls: () => (
-            <div className="absolute inset-x-0 top-0 z-10 flex items-center gap-2 bg-gradient-to-b from-black/60 to-transparent px-3 pt-[max(env(safe-area-inset-top),0.5rem)] pb-6 text-white">
-              <Button type="button" variant="ghost" size="icon-lg" aria-label="Close" onClick={onClose} className="size-11 rounded-full text-white hover:bg-white/15">
+            <div className="absolute inset-x-0 top-0 z-10 flex items-center gap-2 bg-gradient-to-b from-viewer/60 to-transparent px-3 pt-[max(env(safe-area-inset-top),0.5rem)] pb-6 text-overlay-foreground">
+              <Button type="button" variant="ghost" size="icon-lg" aria-label="Close" onClick={onClose} className="size-11 rounded-full text-overlay-foreground hover:bg-overlay-foreground/15">
                 <X className="size-5" />
               </Button>
               <div className="min-w-0 flex-1">
                 <p aria-live="polite" className="text-sm font-semibold">
                   {formatNumber(index + 1)} of {formatNumber(photos.length)}
                 </p>
-                <p suppressHydrationWarning className="truncate text-xs text-white/75">
+                <p suppressHydrationWarning className="truncate text-xs text-overlay-foreground/75">
                   {formatAge(current.createdAt)}
                 </p>
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="ghost" size="icon-lg" aria-label="Photo options" className="size-11 rounded-full text-white hover:bg-white/15">
+                  <Button type="button" variant="ghost" size="icon-lg" aria-label="Photo options" className="size-11 rounded-full text-overlay-foreground hover:bg-overlay-foreground/15">
                     <EllipsisVertical className="size-5" />
                   </Button>
                 </DropdownMenuTrigger>

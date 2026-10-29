@@ -1178,7 +1178,7 @@ export function ChatView({
             variant="ghost"
             size="lg"
             onClick={toggleMute}
-            className="h-12 w-full gap-2 rounded-xl text-base font-semibold text-primary"
+            className="h-12 w-full gap-2 rounded-xl text-base font-semibold text-link"
           >
             {chat.muted ? <Bell className="size-5" /> : <BellOff className="size-5" />}
             {chat.muted ? "Unmute" : "Mute"}
