@@ -1,7 +1,6 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma } from "@/generated/prisma/client";
 import { requireUser } from "@/lib/auth";
@@ -20,15 +19,12 @@ import {
   changePasswordSchema,
   loginSchema,
   registerSchema,
-  updateProfileSchema,
 } from "@/lib/validations/auth";
-import { logger } from "@/lib/logger";
 
 const BCRYPT_COST = 12;
 const INVALID_CREDENTIALS = "Incorrect email/username or password";
 const EMAIL_TAKEN = "This email is already registered";
 const USERNAME_TAKEN = "This username is already taken";
-const GENERIC_ERROR = "Something went wrong, please try again";
 
 // Compared against when the user doesn't exist, so a failed lookup takes as
 // long as a wrong password and doesn't reveal which accounts exist.
@@ -140,30 +136,6 @@ export async function login(
 export async function logout() {
   await deleteSession();
   redirect("/login");
-}
-
-type ProfileField = "name";
-
-export async function updateProfile(
-  _prev: FormState<ProfileField>,
-  formData: FormData,
-): Promise<FormState<ProfileField>> {
-  const user = await requireUser();
-  const values = formValues(formData, ["name"] as const);
-  const parsed = updateProfileSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) {
-    return { errors: fieldErrors(parsed.error), values };
-  }
-
-  try {
-    await db.user.update({ where: { id: user.id }, data: { name: parsed.data.name } });
-  } catch (error) {
-    logger.error("updateProfile", "failed", error);
-    return { message: GENERIC_ERROR, values };
-  }
-
-  revalidatePath("/profile");
-  return { ok: true, message: "Your name was updated", values: { name: parsed.data.name } };
 }
 
 type PasswordField = "currentPassword" | "newPassword" | "confirmPassword";

@@ -2,16 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MessageCircle, UserRound, Users } from "lucide-react";
+import { MessageCircle, Settings, Users } from "lucide-react";
 import { UnreadPill } from "@/components/unread-pill";
 import { selectTotalUnread, useRealtimeStore } from "@/lib/realtime/client/store";
 import { cn } from "@/lib/utils";
 
 // Shared by the mobile bottom nav and the desktop sidebar tabs.
 export const NAV_TABS = [
-  { href: "/", label: "Chats", icon: MessageCircle, unread: true },
   { href: "/contacts", label: "Contacts", icon: Users, unread: false },
-  { href: "/profile", label: "Profile", icon: UserRound, unread: false },
+  { href: "/", label: "Chats", icon: MessageCircle, unread: true },
+  { href: "/settings", label: "Settings", icon: Settings, unread: false },
 ] as const;
 
 export function isTabActive(href: string, pathname: string) {

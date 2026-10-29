@@ -17,6 +17,8 @@ export const TOKEN_NAMES = [
   "bubble-out", "bubble-out-foreground", "bubble-out-meta", "bubble-in", "bubble-in-foreground", "bubble-in-meta",
   "link", "unread-badge", "unread-badge-foreground", "unread-badge-muted", "unread-badge-muted-foreground",
   "service-pill", "service-pill-foreground",
+  "grouped-bg", "grouped-cell", "grouped-cell-pressed", "grouped-separator",
+  "tile-blue", "tile-sky", "tile-green", "tile-orange", "tile-red", "tile-purple", "tile-gray", "tile-teal", "tile-pink", "tile-yellow", "tile-foreground",
   "sender-1", "sender-2", "sender-3", "sender-4", "sender-5", "sender-6", "sender-7", "sender-8",
 ] as const;
 export type TokenName = (typeof TOKEN_NAMES)[number];
@@ -55,6 +57,30 @@ export const DEFAULT_THEME: ThemeId = "firoozeh";
 const SENDER_HUES = [
   [22, 0.19], [62, 0.13], [150, 0.14], [200, 0.12], [260, 0.19], [300, 0.2], [340, 0.19], [105, 0.12],
 ] as const;
+
+// Icon tile colours of the settings lists: the same in every theme, a touch
+// deeper in dark mode, each with white (tile-foreground) on top.
+const TILES = {
+  "tile-blue": [0.56, 0.19, 255],
+  "tile-sky": [0.62, 0.12, 230],
+  "tile-green": [0.6, 0.16, 150],
+  "tile-orange": [0.63, 0.17, 55],
+  "tile-red": [0.58, 0.22, 25],
+  "tile-purple": [0.54, 0.2, 300],
+  "tile-gray": [0.56, 0.01, 260],
+  "tile-teal": [0.58, 0.1, 190],
+  "tile-pink": [0.6, 0.2, 350],
+  "tile-yellow": [0.64, 0.14, 85],
+} as const;
+
+function tiles(dark: boolean) {
+  return {
+    ...(Object.fromEntries(
+      Object.entries(TILES).map(([name, [l, c, h]]) => [name, [dark ? l - 0.03 : l, c, h] as Oklch]),
+    ) as Pick<Palette, keyof typeof TILES>),
+    "tile-foreground": [0.99, 0, 0] as Oklch,
+  };
+}
 
 function palette(spec: ThemeSpec, mode: Mode): Palette {
   const { hue: h } = spec;
@@ -106,6 +132,11 @@ function palette(spec: ThemeSpec, mode: Mode): Palette {
       "unread-badge-muted-foreground": [0.99, 0.005, h],
       "service-pill": [0.99, 0.006 * n, h, 0.92],
       "service-pill-foreground": light(0.4, 0.035),
+      "grouped-bg": light(0.955, 0.012),
+      "grouped-cell": light(0.998, 0.003),
+      "grouped-cell-pressed": light(0.9, 0.018),
+      "grouped-separator": light(0.88, 0.012),
+      ...tiles(false),
       ...senders,
     };
   }
@@ -145,6 +176,11 @@ function palette(spec: ThemeSpec, mode: Mode): Palette {
     "unread-badge-muted-foreground": [0.97, 0.01, h],
     "service-pill": [0.24, 0.03 * n, h, 0.9],
     "service-pill-foreground": light(0.88, 0.025),
+    "grouped-bg": light(0.125, 0.018),
+    "grouped-cell": light(0.2, 0.024),
+    "grouped-cell-pressed": light(0.27, 0.03),
+    "grouped-separator": light(0.3, 0.025),
+    ...tiles(true),
     ...senders,
   };
 }

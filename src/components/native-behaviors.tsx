@@ -92,7 +92,7 @@ function useOverflowDetector() {
 
 // Navigation depth: tabs and the chat list are 0, a chat is 1, its info page 2.
 function depth(path: string) {
-  if (path === "/" || path === "/contacts" || path === "/profile") return 0;
+  if (path === "/" || path === "/contacts" || path === "/settings") return 0;
   return Math.max(path.split("/").filter(Boolean).length - 1, 0);
 }
 

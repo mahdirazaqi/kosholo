@@ -1,4 +1,15 @@
 // Browser-only helpers.
+import { toast } from "sonner";
+import { getSettings } from "@/lib/pwa/settings";
+
+export const OFFLINE_MESSAGE = "This needs an internet connection";
+
+// Online-only actions call this first: false (and a toast) when the device is offline.
+export function guardOnline() {
+  if (typeof navigator === "undefined" || navigator.onLine) return true;
+  toast.error(OFFLINE_MESSAGE);
+  return false;
+}
 
 // crypto.randomUUID only exists in secure contexts (HTTPS/localhost).
 export function tempId() {
@@ -28,6 +39,7 @@ export async function copyText(text: string) {
 // Feature-detected, and skipped for people who asked for reduced motion.
 export function vibrate(ms = 10) {
   if (typeof navigator === "undefined" || !("vibrate" in navigator)) return;
+  if (!getSettings().haptics) return; // Settings → Notifications → Vibration
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   try {
     navigator.vibrate(ms);

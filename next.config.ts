@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
   // server reads MAX_FILE_SIZE_MB again at runtime and is the authority).
   env: { NEXT_PUBLIC_MAX_FILE_SIZE_MB: process.env.MAX_FILE_SIZE_MB || "2048" },
   partialPrefetching: true,
+  // The old profile page lives in the settings now.
+  async redirects() {
+    return [{ source: "/profile", destination: "/settings", permanent: true }];
+  },
   turbopack: {
     rules: {
       "*.css": {

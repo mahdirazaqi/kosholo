@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Download, PlusSquare, Share, Smartphone, X } from "lucide-react";
 import { BottomSheetContent } from "@/components/bottom-sheet";
+import { ActionRow } from "@/components/settings/settings-row";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { dismissInstallBanner, promptInstall, useInstallState } from "@/lib/pwa/install";
@@ -46,20 +47,13 @@ export function InstallBanner() {
   );
 }
 
-// Permanent settings row (no dismissal).
+// Permanent settings row (no dismissal): only when the app can be installed.
 export function InstallSettingsRow() {
   const { state, install, sheet } = useInstallAction();
   if (!state.available) return null;
   return (
     <>
-      <button
-        type="button"
-        onClick={install}
-        className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-start text-base transition-colors hover:bg-muted [&_svg]:size-5 [&_svg]:text-muted-foreground"
-      >
-        <Download />
-        Install app
-      </button>
+      <ActionRow id="install" label="Install app" icon={Download} tile="purple" onSelect={install} chevron />
       {sheet}
     </>
   );

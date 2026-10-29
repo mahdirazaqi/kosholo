@@ -50,26 +50,16 @@ export function ContactsSkeleton() {
   );
 }
 
-export function ProfileSkeleton() {
+// Settings pages: the grouped background with a couple of placeholder cards.
+export function SettingsPageSkeleton() {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-2xl border bg-card px-5 py-7" aria-hidden>
-      <Skeleton className="size-24 rounded-full" />
-      <Skeleton className="h-5 w-32" />
-      <Skeleton className="h-4 w-24" />
-      <Skeleton className="h-4 w-40" />
-    </div>
-  );
-}
-
-export function ProfilePageSkeleton() {
-  return (
-    <>
-      <PageHeader title="Profile" />
-      <div className="space-y-4 px-4 py-6">
-        <ProfileSkeleton />
-        <Skeleton className="h-48 w-full rounded-2xl" />
+    <div className="min-h-full bg-grouped-bg px-4 pt-14" aria-hidden>
+      <div className="mx-auto max-w-[640px] space-y-6">
+        <Skeleton className="h-9 w-40" />
+        <Skeleton className="h-24 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-xl" />
       </div>
-    </>
+    </div>
   );
 }
 

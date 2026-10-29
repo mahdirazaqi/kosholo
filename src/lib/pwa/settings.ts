@@ -4,10 +4,10 @@ import { useSyncExternalStore } from "react";
 
 // Per-device settings in localStorage (wrapped: storage can be unavailable,
 // e.g. Safari private mode). Theme is handled by next-themes.
-export type DeviceSettings = { sound: boolean };
+export type DeviceSettings = { sound: boolean; haptics: boolean };
 
 const KEY = "kosholo:settings";
-const DEFAULTS: DeviceSettings = { sound: true };
+const DEFAULTS: DeviceSettings = { sound: true, haptics: true };
 
 const listeners = new Set<() => void>();
 let cached: DeviceSettings | null = null;

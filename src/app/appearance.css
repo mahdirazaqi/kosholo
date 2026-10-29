@@ -65,3 +65,36 @@ textarea[data-message-text] {
 .swatch > i:nth-child(2) { background: var(--sw-bl); }
 .swatch > i:nth-child(3) { background: var(--sw-pd); }
 .swatch > i:nth-child(4) { background: var(--sw-bd); }
+
+/* ---- Settings lists (iOS style) -------------------------------------------- */
+/* A hairline under a row: starts at --sep-inset (after the icon tile), half a
+   pixel on high-DPI (a scaled 1px line stays crisp), none after the last row. */
+.row-sep::after {
+  content: "";
+  position: absolute;
+  inset-inline: var(--sep-inset, 1rem) 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--grouped-separator);
+  transform: scaleY(0.5);
+  transform-origin: bottom;
+  pointer-events: none;
+}
+.row-sep:last-child::after {
+  display: none;
+}
+/* The pressed highlight lands at once and fades out on release, like iOS. */
+.row-press {
+  transition: background-color 180ms ease-out;
+}
+.row-press:active {
+  background-color: var(--grouped-cell-pressed);
+  transition: none;
+}
+@keyframes setting-highlight {
+  0%, 55% { background-color: color-mix(in oklch, var(--primary) 22%, transparent); }
+  100% { background-color: transparent; }
+}
+.setting-highlight {
+  animation: setting-highlight 1.6s ease-out;
+}
