@@ -23,6 +23,7 @@ import { isRateLimited, RATE_LIMIT_ERROR, recordHit } from "@/lib/rate-limit";
 import { isUuid } from "@/lib/realtime/membership";
 import type { ChatMedia } from "@/lib/types/chat";
 import { sanitizeFileName } from "@/lib/upload/filename";
+import { computeWaveformSafe } from "@/lib/media/waveform";
 
 // Resumable FILE uploads (protocol: lib/upload/protocol.ts). A session owns a
 // temp file that chunks are appended to; `complete` turns it into an Upload
@@ -228,6 +229,8 @@ export async function sessionStatus(userId: string, sessionId: string) {
 
 // ---- Complete / cancel ----
 
+const AUDIO_WAVEFORM_MAX_BYTES = 500 * 1024 * 1024;
+
 export async function completeSession(userId: string, sessionId: string): Promise<ChatMedia> {
   return withLock(sessionId, async () => {
     const session = await ownSession(sessionId, userId);
@@ -245,6 +248,8 @@ export async function completeSession(userId: string, sessionId: string): Promis
     const final = await newBareFilePath(id);
     await rename(temp, final.absolute);
     const thumb = await fileThumbnail(final.absolute, size, mime, id);
+    // Playable audio files get the same waveform as voice messages.
+    const waveform = mime.startsWith("audio/") && size <= AUDIO_WAVEFORM_MAX_BYTES ? await computeWaveformSafe(final.absolute) : undefined;
     try {
       const [upload] = await db.$transaction([
         db.upload.create({
@@ -260,6 +265,7 @@ export async function completeSession(userId: string, sessionId: string): Promis
             width: thumb?.width ?? null,
             height: thumb?.height ?? null,
             placeholder: thumb?.placeholder ?? null,
+            waveform,
           },
           select: chatMediaSelect,
         }),

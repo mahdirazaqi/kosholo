@@ -4,7 +4,8 @@ import { copyFile, rm, stat } from "node:fs/promises";
 import { fileTypeFromFile } from "file-type";
 import sharp from "sharp";
 import { ffmpeg, FfmpegTimeoutError, ffprobe } from "@/lib/media/ffmpeg";
-import { ACCEPTED_MIME, FILE_THUMB_MAX_SOURCE, PROFILE_PHOTO_FULL, PROFILE_PHOTO_MEDIUM, PROFILE_PHOTO_THUMB, MAX_VOICE_SECONDS, MEDIA_ERRORS, WAVEFORM_BARS } from "@/lib/media/limits";
+import { ACCEPTED_MIME, FILE_THUMB_MAX_SOURCE, PROFILE_PHOTO_FULL, PROFILE_PHOTO_MEDIUM, PROFILE_PHOTO_THUMB, MAX_VOICE_SECONDS, MEDIA_ERRORS } from "@/lib/media/limits";
+import { computeWaveformSafe } from "@/lib/media/waveform";
 import { newFilePath, removeFiles, tempFilePath } from "@/lib/media/storage";
 import type { UploadKind } from "@/lib/types/chat";
 import { logger } from "@/lib/logger";
@@ -146,7 +147,7 @@ export async function processVideo(tmp: string, id: string): Promise<ProcessedUp
   }
 }
 
-export async function processVoice(tmp: string, id: string, waveform: unknown): Promise<ProcessedUpload> {
+export async function processVoice(tmp: string, id: string): Promise<ProcessedUpload> {
   await detectType(tmp, "VOICE");
   const probe = await ffprobe(tmp).catch(() => null);
   if (!probe?.audio) throw new MediaError(MEDIA_ERRORS.unsupported);
@@ -175,7 +176,7 @@ export async function processVoice(tmp: string, id: string, waveform: unknown): 
     height: null,
     duration,
     placeholder: null,
-    waveform: normalizeWaveform(waveform),
+    waveform: await computeWaveformSafe(out.absolute),
   };
 }
 
@@ -233,26 +234,6 @@ export async function processProfilePhoto(tmp: string, id: string): Promise<Proc
     placeholder: await placeholderFrom(thumb.out.absolute),
     waveform: null,
   };
-}
-
-// Client-computed peaks: validate and resample to WAVEFORM_BARS values in 0–1.
-function normalizeWaveform(input: unknown): number[] {
-  let values: number[] = [];
-  try {
-    const parsed = typeof input === "string" ? JSON.parse(input) : input;
-    if (Array.isArray(parsed)) values = parsed.slice(0, 512).map(Number).filter(Number.isFinite);
-  } catch {
-    // fall through to the flat default
-  }
-  if (values.length === 0) return Array(WAVEFORM_BARS).fill(0.15);
-  const bars: number[] = [];
-  for (let i = 0; i < WAVEFORM_BARS; i++) {
-    const start = Math.floor((i * values.length) / WAVEFORM_BARS);
-    const end = Math.max(start + 1, Math.floor(((i + 1) * values.length) / WAVEFORM_BARS));
-    const peak = Math.max(...values.slice(start, end));
-    bars.push(Math.round(Math.min(1, Math.max(0.05, peak)) * 100) / 100);
-  }
-  return bars;
 }
 
 // FILE uploads are never processed: the original bytes are served as they

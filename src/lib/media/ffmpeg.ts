@@ -103,3 +103,37 @@ export async function checkMediaBinaries() {
   }
   return missing;
 }
+
+// Decodes `file` to mono signed 16-bit PCM at `rate` Hz and hands the raw
+// bytes to `onData` as they arrive (nothing is buffered, so a long recording
+// costs no memory). Capped at `maxSeconds` of audio.
+export function ffmpegPcm(
+  file: string,
+  rate: number,
+  maxSeconds: number,
+  onData: (chunk: Buffer) => void,
+): Promise<void> {
+  return withSlot(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const child = spawn(
+          ffmpegPath(),
+          ["-hide_banner", "-loglevel", "error", "-i", file, "-vn", "-t", String(maxSeconds), "-ac", "1", "-ar", String(rate), "-f", "s16le", "pipe:1"],
+          { stdio: ["ignore", "pipe", "pipe"] },
+        );
+        let stderr = "";
+        const timer = setTimeout(() => child.kill("SIGKILL"), JOB_TIMEOUT_MS);
+        child.stdout.on("data", onData);
+        child.stderr.on("data", (chunk) => (stderr = (stderr + chunk).slice(-2000)));
+        child.on("error", (error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+        child.on("close", (code) => {
+          clearTimeout(timer);
+          if (code === 0) resolve();
+          else reject(new Error(`ffmpeg exited with ${code}: ${stderr}`));
+        });
+      }),
+  );
+}

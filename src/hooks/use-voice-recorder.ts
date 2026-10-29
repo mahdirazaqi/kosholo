@@ -9,8 +9,9 @@ export type RecorderState = "idle" | "starting" | "recording";
 
 const SAMPLE_MS = 50;
 
-// MediaRecorder + AnalyserNode: live levels while recording and ~48 peak
-// values for the waveform. Prefers audio/mp4 (Safari), else webm/opus; the
+// MediaRecorder + AnalyserNode: live levels while recording. The peaks only
+// feed the optimistic bubble; the stored waveform is computed by the server
+// from the final file. Prefers audio/mp4 (Safari), else webm/opus; the
 // server converts everything to M4A so it plays everywhere.
 export function useVoiceRecorder(onComplete: (recording: VoiceRecording) => void) {
   const [state, setState] = useState<RecorderState>("idle");
@@ -155,7 +156,7 @@ export function useVoiceRecorder(onComplete: (recording: VoiceRecording) => void
   return { state, elapsed, levels, start, stop };
 }
 
-// Peak per bar, normalized so the loudest bar is 1.
+// Peak per bar, normalized so the loudest bar is 1 (optimistic bubble only).
 function summarize(peaks: number[]): number[] {
   if (peaks.length === 0) return Array(WAVEFORM_BARS).fill(0.1);
   const bars = Array.from({ length: WAVEFORM_BARS }, (_, i) => {

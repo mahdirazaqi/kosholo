@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { Download, Pause, Play, RotateCw, X } from "lucide-react";
+import { Waveform } from "@/components/chat/media/waveform";
 import { shortFileName } from "@/components/chat/message-preview";
 import { audioManager } from "@/lib/media/client/audio-manager";
 import { formatBytes, formatNumber } from "@/lib/numbers";
@@ -38,7 +39,10 @@ export function FileMedia({
   // Client-only checks (no hydration mismatch): playable audio.
   const playable = useSyncExternalStore(noop, () => kind === "audio" && canPlayAudio(media.mime), () => false);
   const audio = useSyncExternalStore(audioManager.subscribe, audioManager.getState, audioManager.getServerState);
-  const playing = playable && audio.src === media.url && audio.playing;
+  const active = playable && audio.src === media.url;
+  const playing = active && audio.playing;
+  const duration = (active && audio.duration) || 0;
+  const position = active ? audio.currentTime : 0;
 
   return (
     <div className="flex w-72 max-w-full items-center gap-3 py-1">
@@ -82,6 +86,23 @@ export function FileMedia({
         <p className={cn("truncate text-xs", isMine ? "text-bubble-out-meta" : "text-bubble-in-meta")}>
           <Status local={local} size={media.size} onCancel={onCancel} />
         </p>
+        {!local && ready && playable && (
+          // Same waveform as voice messages when the server made one, else a
+          // plain progress track; it always fits the column it sits in.
+          <Waveform
+            values={media.waveform}
+            progress={duration ? Math.min(1, position / duration) : 0}
+            onSeek={(fraction) =>
+              active && duration ? audioManager.seek(media.url, fraction * duration) : void audioManager.play(media.url)
+            }
+            onStep={(seconds) => audioManager.seek(media.url, Math.min(duration, Math.max(0, position + seconds)))}
+            playedClass={isMine ? "text-bubble-out-foreground" : "text-link"}
+            restClass={isMine ? "text-bubble-out-meta/40" : "text-bubble-in-meta/40"}
+            label="Playback position"
+            valueNow={Math.round(position)}
+            valueMax={Math.round(duration)}
+          />
+        )}
       </div>
 
       {ready && !local && (

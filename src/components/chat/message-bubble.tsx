@@ -5,7 +5,7 @@ import { AlertCircle, Check, CheckCheck, CheckCircle2, Clock3, Copy, Download, B
 import { ImageMedia } from "@/components/chat/media/image-media";
 import { VideoMedia } from "@/components/chat/media/video-media";
 import { FileMedia } from "@/components/chat/media/file-media";
-import { VoiceMedia } from "@/components/chat/media/voice-media";
+import { VoiceMedia, VoiceMeta } from "@/components/chat/media/voice-media";
 import { LocationMedia, LocationThumb } from "@/components/chat/location/location-media";
 import { previewText } from "@/components/chat/message-preview";
 import { UserAvatar } from "@/components/user-avatar";
@@ -339,6 +339,8 @@ export const MessageBubble = memo(function MessageBubble({
                 className={cn(
                   "flex items-center justify-end gap-1 text-[length:var(--msg-meta)] leading-4",
                   visual && "px-2 pb-0.5",
+                  // Voice: the duration row sits under the waveform (play button 44px + gap 8px).
+                  message.type === "VOICE" && "ps-[52px]",
                   emojiOnly
                     ? "ms-auto mt-0.5 w-fit rounded-full bg-background/80 px-1.5 text-muted-foreground"
                     : isMine
@@ -346,6 +348,7 @@ export const MessageBubble = memo(function MessageBubble({
                       : "text-bubble-in-meta",
                 )}
               >
+                {message.type === "VOICE" && message.media && <VoiceMeta message={message} isMine={isMine} />}
                 {isChannel && (
                   <span className="me-auto flex min-w-0 items-center gap-1">
                     {(message.signature ?? (showAuthor ? message.sender.name : null)) && (

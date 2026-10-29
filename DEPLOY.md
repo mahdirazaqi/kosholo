@@ -292,6 +292,16 @@ scripts/deploy.sh
 
 During the switch the app is unavailable for a few seconds; users reconnect automatically.
 
+### Recomputing voice message waveforms (once, after the waveform update)
+
+Waveforms are computed on the server from the finished audio file. Voice messages sent before that update may show a flat or wrong waveform; this command recomputes them from the stored files. It is safe to run while the app is live, can be repeated (it skips voice messages that are already done; add `--all` to redo every one) and prints its progress:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml exec app node dist/backfill-waveforms.mjs
+```
+
+On a development machine: `npm run backfill:waveforms`.
+
 ## 8. Backups
 
 ```bash

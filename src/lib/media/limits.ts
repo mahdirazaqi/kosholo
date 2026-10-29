@@ -47,7 +47,7 @@ export const MAX_FILES_PER_SELECTION = 10;
 export const MAX_VOICE_SECONDS = 5 * 60;
 export const MIN_VOICE_SECONDS = 1;
 export const MAX_CAPTION_LENGTH = 1000;
-export const WAVEFORM_BARS = 48;
+export const WAVEFORM_BARS = 64;
 // Uploads per user per window (shared limiter).
 export const UPLOAD_RATE = { max: 60, windowMs: 10 * 60 * 1000 } as const;
 

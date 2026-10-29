@@ -184,7 +184,6 @@ export function useMediaSender({
           kind: "VOICE",
           caption: null,
           replyToId: replyTo?.id ?? null,
-          extra: { waveform: JSON.stringify(recording.waveform) },
           objectUrl: URL.createObjectURL(recording.blob),
         },
         {

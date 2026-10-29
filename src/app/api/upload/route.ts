@@ -21,7 +21,7 @@ import { isRateLimited, RATE_LIMIT_ERROR, recordHit } from "@/lib/rate-limit";
 import type { UploadKind } from "@/lib/types/chat";
 import { logger } from "@/lib/logger";
 
-// POST /api/upload?kind=IMAGE|VIDEO|VOICE|AVATAR (multipart: file, kind, waveform?)
+// POST /api/upload?kind=IMAGE|VIDEO|VOICE|AVATAR (multipart: file, kind)
 // A Route Handler (not a Server Action) for large bodies and upload progress.
 // Excluded from the proxy, so auth happens here. The body is streamed to a temp
 // file with busboy (never buffered), and the size limit is enforced while
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
         : kind === "VIDEO"
           ? await processVideo(tmp, id)
           : kind === "VOICE"
-            ? await processVoice(tmp, id, fields.get("waveform") ?? null)
+            ? await processVoice(tmp, id)
             : profile
               ? await processProfilePhoto(tmp, id)
               : await processAvatar(tmp, id);
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
   }
 }
 
-const MAX_FIELD_BYTES = 64 * 1024; // waveform JSON and the kind
+const MAX_FIELD_BYTES = 64 * 1024; // the kind
 
 // Streams the multipart body: the one "file" part goes straight to `tmp`
 // (stopping at `limit` bytes), the small text fields are collected.

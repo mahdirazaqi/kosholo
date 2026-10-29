@@ -372,7 +372,7 @@ Telegram-style, **in place**: `Message.editedAt` (nullable) and the new `content
 - Uploads are rate limited to 60 per user per 10 minutes. Every rejection has a user-facing message (`MEDIA_ERRORS`).
 
 **Data:**
-- `Upload` stores `{ path, thumbPath, originalName (FILE), mime, size (BigInt), width, height, duration, placeholder, waveform }`.
+- `Upload` stores `{ path, thumbPath, originalName (FILE), mime, size (BigInt), width, height, duration, placeholder, waveform (64 numbers 0–1; old voice uploads may have 48: clients resample) }`.
   - `path` is relative to `UPLOAD_DIR`: `yyyy/mm/{uuid}.{ext}`, plus `{uuid}.thumb.webp`.
 - `Message.uploadId` (indexed, **not unique**) links a message to its file. **Shared-upload rule:** several messages may reference one `Upload` (saved copies share it; the file is never duplicated on disk). An upload and its files are deleted only when **no** message references it any more and it isn't an avatar: `purgeMessages()` re-checks after deleting its messages, and the cleanup job uses `messages: { none: {} }`. Any new code that deletes uploads must follow this.
 - `ChatMessage.media` is a `ChatMedia`: `{ id, kind, url, thumbUrl, mime, width, height, duration, placeholder, waveform, originalName, size }` (`size` is a number; BigInt in the DB). URLs are always `/api/media/{id}` and `/api/media/{id}/thumb`; never select or send `path`.
@@ -383,7 +383,7 @@ Telegram-style, **in place**: `Message.editedAt` (nullable) and the new `content
 2. **Server:** the Route Handler (`src/app/api/upload/route.ts`) authenticates with the session cookie, then streams the multipart body with **busboy** to `UPLOAD_DIR/tmp` (the size limit is enforced while streaming; nothing is buffered) and detects the real type.
    - **Image (sharp):** EXIF-rotated, metadata stripped, ≤2048px WebP q80. GIFs stay as-is. Each gets a 480px WebP thumb and a 16px placeholder.
    - **Video (ffprobe/ffmpeg):** H.264/AAC MP4 is remuxed with `+faststart`. Anything else (HEVC .mov, WebM) is transcoded to H.264/AAC (`veryfast`, `crf 26`, ≤1280px). A poster frame from ~1s becomes the thumb and placeholder. Rotation is applied to width/height.
-   - **Voice:** converted to M4A (AAC mono 64kbps), so Chrome and Safari recordings play everywhere. The duration comes from ffprobe, and the client's peaks are validated and resampled to 48 bars.
+   - **Voice:** converted to M4A (AAC mono 64kbps), so Chrome and Safari recordings play everywhere. The duration comes from ffprobe. **The waveform is computed on the server from the FINAL M4A** (`lib/media/waveform.ts`, `computeWaveform`): ffmpeg decodes mono 8 kHz PCM (streamed, never buffered), the RMS of 64 equal buckets (`WAVEFORM_BARS`) is normalized to the loudest bucket of that recording, then `sqrt` and rounded to 2 decimals (floor 0.05). Digital silence stores all values at the floor. **The client never uploads peaks** (AnalyserNode data can be all zeros, e.g. a suspended AudioContext on iOS): the recorder's levels only drive the live recording UI and the optimistic bubble. Audio FILE uploads (`audio/*`, ≤500MB) get the same waveform on `complete`; a failed analysis never fails the upload (`computeWaveformSafe`).
    - **Avatar:** 512×512 center-cropped WebP plus a 128×128 thumb.
    - ffmpeg runs at most 2 jobs at a time.
 3. **Send:** `sendMessage({ conversationId, uploadId, content?, replyToId?, tempId })`.
@@ -407,7 +407,10 @@ Telegram-style, **in place**: `Message.editedAt` (nullable) and the new `content
 - **Video:** a poster with a play icon and an `m:ss` duration badge. Tapping opens a full-screen native player (`playsInline`, `autoplay`).
 - **Voice:** the mic replaces send when the composer is empty.
   - Recording (`useVoiceRecorder`): hold to record, slide toward the inline start to cancel, slide up to lock. A tap shows a hint. Recordings under 1s are discarded, and recording stops automatically at 5 minutes.
-  - Playback: the waveform doubles as the seek bar, there's a 1x / 1.5x / 2x toggle, and `audioManager` makes sure only one voice plays at a time.
+  - Playback: `audioManager` makes sure only one voice plays at a time (it also exposes `loading`, which puts a spinner ring around the play button).
+  - **Voice bubble** (`media/voice-media.tsx`, `media/waveform.tsx`): row 1 is the 44px play button (`bg-link`, icon in the bubble colour: `primary` fails contrast on bright themes) plus `Waveform`; row 2 is the bubble's footer line (`VoiceMeta` at the inline start under the waveform, then time and ticks): the duration (`0:05 / 0:13` while playing), an unplayed dot for incoming voices, and the 1x / 1.5x / 2x pill only once playback has started. The bubble width grows with the duration (200px at 0s → 320px at 30s+, always capped by the normal bubble max width).
+  - **`Waveform`** is the flexible part of the row (`flex-1 min-w-0 overflow-hidden`): a `ResizeObserver` (rAF-throttled) gives the width, bars = `floor((width + 2) / 5)` (3px bars, 2px gap, min 12), the stored values are resampled (`resampleWaveform`: average when shrinking, linear interpolation when growing) and drawn as **one SVG with two paths** (rest and played, the played one clipped), never one element per bar. Bars are at least 5px tall (silence = short rounded bars, never dots). Tap seeks, drag scrubs (pointer capture, at most one seek per frame, `stopPropagation` so swipe-to-reply and long-press don't start). **`WAVEFORM_FLOW`** is the single constant for the direction progress fills and seeking maps from. Without values (audio files with no waveform) it draws a plain progress track. Audio FILE bubbles use the same component under the file name.
+  - **Played state** (`lib/media/client/played.ts`): per message id in IndexedDB (`kosholo-played`), device-local, no server change; cleared on logout (`clearAppCaches`).
 - **Previews:** "📷 Photo", "🎬 Video", "🎤 Voice message (m:ss)", "📎 {originalName}" (middle-truncated, `shortFileName`), "📍 Location" (+ label), with the caption when there is one. Quotes and the reply bar show a thumbnail (a tiny map for locations).
 - **Media direction:** playback controls and timelines stay LTR (play icon, waveform direction).
 
@@ -687,6 +690,7 @@ docker compose up -d        # start Postgres
 npm install                 # also runs prisma generate
 npm run db:migrate          # prisma migrate dev (create/apply migrations; needs an interactive terminal)
 npm run db:generate         # regenerate Prisma client
+npm run backfill:waveforms  # recompute VOICE waveforms from the stored files (idempotent; -- --all redoes every one). In production: docker compose ... exec app node dist/backfill-waveforms.mjs (DEPLOY.md §7)
 npm run db:studio           # Prisma Studio
 npm run dev                 # custom server via tsx watch (Next HMR + Socket.IO), http://localhost:3000
 npm run lint
